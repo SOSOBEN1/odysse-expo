@@ -1,15 +1,11 @@
 import { StyleSheet, Text, View } from "react-native";
-import React from 'react';
+import NewPasswordScreen from './frontend/screens/NewPassword';
+
 export default function Page() {
-  return (
-    <View style={styles.container}>
-      <View style={styles.main}>
-        <Text style={styles.title}>Shggggggggf</Text>
-        <Text style={styles.subtitle}>This is the first page of your app.</Text>
-      </View>
-    </View>
-  );
+  return <NewPasswordScreen />;
 }
+
+
 
 const styles = StyleSheet.create({
   container: {

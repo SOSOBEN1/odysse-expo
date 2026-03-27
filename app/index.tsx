@@ -1,9 +1,16 @@
 import { StyleSheet, Text, View } from "react-native";
 import NewPasswordScreen from './frontend/screens/NewPassword';
+import SetUpProfileScreen from "./frontend/screens/SetUpProfile";
+import RegisterScreen from "./frontend/screens/Register";
+import LoginScreen from "./frontend/screens/Login";
 
 export default function Page() {
-  return <NewPasswordScreen />;
+  // return <NewPasswordScreen />;
+  //  return <SetUpProfileScreen/>
+  // return <RegisterScreen/>
+  //  return <LoginScreen/>
 }
+
 
 
 

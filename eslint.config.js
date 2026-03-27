@@ -8,3 +8,15 @@ module.exports = defineConfig([
     ignores: ['dist/*'],
   },
 ]);
+module.exports = {
+  settings: {
+    'import/resolver': {
+      alias: {
+        map: [
+          ['@', './app'],  // '@' pointe vers le dossier app
+        ],
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
+      },
+    },
+  },
+};

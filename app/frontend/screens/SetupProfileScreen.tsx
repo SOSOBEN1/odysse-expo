@@ -1,4 +1,6 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import GroupIcon from "../assets/images/Group.svg";
+
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system/legacy";
 import { LinearGradient } from "expo-linear-gradient";
@@ -222,6 +224,9 @@ export default function SetUpProfileScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
+          <View style={styles.iconContainer}>
+            <GroupIcon width={36} height={36} fill="#7f5af0" />
+          </View>
           <Text style={styles.title}>Set Up Profile</Text>
         </View>
         <Text style={styles.subtitle}>
@@ -337,7 +342,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#5c3ca8",
     letterSpacing: 0.5,
-    marginLeft: 12,
+    //marginLeft: 12,
   },
   subtitle: {
     fontSize: 14,
@@ -421,4 +426,22 @@ const styles = StyleSheet.create({
     bottom: 0,
     overflow: "hidden",
   },
+  iconContainer: {
+  width: 36,
+  height: 36,
+  borderRadius: 12,
+  backgroundColor: "#f0ecff",
+  justifyContent: "center",
+  alignItems: "center",
+  marginRight: 10,
+
+  // Ombre iOS
+  shadowColor: "#7f5af0",
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.15,
+  shadowRadius: 8,
+
+  // Ombre Android
+  elevation: 4,
+},
 });

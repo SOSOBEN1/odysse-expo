@@ -4,12 +4,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
 import {
   FlatList,
-  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import Logo from "../assets/images/Group.svg";
 import WaveBackground from "../components/waveBackground";
 
 // 🔥 fonction safe pour charger les .glb
@@ -146,14 +146,10 @@ export default function SetUpProfileScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        {/* LOGO + TITLE */}
+        {/* LOGO À GAUCHE + TITLE */}
         <View style={styles.titleRow}>
+          <Logo width={32} height={32} style={styles.logoImage} />
           <Text style={styles.title}>Set Up Profile</Text>
-          <Image 
-            source={require("../assets/images/logo.svg")} 
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
         </View>
 
         <Text style={styles.subtitle}>
@@ -163,8 +159,6 @@ export default function SetUpProfileScreen() {
 
       {/* Card */}
       <View style={styles.card}>
-        
-
         {/* BARRE FEMININ/MASCULIN */}
         <View style={styles.genderBar}>
           <TouchableOpacity
@@ -209,7 +203,6 @@ export default function SetUpProfileScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-
 
         {/* GRILLE DES AVATARS 3D */}
         <FlatList
@@ -282,7 +275,7 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start", // Changé de center à flex-start pour aligner à gauche
     marginBottom: 12,
   },
   title: {
@@ -290,11 +283,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#5c3ca8",
     letterSpacing: 0.5,
+    marginLeft: 12, // Ajouté un espace entre le logo et le titre
   },
   logoImage: {
-    width: 32,
-    height: 32,
-    marginLeft: 12,
+    marginLeft:5,
   },
   subtitle: {
     fontSize: 14,
@@ -312,12 +304,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 6,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2c2c54",
-    marginBottom: 12,
   },
   genderBar: {
     flexDirection: "row",

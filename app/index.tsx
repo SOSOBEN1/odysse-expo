@@ -1,8 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
-import NewPasswordScreen from './frontend/screens/NewPassword';
-
+import { StyleSheet } from "react-native";
+import SetupProfileScreen from "./frontend/screens/SetupProfileScreen";
 export default function Page() {
-  return <NewPasswordScreen />;
+  return <SetupProfileScreen />;
 }
 
 

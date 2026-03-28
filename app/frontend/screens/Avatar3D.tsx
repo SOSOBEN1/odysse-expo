@@ -1,4 +1,6 @@
 import { Asset } from "expo-asset";
+import { useGLTF } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 
 function Avatar3D({ source }) {
   const asset = Asset.fromModule(source);

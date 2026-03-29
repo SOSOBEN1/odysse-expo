@@ -5,6 +5,7 @@ import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system/legacy";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
+import Navbar from "../components/Navbar";
 import {
   ActivityIndicator,
   FlatList,
@@ -308,6 +309,8 @@ export default function SetUpProfileScreen() {
           />
         ))}
       </View>
+       {/* ✅ Navbar */}
+      <Navbar active="home" onChange={() => {}} />
     </LinearGradient>
   );
 }

@@ -11,11 +11,11 @@ interface HibouGuideProps {
 }
 
 const hibouImages: Record<HibouState, any> = {
-  happy: require('./assets/hibou/happy.png'),
-  confused: require('./assets/hibou/confused.png'),
-  fail: require('./assets/hibou/fail.png'),
-  sleepy: require('./assets/hibou/sleepy.png'),
-  success: require('./assets/hibou/success.png'),
+  happy: require('../../assets/Hibou/happy.png'),
+  confused: require('../../assets/Hibou/confused.png'),
+  fail: require('../../assets/Hibou/fail.png'),
+  sleepy: require('../../assets/Hibou/sleepy.png'),
+  success: require('../../assets/Hibou/success.png'),
 };
 
 const HibouGuide: React.FC<HibouGuideProps> = ({ emotion, message, size = 150 }) => {

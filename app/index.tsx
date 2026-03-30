@@ -1,7 +1,7 @@
 import { StyleSheet } from "react-native";
-import ForgotPasswordScreen from "./frontend/screens/forget-password";
+import SetUpProfileScreen from "./frontend/screens/SetupProfileScreen";
 export default function Page() {
-  return <ForgotPasswordScreen />;
+  return <SetUpProfileScreen />;
 }
 
 

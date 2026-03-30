@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
+import { COLORS, SIZES, SHADOWS } from "../styles/theme";
 
 type Props = {
   active: string;
@@ -79,47 +80,45 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: "100%",
   },
+
   wave: {
     position: "absolute",
     bottom: 0,
   },
+
   container: {
     height: 100,
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
     backgroundColor: "transparent",
+    paddingHorizontal: SIZES.padding,
   },
+
   item: {
     alignItems: "center",
   },
-  iconBox: {
-    padding: 15,
-    borderRadius: 22,
+
+  iconBoxWrapper: {
+    alignItems: "center",
+    padding: 8,
+    borderRadius: SIZES.radiusLarge,
   },
-  activeIcon: {
-    backgroundColor: "#6949A8",
-    
-    
+
+  activeIconWrapper: {
+    backgroundColor: COLORS.primary,
+    ...SHADOWS.light,
   },
+
   label: {
-  fontSize: 11,
-  color: "#6949A8", // couleur normale violet
-  marginTop: 2,
-  fontWeight: "bold",
-},
-activeLabel: {
-  color: "#fff", // blanc si actif
-  fontWeight: "600",
-},
-iconBoxWrapper: {
-  alignItems: "center",
-  padding: 8,
-  borderRadius: 25,
-},
-activeIconWrapper: {
-  backgroundColor: "#6949A8", // fond violet pour icône + label
-},
+    fontSize: 11,
+    color: COLORS.primary,
+    marginTop: 2,
+    fontWeight: "600",
+  },
 
-
+  activeLabel: {
+    color: COLORS.background,
+    fontWeight: "700",
+  },
 });

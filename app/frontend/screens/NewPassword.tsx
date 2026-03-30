@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions } from 
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
+import { COLORS, SIZES, SHADOWS } from "../styles/theme";
 
 const { width } = Dimensions.get("window");
 
@@ -115,25 +116,28 @@ const NewPassword = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    padding: SIZES.padding,
     justifyContent: "center",
   },
+
   backButton: {
     position: "absolute",
     top: 50,
     left: 20,
     backgroundColor: "#ffffffaa",
     padding: 8,
-    borderRadius: 20,
+    borderRadius: SIZES.radius,
     zIndex: 10,
   },
+
   waveSvg: {
     position: "absolute",
     top: 0,
   },
+
   topIcon: {
     alignSelf: "center",
-    backgroundColor: "#a58bff",
+    backgroundColor: COLORS.secondary,
     width: 60,
     height: 60,
     borderRadius: 30,
@@ -141,33 +145,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
     marginTop: 60,
+    ...SHADOWS.light,
   },
+
   title: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#5c3ca8",
+    color: COLORS.primary,
     textAlign: "center",
   },
+
   subtitle: {
     fontSize: 14,
-    color: "#9b87c9",
+    color: COLORS.secondary,
     textAlign: "center",
     marginBottom: 25,
   },
+
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 5,
+    backgroundColor: COLORS.card,
+    borderRadius: SIZES.radius,
+    padding: SIZES.padding,
+    ...SHADOWS.light,
   },
+
   label: {
-    color: "#555",
+    color: "#555", // optionnel : tu peux ajouter COLORS.textLight plus tard
     marginBottom: 5,
     marginTop: 10,
   },
+
   input: {
     height: 50,
     borderRadius: 12,
@@ -175,31 +182,37 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f3f3",
     marginBottom: 10,
   },
+
   strengthLabel: {
     marginTop: 10,
     color: "#888",
     fontSize: 12,
   },
+
   strengthBarContainer: {
     flexDirection: "row",
     marginTop: 8,
     marginBottom: 20,
   },
+
   strengthBar: {
     flex: 1,
     height: 6,
     borderRadius: 3,
     marginHorizontal: 2,
   },
+
   button: {
-    borderRadius: 15,
+    borderRadius: SIZES.radius,
     overflow: "hidden",
   },
+
   buttonGradient: {
     padding: 15,
     alignItems: "center",
-    borderRadius: 15,
+    borderRadius: SIZES.radius,
   },
+
   buttonText: {
     color: "#fff",
     fontWeight: "bold",

@@ -4,6 +4,8 @@ import * as FileSystem from "expo-file-system/legacy";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
+
+import HibouGuide from '../components/ui/Hibou'; 
 import {
   ActivityIndicator,
   FlatList,
@@ -19,6 +21,7 @@ import WaveBackground from "../components/waveBackground";
 // ─── AvatarCard ───────────────────────────────────────────────────────────────
 function AvatarCard({ modelRequire }: { modelRequire: any }) {
   const [base64, setBase64] = useState<string | null>(null);
+  
 
   useEffect(() => {
   const load = async () => {

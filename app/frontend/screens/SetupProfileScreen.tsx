@@ -1,6 +1,4 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import GroupIcon from "../assets/images/Group.svg";
-
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system/legacy";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { WebView } from "react-native-webview";
+import GroupIcon from "../assets/images/Group.svg";
 import WaveBackground from "../components/waveBackground";
 
 // ─── AvatarCard ───────────────────────────────────────────────────────────────

@@ -2,10 +2,8 @@ import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system/legacy";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useState } from "react";
-import Navbar from "../components/Navbar";
-
-import HibouGuide from '../components/ui/Hibou'; 
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -17,40 +15,37 @@ import {
 import { WebView } from "react-native-webview";
 import GroupIcon from "../assets/images/Group.svg";
 import WaveBackground from "../components/waveBackground";
+import { useAvatar } from "../constants/AvatarContext";
 
-// ─── AvatarCard ───────────────────────────────────────────────────────────────
-function AvatarCard({ modelRequire }: { modelRequire: any }) {
+// ─── AvatarCard (mémoïsé) ─────────────────────────────────────────────────────
+const AvatarCard = React.memo(function AvatarCard({ modelRequire }: { modelRequire: any }) {
   const [base64, setBase64] = useState<string | null>(null);
-  
 
   useEffect(() => {
-  const load = async () => {
-    try {
-      const asset = Asset.fromModule(modelRequire);
-      
-      // Essai 1 : téléchargement normal
-      await asset.downloadAsync();
-      const b64 = await FileSystem.readAsStringAsync(asset.localUri!, {
-        encoding: "base64" as any,
-      });
-      setBase64(b64);
-    } catch (e) {
-      // Essai 2 : copier depuis l'URI local Metro vers le cache
+    const load = async () => {
       try {
         const asset = Asset.fromModule(modelRequire);
-        const destPath = `${FileSystem.cacheDirectory}model_${Date.now()}.glb`;
-        await FileSystem.downloadAsync(asset.uri, destPath);
-        const b64 = await FileSystem.readAsStringAsync(destPath, {
+        await asset.downloadAsync();
+        const b64 = await FileSystem.readAsStringAsync(asset.localUri!, {
           encoding: "base64" as any,
         });
         setBase64(b64);
-      } catch (e2) {
-        console.error("Erreur chargement GLB:", e2);
+      } catch (e) {
+        try {
+          const asset = Asset.fromModule(modelRequire);
+          const destPath = `${FileSystem.cacheDirectory}model_${Date.now()}.glb`;
+          await FileSystem.downloadAsync(asset.uri, destPath);
+          const b64 = await FileSystem.readAsStringAsync(destPath, {
+            encoding: "base64" as any,
+          });
+          setBase64(b64);
+        } catch (e2) {
+          console.error("Erreur chargement GLB:", e2);
+        }
       }
-    }
-  };
-  load();
-}, [modelRequire]);
+    };
+    load();
+  }, [modelRequire]);
 
   if (!base64)
     return (
@@ -60,87 +55,76 @@ function AvatarCard({ modelRequire }: { modelRequire: any }) {
     );
 
   const html = `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      * { margin: 0; padding: 0; }
-      body { background: #f8f7ff; overflow: hidden; }
-      canvas { display: block; }
-    </style>
-  </head>
-  <body>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0xf8f7ff);
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        * { margin: 0; padding: 0; }
+        body { background: #f8f7ff; overflow: hidden; }
+        canvas { display: block; }
+      </style>
+    </head>
+    <body>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+      <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf8f7ff);
+        const w = window.innerWidth, h = window.innerHeight;
+        const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(w, h);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.outputEncoding = 3001;
+        document.body.appendChild(renderer.domElement);
 
-      const w = window.innerWidth, h = window.innerHeight;
-      const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
+        scene.add(new THREE.AmbientLight(0xffffff, 2.5));
+        const dir1 = new THREE.DirectionalLight(0xffffff, 3);
+        dir1.position.set(2, 4, 3);
+        scene.add(dir1);
+        const dir2 = new THREE.DirectionalLight(0xffffff, 1.5);
+        dir2.position.set(-2, 2, -2);
+        scene.add(dir2);
 
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(w, h);
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.outputEncoding = 3001; // sRGBEncoding
-      document.body.appendChild(renderer.domElement);
-
-      // Lumières fortes
-      scene.add(new THREE.AmbientLight(0xffffff, 2.5));
-      const dir1 = new THREE.DirectionalLight(0xffffff, 3);
-      dir1.position.set(2, 4, 3);
-      scene.add(dir1);
-      const dir2 = new THREE.DirectionalLight(0xffffff, 1.5);
-      dir2.position.set(-2, 2, -2);
-      scene.add(dir2);
-
-      let dragging = false, lx = 0;
-      renderer.domElement.addEventListener('touchstart', e => {
-        dragging = true; lx = e.touches[0].clientX;
-      });
-      renderer.domElement.addEventListener('touchmove', e => {
-        if (!dragging) return;
-        scene.rotation.y += (e.touches[0].clientX - lx) * 0.015;
-        lx = e.touches[0].clientX;
-      });
-      renderer.domElement.addEventListener('touchend', () => dragging = false);
-
-      const glbScript = document.createElement('script');
-      glbScript.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
-      glbScript.onload = () => {
-        const b64 = '${base64}';
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-        new THREE.GLTFLoader().parse(bytes.buffer, '', (gltf) => {
-          const model = gltf.scene;
-
-          // Centrer
-          const box = new THREE.Box3().setFromObject(model);
-          const center = box.getCenter(new THREE.Vector3());
-          const size = box.getSize(new THREE.Vector3());
-          model.position.sub(center);
-
-          // Remplir l'écran : caméra adaptée à la hauteur du modèle
-          const height = size.y;
-          const dist = (height / 2) / Math.tan((40 * Math.PI / 180) / 2);
-          camera.position.set(0, 0, dist * 1.1);
-          camera.lookAt(0, 0, 0);
-
-          scene.add(model);
+        let dragging = false, lx = 0;
+        renderer.domElement.addEventListener('touchstart', e => { dragging = true; lx = e.touches[0].clientX; });
+        renderer.domElement.addEventListener('touchmove', e => {
+          if (!dragging) return;
+          scene.rotation.y += (e.touches[0].clientX - lx) * 0.015;
+          lx = e.touches[0].clientX;
         });
-      };
-      document.head.appendChild(glbScript);
+        renderer.domElement.addEventListener('touchend', () => dragging = false);
 
-      (function animate() {
-        requestAnimationFrame(animate);
-        renderer.render(scene, camera);
-      })();
-    </script>
-  </body>
-  </html>
-`;
+        const glbScript = document.createElement('script');
+        glbScript.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
+        glbScript.onload = () => {
+          const b64 = '${base64}';
+          const binary = atob(b64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          new THREE.GLTFLoader().parse(bytes.buffer, '', (gltf) => {
+            const model = gltf.scene;
+            const box = new THREE.Box3().setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            model.position.sub(center);
+            const height = size.y;
+            const dist = (height / 2) / Math.tan((40 * Math.PI / 180) / 2);
+            camera.position.set(0, 0, dist * 1.1);
+            camera.lookAt(0, 0, 0);
+            scene.add(model);
+          });
+        };
+        document.head.appendChild(glbScript);
+
+        (function animate() {
+          requestAnimationFrame(animate);
+          renderer.render(scene, camera);
+        })();
+      </script>
+    </body>
+    </html>
+  `;
 
   return (
     <WebView
@@ -151,28 +135,46 @@ function AvatarCard({ modelRequire }: { modelRequire: any }) {
       scrollEnabled={false}
     />
   );
-}
+});
 
 const avatarStyles = StyleSheet.create({
-  loader: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f8f7ff",
-  },
-  webview: {
-    flex: 1,
-    backgroundColor: "transparent",
-  },
+  loader: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f8f7ff" },
+  webview: { flex: 1, backgroundColor: "transparent" },
 });
+
+// ─── AvatarItem (re-render seulement si isSelected change) ───────────────────
+const AvatarItem = React.memo(
+  function AvatarItem({
+    item,
+    isSelected,
+    onPress,
+  }: {
+    item: (typeof avatars)[0];
+    isSelected: boolean;
+    onPress: (id: number) => void;
+  }) {
+    return (
+      <TouchableOpacity
+        onPress={() => onPress(item.id)}
+        style={[styles.avatarBox, isSelected && styles.avatarSelected]}
+      >
+        <AvatarCard modelRequire={item.model} />
+        {isSelected && (
+          <View style={styles.check}>
+            <Ionicons name="checkmark" size={12} color="#fff" />
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  },
+  (prev, next) => prev.isSelected === next.isSelected
+);
 
 // ─── Données ──────────────────────────────────────────────────────────────────
 const avatars = [
-  // 👩 FEMININ
   { id: 1, gender: "Feminin", model: require("../assets/Avatar3D/fille1Corrige.glb") },
   { id: 2, gender: "Feminin", model: require("../assets/Avatar3D/fille2Corrige.glb") },
   { id: 3, gender: "Feminin", model: require("../assets/Avatar3D/fille3Corrige.glb") },
-  // 👨 MASCULIN
   { id: 4, gender: "Masculin", model: require("../assets/Avatar3D/garcon1Corrige.glb") },
   { id: 5, gender: "Masculin", model: require("../assets/Avatar3D/garcon2Corrige.glb") },
   { id: 6, gender: "Masculin", model: require("../assets/Avatar3D/garcon3Corrige.glb") },
@@ -182,9 +184,26 @@ const avatars = [
 export default function SetUpProfileScreen() {
   const [gender, setGender] = useState("Masculin");
   const [selected, setSelected] = useState(4);
+  const { setSelectedModel } = useAvatar();
+  const router = useRouter();
 
-  // ← seulement 3 avatars par genre
   const filteredAvatars = avatars.filter((a) => a.gender === gender).slice(0, 3);
+
+  const handleSelect = useCallback((id: number) => setSelected(id), []);
+
+  const handleNext = () => {
+    const chosen = avatars.find((a) => a.id === selected);
+    if (chosen) setSelectedModel(chosen.model);
+    router.push("/home");
+  };
+
+  const renderItem = ({ item }: { item: (typeof avatars)[0] }) => (
+    <AvatarItem
+      item={item}
+      isSelected={selected === item.id}
+      onPress={handleSelect}
+    />
+  );
 
   const stars = [
     { top: 10, left: 10, size: 20, opacity: 0.6 },
@@ -198,29 +217,12 @@ export default function SetUpProfileScreen() {
     { bottom: 80, left: 16, size: 18, opacity: 0.55 },
   ];
 
-  const renderItem = ({ item }: { item: (typeof avatars)[0] }) => {
-    const isSelected = selected === item.id;
-    return (
-      <TouchableOpacity
-        onPress={() => setSelected(item.id)}
-        style={[styles.avatarBox, isSelected && styles.avatarSelected]}
-      >
-        <AvatarCard modelRequire={item.model} />
-        {isSelected && (
-          <View style={styles.check}>
-            <Ionicons name="checkmark" size={12} color="#fff" />
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
   return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
       <WaveBackground />
 
       {/* Back */}
-      <TouchableOpacity style={styles.backBtn}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={20} color="#6949a8" />
       </TouchableOpacity>
 
@@ -232,9 +234,7 @@ export default function SetUpProfileScreen() {
           </View>
           <Text style={styles.title}>Set Up Profile</Text>
         </View>
-        <Text style={styles.subtitle}>
-          Create Your Initial Profile To Get Started
-        </Text>
+        <Text style={styles.subtitle}>Create Your Initial Profile To Get Started</Text>
       </View>
 
       {/* Card */}
@@ -274,6 +274,7 @@ export default function SetUpProfileScreen() {
           numColumns={3}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
+          extraData={selected}
           contentContainerStyle={styles.grid}
           showsVerticalScrollIndicator={false}
           scrollEnabled={false}
@@ -281,7 +282,7 @@ export default function SetUpProfileScreen() {
 
         {/* Bouton suivant */}
         <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.nextButton}>
+          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
             <LinearGradient
               colors={["#7f5af0", "#bbaaff"]}
               style={styles.nextButtonGradient}
@@ -311,8 +312,6 @@ export default function SetUpProfileScreen() {
           />
         ))}
       </View>
-       {/* ✅ Navbar */}
-      <Navbar active="home" onChange={() => {}} />
     </LinearGradient>
   );
 }
@@ -342,12 +341,25 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     marginBottom: 12,
   },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "#f0ecff",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10,
+    shadowColor: "#7f5af0",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   title: {
     fontSize: 26,
     fontWeight: "bold",
     color: "#5c3ca8",
     letterSpacing: 0.5,
-    //marginLeft: 12,
   },
   subtitle: {
     fontSize: 14,
@@ -388,8 +400,8 @@ const styles = StyleSheet.create({
     margin: 6,
     borderRadius: 20,
     backgroundColor: "#f8f7ff",
-    overflow: "hidden",       // ← important pour WebView
-    aspectRatio: 0.75,        // ← format portrait
+    overflow: "hidden",
+    aspectRatio: 0.75,
     position: "relative",
   },
   avatarSelected: {
@@ -431,22 +443,4 @@ const styles = StyleSheet.create({
     bottom: 0,
     overflow: "hidden",
   },
-  iconContainer: {
-  width: 36,
-  height: 36,
-  borderRadius: 12,
-  backgroundColor: "#f0ecff",
-  justifyContent: "center",
-  alignItems: "center",
-  marginRight: 10,
-
-  // Ombre iOS
-  shadowColor: "#7f5af0",
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.15,
-  shadowRadius: 8,
-
-  // Ombre Android
-  elevation: 4,
-},
 });

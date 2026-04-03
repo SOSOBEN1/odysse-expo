@@ -5,9 +5,11 @@ import { Ionicons, Feather, MaterialIcons } from "@expo/vector-icons";
 import UsernameInput from "../components/UsernameInput";
 import styles from "../styles/SetUpProfileStyle";
 import WaveBackground from "../components/waveBackground";
+import { Link,useRouter } from "expo-router";
 
 
 export default function SetUpProfileScreen() {
+   const router = useRouter();
   const [username, setUsername] = useState("");
    const stars = [
     { top: 10, left: 10, size: 20, opacity: 0.6 },
@@ -30,7 +32,7 @@ export default function SetUpProfileScreen() {
   <WaveBackground />
 
   {/* Back */}
-  <TouchableOpacity style={styles.backBtn}>
+  <TouchableOpacity style={styles.backBtn}  onPress={() => router.push("/frontend/screens/Register")}>
     <Ionicons name="arrow-back" size={20} color="#6949a8" />
   </TouchableOpacity>
 
@@ -57,7 +59,7 @@ export default function SetUpProfileScreen() {
             <Ionicons name="person" size={40} color="#2c2c54" />
           </View>
 
-          <TouchableOpacity style={styles.editIcon}>
+          <TouchableOpacity style={styles.editIcon} onPress={() => router.push("/frontend/screens/SetupProfileScreen")}>
             <Feather name="edit-2" size={14} color="#fff" />
           </TouchableOpacity>
         </View>

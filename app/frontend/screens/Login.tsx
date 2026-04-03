@@ -34,7 +34,7 @@ export default function LoginScreen() {
             <WaveBackground />
 
             {/* BACK */}
-            <TouchableOpacity style={styles.backBtn}>
+            <TouchableOpacity style={styles.backBtn}  onPress={() => router.push("/frontend/screens/start")} >
                 <Ionicons name="arrow-back" size={20} color="#6949a8" />
             </TouchableOpacity>
 

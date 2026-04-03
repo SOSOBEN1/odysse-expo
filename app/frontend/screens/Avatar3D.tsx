@@ -2,7 +2,7 @@ import { Asset } from "expo-asset";
 import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 
-function Avatar3D({ source }) {
+function Avatar3D({ source }: { source: any })  {
   const asset = Asset.fromModule(source);
   const { scene } = useGLTF(asset.uri);
 

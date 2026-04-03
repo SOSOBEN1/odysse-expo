@@ -1,19 +1,19 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Dimensions } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import WaveBackground from "../components/waveBackground";
 import UsernameInput from "../components/UsernameInput";
 import styles from "../styles/RegisterStyle";
+import { useRouter } from "expo-router";
 
 export default function RegisterScreen() {
-  const { width } = Dimensions.get("window");
+  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Tableau des étoiles avec position, taille et opacité
   const stars = [
     { top: 10, left: 10, size: 20, opacity: 0.6 },
     { top: 10, right: 10, size: 12, opacity: 0.4 },
@@ -21,31 +21,62 @@ export default function RegisterScreen() {
     { bottom: 10, right: 10, size: 10, opacity: 0.35 },
     { top: 30, left: 50, size: 8, opacity: 0.25 },
     { bottom: 40, right: 60, size: 22, opacity: 0.7 },
-     { top: 40, right: 50, size: 22, opacity: 0.7 },
+    { top: 40, right: 50, size: 22, opacity: 0.7 },
     { top: 60, left: 150, size: 14, opacity: 0.45 },
     { bottom: 80, left: 16, size: 18, opacity: 0.55 },
-    // tu peux ajouter autant d'étoiles que tu veux
   ];
 
   return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
-      {/* 🌊 Wave */}
       <WaveBackground />
 
-      {/* 🔙 Back */}
-      <TouchableOpacity style={styles.backBtn}>
+      {/* ✅ Stars EN DESSOUS de tout — pointerEvents none pour ne pas bloquer */}
+      <View
+        style={{
+          position: "absolute",
+          top: 0, left: 0, right: 0, bottom: 0,
+          pointerEvents: "none",   // ← ne capture aucun touch
+          zIndex: 0,
+        }}
+      >
+        {stars.map((star, i) => (
+          <MaterialIcons
+            key={i}
+            name="auto-awesome"
+            size={star.size}
+            color="#fff"
+            style={{
+              position: "absolute",
+              ...(star.top !== undefined ? { top: star.top } : {}),
+              ...(star.bottom !== undefined ? { bottom: star.bottom } : {}),
+              ...(star.left !== undefined ? { left: star.left } : {}),
+              ...(star.right !== undefined ? { right: star.right } : {}),
+              opacity: star.opacity,
+            }}
+          />
+        ))}
+      </View>
+
+      {/* ✅ Back — zIndex élevé pour être cliquable */}
+      <TouchableOpacity
+        style={[styles.backBtn, { zIndex: 10 }]}
+        onPress={() => router.push("/frontend/screens/Login")}
+      >
         <Ionicons name="arrow-back" size={20} color="#6949a8" />
       </TouchableOpacity>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      {/* ✅ ScrollView + bouton DANS le scroll pour éviter d'être poussé */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        style={{ zIndex: 1 }}
+      >
         {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.titleRow}>
             <Text style={styles.title}>Create A New Account</Text>
           </View>
-          <Text style={styles.subtitle}>
-            Register & Get The Best Experience
-          </Text>
+          <Text style={styles.subtitle}>Register & Get The Best Experience</Text>
         </View>
 
         {/* CARD */}
@@ -85,8 +116,11 @@ export default function RegisterScreen() {
           />
         </View>
 
-        {/* BUTTON */}
-        <TouchableOpacity style={styles.buttonWrapper}>
+        {/* ✅ Bouton DANS le ScrollView — toujours visible et cliquable */}
+        <TouchableOpacity
+          style={[styles.buttonWrapper, { zIndex: 10 }]}
+          onPress={() => router.push("/frontend/screens/SetUpProfile")}
+        >
           <LinearGradient
             colors={["#6949a8", "#9574e0", "#baaae7"]}
             start={{ x: 0, y: 0 }}
@@ -97,26 +131,6 @@ export default function RegisterScreen() {
           </LinearGradient>
         </TouchableOpacity>
       </ScrollView>
-
-      {/* ✨ Stars */}
-      <View style={styles.stars}>
-        {stars.map((star, i) => (
-          <MaterialIcons
-            key={i}
-            name="auto-awesome"
-            size={star.size}
-            color="#fff"
-            style={{
-              position: "absolute",
-              ...(star.top !== undefined ? { top: star.top } : {}),
-              ...(star.bottom !== undefined ? { bottom: star.bottom } : {}),
-              ...(star.left !== undefined ? { left: star.left } : {}),
-              ...(star.right !== undefined ? { right: star.right } : {}),
-              opacity: star.opacity,
-            }}
-          />
-        ))}
-      </View>
     </LinearGradient>
   );
 }

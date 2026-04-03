@@ -6,7 +6,8 @@ import { WebView } from 'react-native-webview';
 
 interface AvatarCardProps {
   model: any;
-  size: number;
+  size?: number;    // ✅ ajouter size
+  bgColor?: string; // ✅ garder bgColor
 }
 
 export default function AvatarCard({ model, size }: AvatarCardProps) {

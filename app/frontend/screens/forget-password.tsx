@@ -27,25 +27,19 @@ export default function ForgotPasswordScreen() {
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
       <WaveBackground />
 
-      {/* Header avec flèche à gauche et cadenas centré */}
+      {/* Cercle du cadenas centré */}
+      <View style={localStyles.lockCircle}>
+        <Text style={localStyles.lockIcon}>🔒</Text>
+      </View>
+
+      {/* Header avec flèche de retour */}
       <View style={localStyles.headerRow}>
-        {/* Bouton retour à gauche */}
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={20} color="#6949a8" />
         </TouchableOpacity>
-
-        {/* Espace vide pour centrer le cadenas */}
-        <View style={localStyles.placeholder} />
-
-        {/* Cadenas centré */}
-        <View style={localStyles.lockCircle}>
-          <Text style={localStyles.lockIcon}>🔒</Text>
-        </View>
-
-        {/* Espace vide pour équilibrer */}
-        <View style={localStyles.placeholder} />
       </View>
 
+      {/* TITRE ET SOUS-TITRE */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>Forgot Password ?</Text>
@@ -55,11 +49,13 @@ export default function ForgotPasswordScreen() {
         </Text>
       </View>
 
+      {/* CARD DU NUMÉRO DE TÉLÉPHONE */}
       <View style={styles.card}>
         <Text style={styles.label}>Phone Number</Text>
         <PhoneInput value={phone} onChange={setPhone} />
       </View>
 
+      {/* BOUTON ENVOYER */}
       <TouchableOpacity 
         style={styles.buttonWrapper}
         onPress={() => {
@@ -80,6 +76,7 @@ export default function ForgotPasswordScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
+      {/* ÉTOILES EN ARRIÈRE-PLAN */}
       <View style={[styles.stars, { pointerEvents: "none" }]}>
         {stars.map((star, i) => (
           <MaterialIcons
@@ -106,24 +103,27 @@ const localStyles = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
     paddingHorizontal: 10,
-  },
-  placeholder: {
-    width: 40,
-    height: 40,
+    marginTop: 20,
   },
   lockCircle: {
-    width: 40,
+    width: 40, // même taille que le cercle de la flèche
     height: 40,
     borderRadius: 20,
     backgroundColor: "#f1edff",
     justifyContent: "center",
     alignItems: "center",
+    position: "absolute",
+    top: 80, // distance au-dessus du titre
+    left: "50%",
+    marginLeft: -20, // moitié de la largeur pour centrer
     elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   lockIcon: {
-    fontSize: 20,
+    fontSize: 18, // légèrement plus petit pour rentrer dans le cercle
   },
 });

@@ -1,11 +1,11 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { useState } from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import BackButton from "../components/BackButton";
 import QuestionCard from "../components/QuestionCard";
 import WaveBackground from "../components/waveBackground";
-import BackButton from "../components/BackButton";
 
 export default function Question1Screen() {
   const router = useRouter();
@@ -108,11 +108,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
 
-cardWrapper: {
+  cardWrapper: {
   flex: 1,
-  width: '100%', // Prend toute la largeur
-  marginTop: 40,  // Ajuste selon la position du texte "Question 1 of 5"
+  justifyContent: "flex-start",
+  marginTop: 80, // 🔥 augmente ici (essaie 60, 80, 100 selon ton design)
 },
+
   bottomButtons: {
     flexDirection: "row",
     justifyContent: "space-between",

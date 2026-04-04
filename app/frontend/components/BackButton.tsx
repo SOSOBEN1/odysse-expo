@@ -1,27 +1,14 @@
-import React from "react";
-import { TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { StyleSheet, TouchableOpacity } from "react-native";
 
-interface BackButtonProps {
-  onPress?: () => void;
-}
-
-export default function BackButton({ onPress }: BackButtonProps) {
+export default function BackButton() {
   const router = useRouter();
-
-  const handlePress = () => {
-    if (onPress) {
-      onPress();
-    } else {
-      router.back();
-    }
-  };
 
   return (
     <TouchableOpacity
       style={styles.backBtn}
-      onPress={handlePress}
+      onPress={() => router.back()}
       activeOpacity={0.7}
     >
       <Ionicons name="arrow-back" size={20} color="#6949a8" />
@@ -37,6 +24,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#F4F0FF",
     justifyContent: "center",
     alignItems: "center",
+
+    // shadow comme login
     shadowColor: "#6949a8",
     shadowOpacity: 0.2,
     shadowRadius: 6,

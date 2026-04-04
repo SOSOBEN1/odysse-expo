@@ -1,6 +1,12 @@
 
+import Question4Screen from "./frontend/screens/Question1";
+
 export default function Page() {
-  return <Redirect href="/frontend/screens/Login" />;
+  return <Question4Screen />;
 }
+ //import SetUpProfileScreen from "./frontend/screens/SetupProfileScreen";
+//export default function Page() {
+ // return <SetUpProfileScreen />;
+ //}
 
 

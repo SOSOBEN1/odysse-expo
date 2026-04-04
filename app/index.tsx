@@ -1,8 +1,14 @@
 import { StyleSheet } from "react-native";
-import SetUpProfileScreen from "./frontend/screens/SetupProfileScreen";
+
+import Question4Screen from "./frontend/screens/Question1";
+
 export default function Page() {
-  return <SetUpProfileScreen />;
+  return <Question4Screen />;
 }
+ //import SetUpProfileScreen from "./frontend/screens/SetupProfileScreen";
+//export default function Page() {
+ // return <SetUpProfileScreen />;
+ //}
 
 
 

@@ -34,7 +34,11 @@ export default function LoginScreen() {
             <WaveBackground />
 
             {/* BACK */}
+<<<<<<< HEAD
             <TouchableOpacity style={styles.backBtn}>
+=======
+            <TouchableOpacity style={styles.backBtn}  onPress={() => router.push("/frontend/screens/start")} >
+>>>>>>> sonia
                 <Ionicons name="arrow-back" size={20} color="#6949a8" />
             </TouchableOpacity>
 

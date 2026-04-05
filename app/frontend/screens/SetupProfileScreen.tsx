@@ -4,6 +4,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
+
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +21,8 @@ import { useAvatar } from "../constants/AvatarContext";
 // ─── AvatarCard (mémoïsé) ─────────────────────────────────────────────────────
 const AvatarCard = React.memo(function AvatarCard({ modelRequire }: { modelRequire: any }) {
   const [base64, setBase64] = useState<string | null>(null);
+ 
+  
 
   useEffect(() => {
     const load = async () => {
@@ -182,6 +185,7 @@ const avatars = [
 
 // ─── Écran principal ──────────────────────────────────────────────────────────
 export default function SetUpProfileScreen() {
+   const router = useRouter();
   const [gender, setGender] = useState("Masculin");
   const [selected, setSelected] = useState(4);
   const { setSelectedModel } = useAvatar();
@@ -287,7 +291,7 @@ export default function SetUpProfileScreen() {
               colors={["#7f5af0", "#bbaaff"]}
               style={styles.nextButtonGradient}
             >
-              <Text style={styles.nextButtonText}>Suivant</Text>
+              <Text style={styles.nextButtonText} onPress={() => router.push("/frontend/screens/SetUpProfile")}>Suivant</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -312,6 +316,7 @@ export default function SetUpProfileScreen() {
           />
         ))}
       </View>
+     
     </LinearGradient>
   );
 }

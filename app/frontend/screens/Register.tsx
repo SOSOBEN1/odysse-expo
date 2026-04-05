@@ -1,9 +1,9 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Dimensions } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import WaveBackground from "../components/waveBackground";
+import { LinearGradient } from "expo-linear-gradient";
+import { useState } from "react";
+import { Dimensions, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import UsernameInput from "../components/UsernameInput";
+import WaveBackground from "../components/waveBackground";
 import styles from "../styles/RegisterStyle";
 
 export default function RegisterScreen() {

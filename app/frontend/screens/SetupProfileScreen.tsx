@@ -177,18 +177,24 @@ const avatars = [
   { id: 1,  gender: "Feminin",  page: 0, model: require("../assets/Avatar3D/fille1.glb") },
   { id: 2,  gender: "Feminin",  page: 0, model: require("../assets/Avatar3D/fille3Corrige.glb") },
   { id: 3,  gender: "Feminin",  page: 0, model: require("../assets/Avatar3D/fille3.glb") },
+  { id: 4,  gender: "Feminin",  page: 0, model: require("../assets/Avatar3D/fille1.glb") },
+  { id: 5,  gender: "Feminin",  page: 0, model: require("../assets/Avatar3D/fille3Corrige.glb") },
+  { id: 6,  gender: "Feminin",  page: 0, model: require("../assets/Avatar3D/fille3.glb") },
   // ── Féminin page 1 ──
-  { id: 4,  gender: "Feminin",  page: 1, model: require("../assets/Avatar3D/fille4.glb") },
-  { id: 5,  gender: "Feminin",  page: 1, model: require("../assets/Avatar3D/fille5.glb") },
-  { id: 6,  gender: "Feminin",  page: 1, model: require("../assets/Avatar3D/fille6.glb") },
+  { id: 7,  gender: "Feminin",  page: 1, model: require("../assets/Avatar3D/fille4.glb") },
+  { id: 8,  gender: "Feminin",  page: 1, model: require("../assets/Avatar3D/fille5.glb") },
+  { id: 9,  gender: "Feminin",  page: 1, model: require("../assets/Avatar3D/fille6.glb") },
   // ── Masculin page 0 ──
-  { id: 7,  gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon1.glb") },
-  { id: 8,  gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon2.glb") },
-  { id: 9,  gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon8.glb") },
+  { id: 10,  gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon1.glb") },
+  { id: 11,  gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon2.glb") },
+  { id: 12,  gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon8.glb") },
   // ── Masculin page 1 ──
-  { id: 10, gender: "Masculin", page: 1, model: require("../assets/Avatar3D/garcon4.glb") },
-  { id: 11, gender: "Masculin", page: 1, model: require("../assets/Avatar3D/garcon5.glb") },
-  { id: 12, gender: "Masculin", page: 1, model: require("../assets/Avatar3D/garcon7.glb") },
+  { id: 13, gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon4.glb") },
+  { id: 14, gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon5.glb") },
+  { id: 15, gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon7.glb") },
+   { id: 16, gender: "Masculin", page: 1, model: require("../assets/Avatar3D/garcon4.glb") },
+  { id: 17, gender: "Masculin", page: 1, model: require("../assets/Avatar3D/garcon5.glb") },
+  { id: 18, gender: "Masculin", page: 1, model: require("../assets/Avatar3D/garcon7.glb") },
 ];
 
 // ─── Écran principal ──────────────────────────────────────────────────────────

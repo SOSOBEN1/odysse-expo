@@ -1,15 +1,15 @@
 import { useState } from "react";
 import {
-  View,
-  Text,
   ScrollView,
-  TouchableOpacity,
-  StyleSheet,
   StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { COLORS, SIZES, SHADOWS } from "../styles/theme";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
+import { SHADOWS, SIZES } from "../styles/theme";
 
 
 // ─── Types ────────────────────────────────────────

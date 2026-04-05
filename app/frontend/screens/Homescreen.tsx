@@ -18,7 +18,6 @@ import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 
-// ─── Soleil ou Lune selon l'heure ─────────────────────────────────────────────
 function getTimeGreeting() {
   const hour = new Date().getHours();
   if (hour >= 6 && hour < 12) return { icon: "☀️", text: "Bonjour" };
@@ -27,7 +26,6 @@ function getTimeGreeting() {
   return { icon: "🌙", text: "Bonne nuit" };
 }
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
 const USER = {
   userName: "Sonia",
   level: 6,
@@ -51,7 +49,6 @@ const MISSIONS = [
   { id: "3", title: "Préparer présentation", tag: "Soutenance PFE", duration: "10h00", status: "En retard" as const, date: "23/04/2024" },
 ];
 
-// ─── HomeScreen ───────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState("Missions");
   const [activeNav, setActiveNav] = useState("home");
@@ -61,8 +58,8 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Wave background */}
-      <WaveBackground />
+      {/* Wave background — top overridé pour descendre la vague */}
+      <WaveBackground height={290} />
 
       <ScrollView
         style={styles.scroll}
@@ -89,7 +86,6 @@ export default function HomeScreen() {
 
           {/* Avatar + Info */}
           <View style={styles.profileRow}>
-            {/* Avatar 3D */}
             <View style={styles.avatarWrapper}>
               {selectedModel ? (
                 <AvatarCrd model={selectedModel} bgColor="#ede9fe" />
@@ -103,7 +99,6 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Info */}
             <View style={styles.infoBlock}>
               <View style={styles.greetingRow}>
                 <Text style={styles.greeting}>
@@ -113,7 +108,6 @@ export default function HomeScreen() {
                 <Text style={styles.timeIcon}>{timeIcon}</Text>
               </View>
 
-              {/* XP Bar */}
               <View style={styles.xpBarBg}>
                 <LinearGradient
                   colors={[COLORS.secondary, COLORS.primary]}
@@ -181,9 +175,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 20 },
 
-  // Header
   header: {
-    paddingTop: 54,
+    paddingTop: 30,           // ← était 54, remonté
     paddingHorizontal: SIZES.padding,
     paddingBottom: 20,
   },
@@ -216,7 +209,6 @@ const styles = StyleSheet.create({
     ...SHADOWS.light,
   },
 
-  // Profile row
   profileRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -272,7 +264,6 @@ const styles = StyleSheet.create({
   xpBarFill: { height: "100%", borderRadius: 10 },
   xpText: { color: "#9ca3af", fontSize: 11, marginTop: 4 },
 
-  // Tabs
   tabsRow: {
     flexDirection: "row",
     marginHorizontal: 16,

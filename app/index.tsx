@@ -1,7 +1,6 @@
-import BadgesScreen from "./frontend/screens/BadgeScreen";
 
 export default function Page() {
-  return <BadgesScreen/>;
+  return <Redirect href="/frontend/screens/Login" />;
 }
 
 

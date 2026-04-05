@@ -108,12 +108,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
 
-  cardWrapper: {
+cardWrapper: {
   flex: 1,
-  justifyContent: "flex-start",
-  marginTop: 80, // 🔥 augmente ici (essaie 60, 80, 100 selon ton design)
+  width: '100%', // Prend toute la largeur
+  marginTop: 40,  // Ajuste selon la position du texte "Question 1 of 5"
 },
-
   bottomButtons: {
     flexDirection: "row",
     justifyContent: "space-between",

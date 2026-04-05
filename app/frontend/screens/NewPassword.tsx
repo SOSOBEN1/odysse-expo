@@ -1,9 +1,9 @@
-import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useState } from "react";
+import { Dimensions, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import { COLORS, SIZES, SHADOWS } from "../styles/theme";
+import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 
 const { width } = Dimensions.get("window");
 
@@ -26,7 +26,7 @@ const NewPassword = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [strength, setStrength] = useState(0);
 
-  const checkStrength = (pwd) => {
+  const checkStrength = (pwd: string) => {  // ← FIX
     let score = 0;
     if (pwd.length >= 6) score++;
     if (/[A-Z]/.test(pwd)) score++;
@@ -35,7 +35,7 @@ const NewPassword = () => {
     setStrength(score);
   };
 
-  const handlePasswordChange = (text) => {
+  const handlePasswordChange = (text: string) => {  // ← FIX
     setPassword(text);
     checkStrength(text);
   };
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    color: "#555", // optionnel : tu peux ajouter COLORS.textLight plus tard
+    color: "#555",
     marginBottom: 5,
     marginTop: 10,
   },

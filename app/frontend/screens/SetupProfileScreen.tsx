@@ -18,11 +18,9 @@ import GroupIcon from "../assets/images/Group.svg";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
 
-// ─── AvatarCard (mémoïsé) ─────────────────────────────────────────────────────
+// ─── AvatarCard ───────────────────────────────────────────────────────────────
 const AvatarCard = React.memo(function AvatarCard({ modelRequire }: { modelRequire: any }) {
   const [base64, setBase64] = useState<string | null>(null);
- 
-  
 
   useEffect(() => {
     const load = async () => {
@@ -145,7 +143,7 @@ const avatarStyles = StyleSheet.create({
   webview: { flex: 1, backgroundColor: "transparent" },
 });
 
-// ─── AvatarItem (re-render seulement si isSelected change) ───────────────────
+// ─── AvatarItem ───────────────────────────────────────────────────────────────
 const AvatarItem = React.memo(
   function AvatarItem({
     item,
@@ -173,27 +171,64 @@ const AvatarItem = React.memo(
   (prev, next) => prev.isSelected === next.isSelected
 );
 
-// ─── Données ──────────────────────────────────────────────────────────────────
+// ─── Données : 6 féminins (2 pages × 3) + 6 masculins (2 pages × 3) ──────────
 const avatars = [
-  { id: 1, gender: "Feminin", model: require("../assets/Avatar3D/fille1Corrige.glb") },
-  { id: 2, gender: "Feminin", model: require("../assets/Avatar3D/fille2Corrige.glb") },
-  { id: 3, gender: "Feminin", model: require("../assets/Avatar3D/fille3Corrige.glb") },
-  { id: 4, gender: "Masculin", model: require("../assets/Avatar3D/garcon1Corrige.glb") },
-  { id: 5, gender: "Masculin", model: require("../assets/Avatar3D/garcon2Corrige.glb") },
-  { id: 6, gender: "Masculin", model: require("../assets/Avatar3D/garcon3Corrige.glb") },
+  // ── Féminin page 0 ──
+  { id: 1,  gender: "Feminin",  page: 0, model: require("../assets/Avatar3D/fille1.glb") },
+  { id: 2,  gender: "Feminin",  page: 0, model: require("../assets/Avatar3D/fille3Corrige.glb") },
+  { id: 3,  gender: "Feminin",  page: 0, model: require("../assets/Avatar3D/fille3.glb") },
+  // ── Féminin page 1 ──
+  { id: 4,  gender: "Feminin",  page: 1, model: require("../assets/Avatar3D/fille4.glb") },
+  { id: 5,  gender: "Feminin",  page: 1, model: require("../assets/Avatar3D/fille5.glb") },
+  { id: 6,  gender: "Feminin",  page: 1, model: require("../assets/Avatar3D/fille6.glb") },
+  // ── Masculin page 0 ──
+  { id: 7,  gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon1.glb") },
+  { id: 8,  gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon2.glb") },
+  { id: 9,  gender: "Masculin", page: 0, model: require("../assets/Avatar3D/garcon8.glb") },
+  // ── Masculin page 1 ──
+  { id: 10, gender: "Masculin", page: 1, model: require("../assets/Avatar3D/garcon4.glb") },
+  { id: 11, gender: "Masculin", page: 1, model: require("../assets/Avatar3D/garcon5.glb") },
+  { id: 12, gender: "Masculin", page: 1, model: require("../assets/Avatar3D/garcon7.glb") },
 ];
 
 // ─── Écran principal ──────────────────────────────────────────────────────────
 export default function SetUpProfileScreen() {
-   const router = useRouter();
-  const [gender, setGender] = useState("Masculin");
-  const [selected, setSelected] = useState(4);
-  const { setSelectedModel } = useAvatar();
   const router = useRouter();
+  const [gender, setGender] = useState<"Masculin" | "Feminin">("Masculin");
+  const [selected, setSelected] = useState(7);
+  // Pages indépendantes par genre
+  const [femPage, setFemPage] = useState(0);
+  const [mascPage, setMascPage] = useState(0);
+  const { setSelectedModel } = useAvatar();
 
-  const filteredAvatars = avatars.filter((a) => a.gender === gender).slice(0, 3);
+  const currentPage = gender === "Feminin" ? femPage : mascPage;
+  const setCurrentPage = gender === "Feminin" ? setFemPage : setMascPage;
+
+  const allForGender = avatars.filter((a) => a.gender === gender);
+  const totalPages = Math.max(...allForGender.map((a) => a.page)) + 1;
+  const filteredAvatars = allForGender.filter((a) => a.page === currentPage);
 
   const handleSelect = useCallback((id: number) => setSelected(id), []);
+
+  const handleGenderChange = (newGender: "Masculin" | "Feminin") => {
+    setGender(newGender);
+    const page = newGender === "Feminin" ? femPage : mascPage;
+    const first = avatars.find((a) => a.gender === newGender && a.page === page);
+    if (first) setSelected(first.id);
+  };
+
+  const handlePageChange = (direction: "prev" | "next") => {
+    const newPage = direction === "prev" ? currentPage - 1 : currentPage + 1;
+    setCurrentPage(newPage);
+    const first = avatars.find((a) => a.gender === gender && a.page === newPage);
+    if (first) setSelected(first.id);
+  };
+
+  const goToPage = (p: number) => {
+    setCurrentPage(p);
+    const first = avatars.find((a) => a.gender === gender && a.page === p);
+    if (first) setSelected(first.id);
+  };
 
   const handleNext = () => {
     const chosen = avatars.find((a) => a.id === selected);
@@ -243,27 +278,19 @@ export default function SetUpProfileScreen() {
 
       {/* Card */}
       <View style={styles.card}>
+
         {/* Barre genre */}
         <View style={styles.genderBar}>
           <TouchableOpacity
-            onPress={() => {
-              setGender("Feminin");
-              const first = avatars.find((a) => a.gender === "Feminin");
-              if (first) setSelected(first.id);
-            }}
+            onPress={() => handleGenderChange("Feminin")}
             style={[styles.genderButton, gender === "Feminin" && styles.genderButtonActive]}
           >
             <Text style={[styles.genderText, gender === "Feminin" && styles.genderTextActive]}>
               Feminin
             </Text>
           </TouchableOpacity>
-
           <TouchableOpacity
-            onPress={() => {
-              setGender("Masculin");
-              const first = avatars.find((a) => a.gender === "Masculin");
-              if (first) setSelected(first.id);
-            }}
+            onPress={() => handleGenderChange("Masculin")}
             style={[styles.genderButton, gender === "Masculin" && styles.genderButtonActive]}
           >
             <Text style={[styles.genderText, gender === "Masculin" && styles.genderTextActive]}>
@@ -272,29 +299,75 @@ export default function SetUpProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Grille 3 avatars */}
-        <FlatList
-          data={filteredAvatars}
-          numColumns={3}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderItem}
-          extraData={selected}
-          contentContainerStyle={styles.grid}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={false}
-        />
+        {/* Grille + flèches gauche / droite */}
+        <View style={styles.gridRow}>
+
+          {/* ← Flèche gauche */}
+          <TouchableOpacity
+            onPress={() => handlePageChange("prev")}
+            disabled={currentPage === 0}
+            style={[styles.arrowBtn, currentPage === 0 && styles.arrowBtnDisabled]}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.arrowCircle, currentPage === 0 && styles.arrowCircleDisabled]}>
+              <Ionicons
+                name="chevron-back"
+                size={22}
+                color={currentPage === 0 ? "#c8c0e0" : "#7f5af0"}
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Grille centrale */}
+          <View style={styles.gridWrapper}>
+            <FlatList
+              data={filteredAvatars}
+              numColumns={3}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={renderItem}
+              extraData={selected}
+              contentContainerStyle={styles.grid}
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={false}
+            />
+
+            {/* Points de pagination */}
+            <View style={styles.dotsRow}>
+              {Array.from({ length: totalPages }).map((_, i) => (
+                <TouchableOpacity key={i} onPress={() => goToPage(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <View style={[styles.dot, i === currentPage && styles.dotActive]} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* → Flèche droite */}
+          <TouchableOpacity
+            onPress={() => handlePageChange("next")}
+            disabled={currentPage === totalPages - 1}
+            style={[styles.arrowBtn, currentPage === totalPages - 1 && styles.arrowBtnDisabled]}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.arrowCircle, currentPage === totalPages - 1 && styles.arrowCircleDisabled]}>
+              <Ionicons
+                name="chevron-forward"
+                size={22}
+                color={currentPage === totalPages - 1 ? "#c8c0e0" : "#7f5af0"}
+              />
+            </View>
+          </TouchableOpacity>
+
+        </View>
 
         {/* Bouton suivant */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-            <LinearGradient
-              colors={["#7f5af0", "#bbaaff"]}
-              style={styles.nextButtonGradient}
-            >
-              <Text style={styles.nextButtonText} onPress={() => router.push("/frontend/screens/SetUpProfile")}>Suivant</Text>
+            <LinearGradient colors={["#7f5af0", "#bbaaff"]} style={styles.nextButtonGradient}>
+              <Text style={styles.nextButtonText}>Suivant</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
+
       </View>
 
       {/* Stars */}
@@ -316,7 +389,6 @@ export default function SetUpProfileScreen() {
           />
         ))}
       </View>
-     
     </LinearGradient>
   );
 }
@@ -388,7 +460,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0edff",
     borderRadius: 40,
     padding: 4,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   genderButton: {
     flex: 1,
@@ -399,11 +471,44 @@ const styles = StyleSheet.create({
   genderButtonActive: { backgroundColor: "#7f5af0" },
   genderText: { fontSize: 15, fontWeight: "600", color: "#7f5af0" },
   genderTextActive: { color: "#fff" },
-  grid: { paddingBottom: 8, marginTop: 12 },
+
+  // ─── Grille + flèches ─────────────────────────────────────────────────────
+  gridRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  arrowBtn: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  arrowBtnDisabled: {
+    opacity: 0.35,
+  },
+  arrowCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#f0ecff",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#d4c9ff",
+  },
+  arrowCircleDisabled: {
+    backgroundColor: "#f5f5f5",
+    borderColor: "#e8e8e8",
+  },
+  gridWrapper: {
+    flex: 1,
+  },
+  grid: {
+    paddingBottom: 4,
+  },
   avatarBox: {
     flex: 1,
-    margin: 6,
-    borderRadius: 20,
+    margin: 4,
+    borderRadius: 16,
     backgroundColor: "#f8f7ff",
     overflow: "hidden",
     aspectRatio: 0.75,
@@ -416,22 +521,45 @@ const styles = StyleSheet.create({
   },
   check: {
     position: "absolute",
-    bottom: 8,
-    right: 8,
+    bottom: 6,
+    right: 6,
     backgroundColor: "#7f5af0",
     borderRadius: 12,
-    width: 22,
-    height: 22,
+    width: 20,
+    height: 20,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1.5,
     borderColor: "#fff",
     zIndex: 10,
   },
+
+  // ─── Points de pagination ─────────────────────────────────────────────────
+  dotsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#d4c9ff",
+  },
+  dotActive: {
+    width: 22,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#7f5af0",
+  },
+
+  // ─── Bouton suivant ───────────────────────────────────────────────────────
   buttonContainer: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    marginTop: 20,
+    marginTop: 16,
   },
   nextButton: { borderRadius: 25, overflow: "hidden", width: 100 },
   nextButtonGradient: {
@@ -440,6 +568,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   nextButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
+
+  // ─── Stars ────────────────────────────────────────────────────────────────
   stars: {
     position: "absolute",
     top: 0,

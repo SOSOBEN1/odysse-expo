@@ -9,11 +9,12 @@ import {
   Animated,
 } from "react-native";
 import { useRouter } from "expo-router";
-import Svg, { Circle, Path, Ellipse, G } from "react-native-svg";
+import Svg, { Circle, Path, Ellipse, G, Rect } from "react-native-svg";
 import Logo from "../assets/images/logo.svg";
 import { COLORS, SIZES, SHADOWS } from "../styles/theme";
 
-const { width, height } = Dimensions.get("window");
+// FIX 1 : "screen" au lieu de "window" pour couvrir toute la hauteur physique
+const { width, height } = Dimensions.get("screen");
 
 const C = {
   primary:   COLORS.primary,    // "#6949a8"
@@ -23,7 +24,6 @@ const C = {
 };
 
 // ─── Wave Top ─────────────────────────────────────────────────────────────────
-// Rendu EN PREMIER → derrière tout le contenu
 const WaveTop = () => (
   <>
     {/* Couche arrière – claire */}
@@ -57,33 +57,88 @@ const WaveTop = () => (
 );
 
 // ─── Wave Bottom ──────────────────────────────────────────────────────────────
-// Rendu EN DERNIER → par-dessus le contenu (comme dans l'image)
+// FIX 2 : icônes intégrées dans la vague CLAIRE (couche arrière)
+// FIX 3 : bottom: 0 sur les deux couches pour couvrir tout le bas
 const WaveBottom = () => (
   <>
-    {/* Couche arrière – claire */}
+    {/* ── Couche claire (derrière) — contient les icônes ── */}
     <Svg
-      width={width} height={180}
-      style={[styles.absolute, { bottom: -22 }]}
+      width={width}
+      height={210}
+      style={[styles.absolute, { bottom: 0 }]}
       pointerEvents="none"
     >
+      {/* Vague claire */}
       <Path
-        d={`M0,130 L${width},130 L${width},50
-            Q${width * 0.72},0 ${width * 0.5},36
-            Q${width * 0.28},66 0,30 Z`}
+        d={`M0,210 L${width},210 L${width},65
+            Q${width * 0.72},5 ${width * 0.5},50
+            Q${width * 0.28},88 0,48 Z`}
         fill={C.secondary}
         opacity={0.55}
       />
+
+      {/* ══ ICÔNE 1 — Manette de jeu (gauche) ══ */}
+      <G transform={`translate(${width * 0.13 - 24}, 100)`}>
+        {/* Corps */}
+        <Path
+          d="M6,10 Q6,2 16,2 L32,2 Q42,2 42,10 L42,26 Q42,34 32,34 L16,34 Q6,34 6,26 Z"
+          fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}
+        />
+        {/* Croix directionnelle */}
+        <Path d="M14,18 H20 M17,15 V21" stroke="#fff" strokeWidth={2} strokeLinecap="round" opacity={0.75}/>
+        {/* Boutons ABXY */}
+        <Circle cx={32} cy={15} r={3} fill="#fff" opacity={0.6}/>
+        <Circle cx={36} cy={20} r={3} fill="#fff" opacity={0.6}/>
+        {/* Poignées gauche */}
+        <Path d="M10,32 Q8,42 13,46" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" fill="none" opacity={0.75}/>
+        {/* Poignées droite */}
+        <Path d="M38,32 Q40,42 35,46" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" fill="none" opacity={0.75}/>
+        {/* Bouton start */}
+        <Rect x={19} y={14} width={10} height={5} rx={2.5} fill="none" stroke="#fff" strokeWidth={1.5} opacity={0.6}/>
+      </G>
+
+      {/* ══ ICÔNE 2 — Hexagone / médaille (centre) ══ */}
+      <G transform={`translate(${width * 0.5 - 22}, 82)`}>
+        {/* Hexagone */}
+        <Path
+          d="M22,0 L42,12 L42,36 L22,48 L2,36 L2,12 Z"
+          fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}
+        />
+        {/* Étoile intérieure */}
+        <Path
+          d="M22,14 L25,21 L32,21 L27,26 L29,33 L22,29 L15,33 L17,26 L12,21 L19,21 Z"
+          fill="#fff" opacity={0.55}
+        />
+      </G>
+
+      {/* ══ ICÔNE 3 — Cloche de notification (droite) ══ */}
+      <G transform={`translate(${width * 0.85 - 20}, 88)`}>
+        {/* Anneau supérieur */}
+        <Circle cx={20} cy={3} r={3.5} fill="none" stroke="#fff" strokeWidth={2} opacity={0.75}/>
+        {/* Corps de la cloche */}
+        <Path
+          d="M6,36 L34,36 L32,16 Q30,4 20,6 Q10,4 8,16 Z"
+          fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}
+        />
+        {/* Battant */}
+        <Path
+          d="M13,36 Q13,44 20,44 Q27,44 27,36"
+          fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" opacity={0.75}
+        />
+      </G>
     </Svg>
-    {/* Couche avant – foncée */}
+
+    {/* ── Couche foncée (devant) ── */}
     <Svg
-      width={width} height={130}
+      width={width}
+      height={150}
       style={[styles.absolute, { bottom: 0 }]}
       pointerEvents="none"
     >
       <Path
-        d={`M0,130 L${width},130 L${width},46
-            Q${width * 0.75},0 ${width * 0.5},34
-            Q${width * 0.25},64 0,28 Z`}
+        d={`M0,150 L${width},150 L${width},50
+            Q${width * 0.75},0 ${width * 0.5},36
+            Q${width * 0.25},66 0,30 Z`}
         fill={C.primary}
       />
     </Svg>
@@ -91,6 +146,7 @@ const WaveBottom = () => (
 );
 
 // ─── Decorations (points, +, blobs, étincelles) ───────────────────────────────
+// FIX 4 : icônes fantômes retirées d'ici (elles sont maintenant dans WaveBottom)
 const Decorations = () => (
   <Svg
     width={width} height={height}
@@ -123,64 +179,14 @@ const Decorations = () => (
     <Circle cx={68} cy={682} r={3.5} fill={C.light} />
 
     {/* ── Étincelles autour du bouton CTA ── */}
-    {/* Gauche */}
     <Path
       d="M52 556 L57 544 L62 556"
       stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none"
     />
-    {/* Droite */}
     <Path
       d={`M${width - 62} 566 L${width - 57} 554 L${width - 52} 566`}
       stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none"
     />
-
-    {/* ══ Icônes fantômes dans la vague du bas ══ */}
-    {/* 1 — Bulle de chat (gauche) */}
-    <Path
-      d={`
-        M${width * 0.16 - 16} ${height - 56}
-        Q${width * 0.16 - 16} ${height - 74} ${width * 0.16} ${height - 74}
-        Q${width * 0.16 + 16} ${height - 74} ${width * 0.16 + 16} ${height - 56}
-        Q${width * 0.16 + 16} ${height - 42} ${width * 0.16 + 5} ${height - 42}
-        L${width * 0.16} ${height - 34}
-        L${width * 0.16 - 7} ${height - 42}
-        Q${width * 0.16 - 16} ${height - 42} ${width * 0.16 - 16} ${height - 56} Z
-      `}
-      fill="none" stroke="#fff" strokeWidth={2} opacity={0.55}
-    />
-
-    {/* 2 — Étoile / losange (centre) */}
-    <Path
-      d={`
-        M${width * 0.5} ${height - 70}
-        L${width * 0.5 + 6} ${height - 56}
-        L${width * 0.5} ${height - 42}
-        L${width * 0.5 - 6} ${height - 56} Z
-      `}
-      fill="none" stroke="#fff" strokeWidth={2} opacity={0.55}
-    />
-    {/* Petit point central de l'étoile */}
-    <Circle cx={width * 0.5} cy={height - 56} r={2.5} fill="#fff" opacity={0.55} />
-
-    {/* 3 — Cloche (droite) */}
-    <Path
-      d={`
-        M${width * 0.82 + 12} ${height - 76}
-        Q${width * 0.82 + 24} ${height - 76} ${width * 0.82 + 24} ${height - 62}
-        L${width * 0.82 + 28} ${height - 46}
-        L${width * 0.82 - 4} ${height - 46}
-        L${width * 0.82} ${height - 62}
-        Q${width * 0.82} ${height - 76} ${width * 0.82 + 12} ${height - 76} Z
-      `}
-      fill="none" stroke="#fff" strokeWidth={2} opacity={0.55}
-    />
-    {/* Battant de la cloche */}
-    <Path
-      d={`M${width * 0.82 + 6} ${height - 44} Q${width * 0.82 + 12} ${height - 38} ${width * 0.82 + 18} ${height - 44}`}
-      fill="none" stroke="#fff" strokeWidth={2} opacity={0.55}
-    />
-    {/* Anneau haut cloche */}
-    <Circle cx={width * 0.82 + 12} cy={height - 76} r={3} fill="none" stroke="#fff" strokeWidth={1.8} opacity={0.55} />
   </Svg>
 );
 
@@ -287,7 +293,7 @@ const StartScreen = () => {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* 5 — Vague bas (par-dessus le contenu, comme dans l'image) */}
+      {/* 5 — Vague bas (par-dessus le contenu) */}
       <WaveBottom />
     </View>
   );
@@ -297,6 +303,7 @@ const StartScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: height,      // FIX : garantit la hauteur physique complète
     alignItems: "center",
     backgroundColor: C.bg,
     overflow: "hidden",
@@ -312,7 +319,6 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: "center",
     marginTop: height * 0.24,
-    // Légère ombre sous le logo
     shadowColor: C.primary,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.2,
@@ -325,7 +331,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#3d2b7a",
     letterSpacing: 1.5,
-    marginTop:-28,
+    marginTop: -28,
   },
   tagline: {
     fontSize: 16,
@@ -353,7 +359,6 @@ const styles = StyleSheet.create({
     paddingLeft: 38,
     paddingRight: 10,
     minWidth: 220,
-    // Glow blanc
     shadowColor: "#ffffff",
     shadowOpacity: 0.9,
     shadowRadius: 20,

@@ -1,7 +1,7 @@
-import { Redirect } from "expo-router";
 
+import { Redirect } from 'expo-router';
 export default function Page() {
-  return <Redirect href="/frontend/screens/Question4" />;
+  return <Redirect href="/frontend/screens/Homescreen" />;
 }
 
 

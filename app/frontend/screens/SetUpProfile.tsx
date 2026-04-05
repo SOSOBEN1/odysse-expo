@@ -1,11 +1,11 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons, Feather, MaterialIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import { Text, TouchableOpacity, View } from "react-native";
 import UsernameInput from "../components/UsernameInput";
-import styles from "../styles/SetUpProfileStyle";
 import WaveBackground from "../components/waveBackground";
-import { Link,useRouter } from "expo-router";
+import styles from "../styles/SetUpProfileStyle";
 
 
 export default function SetUpProfileScreen() {

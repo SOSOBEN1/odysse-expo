@@ -773,8 +773,7 @@ export default function DashboardScreen() {
         <GlobalProgressSection />
       </ScrollView>
 
-
-      <Navbar active="home" onChange={() => {}} />
+<Navbar active="home" onChange={(key) => console.log(key)} />
     </View>
   );
 }

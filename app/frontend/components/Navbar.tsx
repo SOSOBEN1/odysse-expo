@@ -3,22 +3,23 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
 import { COLORS, SIZES, SHADOWS } from "../styles/theme";
-
+import { useRouter } from "expo-router";
 type Props = {
   active: string;
   onChange: (key: string) => void;
 };
 
 const items = [
-  { key: "home", label: "Accueil", icon: "home-outline" },
-  { key: "missions", label: "Missions", icon: "flag-outline" },
-  { key: "shop", label: "Boutique", icon: "cart-outline" },
-  { key: "badges", label: "Badges", icon: "ribbon-outline" },
-  { key: "defis", label: "Defis", icon: "trophy-outline"  },
-  { key: "profile", label: "Profil", icon: "person-outline" },
+  { key: "home", label: "Accueil", icon: "home-outline", route: "/frontend/screens/Dashbord" },
+  { key: "missions", label: "Missions", icon: "flag-outline",route: "/frontend/screens/Homescreen" },
+  { key: "shop", label: "Boutique", icon: "cart-outline",route: ""  },
+  { key: "badges", label: "Badges", icon: "ribbon-outline",route: ""  },
+  { key: "defis", label: "Defis", icon: "trophy-outline",route: "/frontend/screens/Defis"   },
+  { key: "profile", label: "Profil", icon: "person-outline",route: ""  },
 ];
 
 export default function Navbar({ active, onChange }: Props) {
+  const router = useRouter();
   return (
     <View style={styles.wrapper}>
       
@@ -43,7 +44,12 @@ export default function Navbar({ active, onChange }: Props) {
           return (
        <TouchableOpacity
   key={item.key}
-  onPress={() => onChange(item.key)}
+ onPress={() => {
+  onChange(item.key);
+  if (item.route) {
+    router.push(item.route);
+  }
+}}
   style={styles.item}
 >
   <View

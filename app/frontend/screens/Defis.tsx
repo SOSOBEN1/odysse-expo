@@ -16,6 +16,7 @@ import {
 import Svg, { Path, Circle, Ellipse, Rect } from "react-native-svg";
 import { COLORS, SIZES, SHADOWS } from "../constants/theme";
 import Navbar from "../components/Navbar"; // ta navbar existante
+import { useRouter } from "expo-router";
 
 const { width } = Dimensions.get("window");
 
@@ -263,6 +264,7 @@ const TabBar = ({ active, onSelect }: TabBarProps) => (
 
 // ─── DefiScreen ───────────────────────────────────────────────────────────────
 export default function DefiScreen() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>("mes_defis");
 
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -348,7 +350,7 @@ export default function DefiScreen() {
 
       {/* ── CTA "Lancer un défi" ── */}
       <View style={styles.ctaBar}>
-        <TouchableOpacity style={styles.ctaBtn} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.ctaBtn} activeOpacity={0.85} onPress={() => router.push("/frontend/screens/AmisDefis")}>
           <Text style={styles.ctaBtnText}>Lancer un défi</Text>
         </TouchableOpacity>
       </View>

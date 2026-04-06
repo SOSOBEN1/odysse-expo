@@ -11,9 +11,13 @@ import {
   StatusBar,
   Platform,
 } from "react-native";
-import Svg, { Path, Circle, Ellipse, G } from "react-native-svg";
+import Svg, { Path, Circle } from "react-native-svg";
 import { COLORS, SIZES, SHADOWS } from "../constants/theme";
 import Navbar from "../components/Navbar";
+import BackButton from "../components/BackButton";
+import InviteFriendModal from "../components/InviteFriendModal";
+import { useRouter } from "expo-router";
+
 
 const { width, height } = Dimensions.get("window");
 
@@ -36,38 +40,20 @@ const FRIENDS: Friend[] = [
 // ─── Mini Avatar SVG ──────────────────────────────────────────────────────────
 const MiniAvatar = ({ color, hairColor }: { color: string; hairColor: string }) => (
   <Svg width={46} height={46} viewBox="0 0 46 46">
-    {/* Background circle */}
     <Circle cx={23} cy={23} r={22} fill={color} />
-    {/* Skin face */}
     <Circle cx={23} cy={20} r={9} fill="#FDDBB4" />
-    {/* Hair */}
     <Path
       d={`M14 18 Q14 8 23 8 Q32 8 32 18 Q30 12 23 12 Q16 12 14 18 Z`}
       fill={hairColor}
     />
-    {/* Body / shoulders */}
-    <Path
-      d={`M10 46 Q10 34 23 34 Q36 34 36 46 Z`}
-      fill={color}
-      opacity={0.8}
-    />
-    {/* Shirt/top hint */}
-    <Path
-      d={`M13 44 Q13 36 23 36 Q33 36 33 44 Z`}
-      fill="#fff"
-      opacity={0.35}
-    />
+    <Path d={`M10 46 Q10 34 23 34 Q36 34 36 46 Z`} fill={color} opacity={0.8} />
+    <Path d={`M13 44 Q13 36 23 36 Q33 36 33 44 Z`} fill="#fff" opacity={0.35} />
   </Svg>
 );
 
 // ─── Checkmark circle ─────────────────────────────────────────────────────────
 const CheckCircle = ({ selected }: { selected: boolean }) => (
-  <View
-    style={[
-      styles.checkCircle,
-      selected && styles.checkCircleSelected,
-    ]}
-  >
+  <View style={[styles.checkCircle, selected && styles.checkCircleSelected]}>
     {selected && (
       <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
         <Path
@@ -127,15 +113,10 @@ const FriendRow = ({ friend, selected, onToggle, delay }: FriendRowProps) => {
         onPress={handlePress}
         activeOpacity={0.9}
       >
-        {/* Avatar */}
         <View style={styles.avatarWrapper}>
           <MiniAvatar color={friend.avatarColor} hairColor={friend.hairColor} />
         </View>
-
-        {/* Name */}
         <Text style={styles.friendName}>{friend.name}</Text>
-
-        {/* Check */}
         <CheckCircle selected={selected} />
       </TouchableOpacity>
     </Animated.View>
@@ -150,17 +131,13 @@ const BgSparkles = () => (
     style={StyleSheet.absoluteFillObject}
     pointerEvents="none"
   >
-    {/* Top-left cross */}
     <Path d="M28 110 H40 M34 104 V116" stroke={COLORS.secondary} strokeWidth={2} strokeLinecap="round" opacity={0.5} />
-    {/* Top-right cross */}
     <Path d={`M${width - 36} 160 H${width - 24} M${width - 30} 154 V166`} stroke={COLORS.secondary} strokeWidth={2} strokeLinecap="round" opacity={0.4} />
-    {/* Scattered dots */}
     <Circle cx={width - 20} cy={200} r={3}   fill={COLORS.primaryLight} opacity={0.5} />
     <Circle cx={20}         cy={300} r={2.5} fill={COLORS.primaryLight} opacity={0.4} />
     <Circle cx={width - 30} cy={380} r={2}   fill={COLORS.primaryLight} opacity={0.45} />
     <Circle cx={45}         cy={450} r={3}   fill={COLORS.primaryLight} opacity={0.35} />
     <Circle cx={width - 15} cy={520} r={2}   fill={COLORS.primaryLight} opacity={0.4} />
-    {/* Small stars (4-point) */}
     <Path d={`M${width-55} 130 L${width-52} 122 L${width-49} 130 L${width-57} 126 L${width-47} 126 Z`}
       fill={COLORS.primaryLight} opacity={0.4} />
     <Path d="M55 380 L58 372 L61 380 L53 376 L63 376 Z"
@@ -194,7 +171,9 @@ const HeaderIcons = () => (
 
 // ─── DefierAmisScreen ─────────────────────────────────────────────────────────
 export default function DefierAmisScreen() {
-  const [selected, setSelected] = useState<number[]>([1, 2, 3]); // Ariana, David, Aylin pré-sélectionnés
+  const router = useRouter();
+  const [selected, setSelected] = useState<number[]>([1, 2, 3]);
+  const [modalVisible, setModalVisible] = useState(false);
 
   const titleAnim = useRef(new Animated.Value(0)).current;
 
@@ -219,8 +198,11 @@ export default function DefierAmisScreen() {
       {/* Background sparkles */}
       <BgSparkles />
 
-      {/* Top-right icons */}
-      <HeaderIcons />
+      {/* ── Top bar: BackButton left, icons right ── */}
+      <View style={styles.topBar}>
+             <BackButton  onPress={() => router.push("/frontend/screens/Defis")} />
+        <HeaderIcons />
+      </View>
 
       {/* ── Main content ── */}
       <ScrollView
@@ -259,8 +241,12 @@ export default function DefierAmisScreen() {
           ))}
         </View>
 
-        {/* Add friend button */}
-        <TouchableOpacity style={styles.addFriendBtn} activeOpacity={0.8}>
+        {/* Add friend button — opens modal */}
+        <TouchableOpacity
+          style={styles.addFriendBtn}
+          activeOpacity={0.8}
+          onPress={() => setModalVisible(true)}
+        >
           <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
             <Circle cx={9} cy={9} r={8} fill={COLORS.primary} />
             <Path d="M9 5V13M5 9H13" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
@@ -268,7 +254,6 @@ export default function DefierAmisScreen() {
           <Text style={styles.addFriendText}>Ajouter un Ami</Text>
         </TouchableOpacity>
 
-        {/* spacer for CTA + navbar */}
         <View style={{ height: 130 }} />
       </ScrollView>
 
@@ -283,7 +268,17 @@ export default function DefierAmisScreen() {
       </View>
 
       {/* ── Navbar ── */}
-     <Navbar active="defis" onChange={() => {}} />
+      <Navbar active="defis" onChange={() => {}} />
+
+      {/* ── Invite Friend Modal ── */}
+      <InviteFriendModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        onInvite={(email) => {
+          console.log("Invited:", email);
+          // handle invite logic here
+        }}
+      />
     </View>
   );
 }
@@ -295,14 +290,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
+  // ── Top bar ──
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: Platform.OS === "android" ? 44 : 58,
+    paddingHorizontal: SIZES.padding,
+    zIndex: 10,
+  },
+
   // ── Header icons ──
   headerIcons: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    paddingTop: Platform.OS === "android" ? 44 : 58,
-    paddingHorizontal: SIZES.padding,
     gap: 8,
-    zIndex: 10,
   },
   iconBtn: {
     width: 38,
@@ -360,7 +361,6 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   friendRowSelected: {
-    // subtle highlight when selected
     backgroundColor: `${COLORS.primary}08`,
   },
   avatarWrapper: {

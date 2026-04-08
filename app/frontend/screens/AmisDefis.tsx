@@ -247,7 +247,7 @@ export default function DefierAmisScreen() {
           activeOpacity={0.8}
           onPress={() => setModalVisible(true)}
         >
-          <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
+          <Svg width={14} height={14} viewBox="0 0 18 18" fill="none">
             <Circle cx={9} cy={9} r={8} fill={COLORS.primary} />
             <Path d="M9 5V13M5 9H13" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
           </Svg>
@@ -402,14 +402,16 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
 
-  // ── Add friend ──
+  // ── Add friend (plus petit) ──
   addFriendBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: 18,
-    paddingVertical: 12,
+    gap: 6,
+    marginTop: 12,
+    alignSelf: "center",          // ne prend plus toute la largeur
+    paddingVertical: 8,
+    paddingHorizontal: 20,
     borderRadius: SIZES.radiusFull,
     borderWidth: 1.5,
     borderStyle: "dashed",
@@ -417,7 +419,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${COLORS.primary}0D`,
   },
   addFriendText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
     color: COLORS.primary,
   },

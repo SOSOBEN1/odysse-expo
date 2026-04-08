@@ -59,7 +59,6 @@ const SPARKLES = [
 
 // ─── SVG path that snakes between steps ───────────────────────────────────────
 const TrailPath = () => {
-  // Control-point snake: right side → left side → right side …
   const cx = width / 2;
   const d = `
     M ${cx * 0.45} 90
@@ -227,6 +226,17 @@ const HeaderWave = () => (
   </Svg>
 );
 
+// ─── Speech Bubble (au-dessus de l'hibou) ────────────────────────────────────
+const SpeechBubble = ({ message }: { message: string }) => (
+  <View style={styles.bubbleWrapper}>
+    <View style={styles.bubble}>
+      <Text style={styles.bubbleText}>{message}</Text>
+    </View>
+    {/* Flèche pointant vers le bas (vers la tête de l'hibou) */}
+    <View style={styles.bubbleArrow} />
+  </View>
+);
+
 // ─── MissionMapScreen ─────────────────────────────────────────────────────────
 export default function MissionMapScreen() {
   const router  = useRouter();
@@ -324,11 +334,14 @@ export default function MissionMapScreen() {
             <StepNode key={step.id} step={step} delay={i * 120} />
           ))}
 
-          {/* Hibou + bubble (bottom-left) */}
+          {/* Hibou + bulle AU-DESSUS (bottom-left) */}
           <View style={styles.hibouArea}>
+            {/* Bulle de dialogue positionnée au-dessus de l'hibou */}
+            <SpeechBubble message={hibouMsg} />
+            {/* HibouGuide sans message, on gère la bulle nous-mêmes */}
             <HibouGuide
               emotion="confused"
-              message={hibouMsg}
+              message=""
               size={110}
             />
           </View>
@@ -531,10 +544,51 @@ const styles = StyleSheet.create({
   // ── Hibou ──
   hibouArea: {
     position: "absolute",
-    bottom: 40,
+    bottom: 10,
     left: 10,
     width: 170,
     zIndex: 6,
+    alignItems: "flex-start",  // bulle alignée à gauche comme l'hibou
+  },
+
+  // ── Speech Bubble ──
+  bubbleWrapper: {
+    alignItems: "center",
+    marginLeft: 10,             // léger décalage pour pointer vers la tête
+    marginBottom: 0,
+  },
+  bubble: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    maxWidth: 150,
+    ...SHADOWS.light,
+    borderWidth: 1.5,
+    borderColor: COLORS.primaryLight,
+  },
+  bubbleText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.text,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  bubbleArrow: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 9,
+    borderRightWidth: 9,
+    borderTopWidth: 11,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#fff",
+    marginTop: -1,
+    // Petite ombre pour la flèche
+    shadowColor: COLORS.primaryLight,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 1,
   },
 
   // ── Troll label ──

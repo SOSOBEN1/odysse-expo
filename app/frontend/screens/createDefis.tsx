@@ -232,30 +232,28 @@ const MissionCard = ({
         </TouchableOpacity>
       </View>
 
-      {/* Titre */}
-      <View style={styles.missionField}>
-        <Text style={styles.fieldLabel}>Titre :</Text>
-        <FocusInput
-          placeholder="Titre de la mission"
-          value={mission.titre}
-          onChangeText={(v) => onChange(mission.id, "titre", v)}
-        />
-      </View>
-
-      {/* Description */}
-      <View style={styles.missionField}>
-        <Text style={styles.fieldLabel}>Description :</Text>
-        <FocusInput
-          placeholder="Décrivez la mission"
-          value={mission.description}
-          onChangeText={(v) => onChange(mission.id, "description", v)}
-          multiline
-          numberOfLines={3}
-        />
+      {/* Titre + Description — côte à côte */}
+      <View style={styles.missionRow}>
+        <View style={styles.missionCol}>
+          <Text style={styles.fieldLabel}>Titre :</Text>
+          <FocusInput
+            placeholder="Titre"
+            value={mission.titre}
+            onChangeText={(v) => onChange(mission.id, "titre", v)}
+          />
+        </View>
+        <View style={styles.missionCol}>
+          <Text style={styles.fieldLabel}>Description :</Text>
+          <FocusInput
+            placeholder="Description"
+            value={mission.description}
+            onChangeText={(v) => onChange(mission.id, "description", v)}
+          />
+        </View>
       </View>
 
       {/* Durée + Difficulté */}
-      <View style={styles.missionRow}>
+      <View style={[styles.missionRow, { zIndex: 300 }]}>
         <View style={styles.missionCol}>
           <Text style={styles.fieldLabel}>Durée :</Text>
           <FocusInput
@@ -308,8 +306,10 @@ export default function CreateDefisScreen() {
   const [description, setDescription]  = useState("");
   const [dateDebut, setDateDebut]       = useState("");
   const [dateFin, setDateFin]           = useState("");
-  const [missions, setMissions]         = useState<Mission[]>([]);
-  const [missionCounter, setCounter]    = useState(1);
+  const [missions, setMissions]         = useState<Mission[]>([
+    { id: 1, titre: "", description: "", duree: "", difficulte: "", priorite: "", categorie: "" }
+  ]);
+  const [missionCounter, setCounter]    = useState(2);
   const [missionsOpen, setMissionsOpen] = useState(true);
 
   const titleAnim = useRef(new Animated.Value(0)).current;
@@ -339,6 +339,8 @@ export default function CreateDefisScreen() {
     ]).start();
   };
 
+  const canCreate = missions.length === 0 || missions.every(m => m.titre.trim() !== "");
+
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
@@ -346,7 +348,7 @@ export default function CreateDefisScreen() {
 
       {/* Top bar */}
       <View style={styles.topBar}>
-        <BackButton  onPress={() => router.push("/frontend/screens/DefisStat")} />
+        <BackButton onPress={() => router.push("/frontend/screens/DefisStat")} />
         <HeaderIcons />
       </View>
 
@@ -456,7 +458,7 @@ export default function CreateDefisScreen() {
                 />
               ))}
 
-              {/* Add mission */}
+              {/* Add mission — petit, centré, comme dans l'image */}
               <TouchableOpacity style={styles.addMissionBtn} onPress={addMission} activeOpacity={0.85}>
                 <Svg width={20} height={20} viewBox="0 0 18 18" fill="none">
                   <Circle cx={9} cy={9} r={8} fill={COLORS.primary} />
@@ -480,7 +482,7 @@ export default function CreateDefisScreen() {
           </Animated.View>
 
           {/* Bottom padding so CTA clears the navbar */}
-          <View style={{ height: 24 }} />
+          <View style={{ height: 100 }} />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -750,7 +752,7 @@ const styles = StyleSheet.create({
   dropOptionText: { fontSize: 12, fontWeight: "500", color: "#2A1060" },
   dropOptionTextSelected: { color: COLORS.primary, fontWeight: "700" },
 
-  // ── Add mission btn ──
+  // ── Add mission btn — pleine largeur comme dans l'image ──
   addMissionBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -790,6 +792,11 @@ const styles = StyleSheet.create({
     height: "42%",
     backgroundColor: "rgba(255,255,255,0.2)",
     borderRadius: 20,
+  },
+  ctaBtnDisabled: {
+    backgroundColor: "rgba(149,116,224,0.4)",
+    shadowOpacity: 0,
+    elevation: 0,
   },
   ctaBtnText: { color: "#fff", fontSize: 16, fontWeight: "800", letterSpacing: 0.4 },
 

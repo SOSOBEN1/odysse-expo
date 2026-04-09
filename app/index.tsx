@@ -1,6 +1,7 @@
-import SetUpProfileScreen from "./frontend/screens/SetupProfileScreen";
+import BadgesScreen from "./frontend/screens/BadgeScreen";
+
 export default function Page() {
-  return <SetUpProfileScreen />;
+  return <BadgesScreen/>;
 }
 
 

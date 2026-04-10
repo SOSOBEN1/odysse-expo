@@ -3,6 +3,7 @@ import { TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
+
 interface BackButtonProps {
   onPress?: () => void;
 }
@@ -22,7 +23,9 @@ export default function BackButton({ onPress }: BackButtonProps) {
     <TouchableOpacity
       style={styles.backBtn}
       onPress={handlePress}
-      activeOpacity={0.7}
+       activeOpacity={0.7}
+
+      
     >
       <Ionicons name="arrow-back" size={20} color="#6949a8" />
     </TouchableOpacity>

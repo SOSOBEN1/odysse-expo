@@ -14,6 +14,30 @@ import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
 
+
+// ── Interfaces ───────────────────────────────────────────────
+interface StatCardProps {
+  emoji: string;
+  value: number;
+  label: string;
+}
+
+interface BadgeItemProps {
+  emoji: string;
+  label: string;
+  color: string;
+}
+
+interface StarItem {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+  size: number;
+  opacity: number;
+}
+
+// ── Données ──────────────────────────────────────────────────
 const USER = {
   name: "SOSO BEN",
   level: 7,
@@ -96,7 +120,8 @@ const badgeStyles = StyleSheet.create({
 });
 
 export default function ProfileScreen() {
-  const router = useRouter();
+   const router = useRouter();
+
   const { selectedModel } = useAvatar();
   const xpPct = Math.min((USER.xp / USER.xpMax) * 100, 100);
 
@@ -185,7 +210,7 @@ export default function ProfileScreen() {
           <TouchableOpacity
             style={styles.editButton}
             activeOpacity={0.85}
-            onPress={() => router.push("/edit-profile")}
+            onPress={() => router.push("/frontend/screens/EditProfileScreen")}
           >
             <LinearGradient
               colors={["#7f5af0", "#bbaaff"]}

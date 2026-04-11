@@ -3,7 +3,7 @@
 import { Redirect } from 'expo-router';
 export default function Page() {
 
-  return <Redirect href="/frontend/screens/start" />;
+  return <Redirect href="/frontend/screens/Defis" />;
 
 
 

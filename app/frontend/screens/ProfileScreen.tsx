@@ -14,6 +14,7 @@ import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
 
+
 // ── Interfaces ───────────────────────────────────────────────
 interface StatCardProps {
   emoji: string;
@@ -122,7 +123,8 @@ const badgeStyles = StyleSheet.create({
 
 // ── Écran principal ───────────────────────────────────────────
 export default function ProfileScreen() {
-  const router = useRouter();
+   const router = useRouter();
+
   const { selectedModel } = useAvatar();
   const xpPct = Math.min((USER.xp / USER.xpMax) * 100, 100);
 
@@ -211,7 +213,7 @@ export default function ProfileScreen() {
           <TouchableOpacity
             style={styles.editButton}
             activeOpacity={0.85}
-            onPress={() => router.push("/edit-profile")}
+            onPress={() => router.push("/frontend/screens/EditProfileScreen")}
           >
             <LinearGradient
               colors={["#7f5af0", "#bbaaff"]}

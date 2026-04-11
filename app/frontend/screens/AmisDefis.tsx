@@ -262,6 +262,7 @@ export default function DefierAmisScreen() {
         <TouchableOpacity
           style={[styles.ctaBtn, !canContinue && styles.ctaBtnDisabled]}
           activeOpacity={canContinue ? 0.85 : 1}
+            onPress={() => router.push("/frontend/screens/AmisDefis")}
         >
           <Text style={styles.ctaBtnText}>Poursuivre</Text>
         </TouchableOpacity>
@@ -320,6 +321,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: SIZES.padding,
     paddingTop: 24,
+    
   },
 
   // ── Title ──
@@ -429,7 +431,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: SIZES.padding,
     right: SIZES.padding,
-    bottom: 82,
+    bottom: 130,
     alignItems: "center",
   },
   ctaBtn: {

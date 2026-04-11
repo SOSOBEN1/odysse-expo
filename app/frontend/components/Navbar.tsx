@@ -15,7 +15,7 @@ const items = [
   { key: "shop", label: "Boutique", icon: "cart-outline",route: "/frontend/screens/BoutiqueScreen"  },
   { key: "badges", label: "Badges", icon: "ribbon-outline",route: "/frontend/screens/BadgeScreen"  },
   { key: "defis", label: "Defis", icon: "trophy-outline",route: "/frontend/screens/Defis"   },
-  { key: "profile", label: "Profil", icon: "person-outline",route: "/frontend/screens/ProfilScreen"  },
+  { key: "profile", label: "Profil", icon: "person-outline",route: "/frontend/screens/ProfileScreen"  },
 ];
 
 export default function Navbar({ active, onChange }: Props) {

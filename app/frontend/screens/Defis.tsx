@@ -11,11 +11,10 @@ import {
   Animated,
   StatusBar,
   Platform,
-  Image,
 } from "react-native";
-import Svg, { Path, Circle, Ellipse, Rect } from "react-native-svg";
+import Svg, { Path, Circle } from "react-native-svg";
 import { COLORS, SIZES, SHADOWS } from "../constants/theme";
-import Navbar from "../components/Navbar"; // ta navbar existante
+import Navbar from "../components/Navbar";
 import { useRouter } from "expo-router";
 
 const { width } = Dimensions.get("window");
@@ -26,10 +25,10 @@ type TabKey = "mes_defis" | "en_attente" | "termine";
 interface Defi {
   id: number;
   title: string;
-  subtitle: string;   // "Fin: 15 mars · …"
+  subtitle: string;
   xp: number;
-  duration: string;   // "1h30/3h"
-  participants: number; // nb avatars à afficher
+  duration: string;
+  participants: number;
   icon: "book" | "sport" | "rocket";
 }
 
@@ -65,9 +64,9 @@ const DEFIS: Defi[] = [
 ];
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "mes_defis",   label: "Mes défis"   },
-  { key: "en_attente",  label: "en attente"  },
-  { key: "termine",     label: "terminé"     },
+  { key: "mes_defis",  label: "Mes défis"  },
+  { key: "en_attente", label: "en attente" },
+  { key: "termine",    label: "terminé"    },
 ];
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
@@ -93,7 +92,7 @@ const IconRocket = () => (
 
 const ICONS = { book: IconBook, sport: IconSport, rocket: IconRocket };
 
-// ─── Avatar placeholder (silhouette féminine colorée) ────────────────────────
+// ─── Avatar ───────────────────────────────────────────────────────────────────
 const AvatarCircle = ({ color, offset }: { color: string; offset: number }) => (
   <View
     style={[
@@ -101,9 +100,7 @@ const AvatarCircle = ({ color, offset }: { color: string; offset: number }) => (
       { backgroundColor: color, marginLeft: offset === 0 ? 0 : -10, zIndex: 10 - offset },
     ]}
   >
-    {/* tête */}
     <View style={styles.avatarHead} />
-    {/* corps arrondi */}
     <View style={styles.avatarBody} />
   </View>
 );
@@ -117,7 +114,7 @@ const XPBadge = ({ xp }: { xp: number }) => (
   </View>
 );
 
-// ─── "En cours" pill ──────────────────────────────────────────────────────────
+// ─── En cours pill ────────────────────────────────────────────────────────────
 const EnCoursPill = () => (
   <View style={styles.enCoursPill}>
     <Text style={styles.enCoursText}>En cours</Text>
@@ -140,12 +137,7 @@ const SearchBar = () => (
 );
 
 // ─── Defi Card ────────────────────────────────────────────────────────────────
-interface DefiCardProps {
-  defi: Defi;
-  index: number;
-}
-
-const DefiCard = ({ defi, index }: DefiCardProps) => {
+const DefiCard = ({ defi, index }: { defi: Defi; index: number }) => {
   const anim = useRef(new Animated.Value(0)).current;
   const IconComp = ICONS[defi.icon];
 
@@ -172,25 +164,20 @@ const DefiCard = ({ defi, index }: DefiCardProps) => {
         },
       ]}
     >
-      {/* "En cours" tag top-right */}
       <View style={styles.cardTagRow}>
         <EnCoursPill />
       </View>
 
       <View style={styles.cardInner}>
-        {/* Left: icon circle */}
         <View style={styles.cardIconWrapper}>
           <View style={styles.cardIconCircle}>
             <IconComp />
           </View>
         </View>
 
-        {/* Center: info */}
         <View style={styles.cardContent}>
           <Text style={styles.cardTitle} numberOfLines={1}>{defi.title}</Text>
           <Text style={styles.cardSubtitle} numberOfLines={2}>{defi.subtitle}</Text>
-
-          {/* Avatars row */}
           <View style={styles.avatarRow}>
             {Array.from({ length: defi.participants }).map((_, i) => (
               <AvatarCircle key={i} color={AVATAR_COLORS[i % AVATAR_COLORS.length]} offset={i} />
@@ -198,14 +185,12 @@ const DefiCard = ({ defi, index }: DefiCardProps) => {
           </View>
         </View>
 
-        {/* Right: XP + duration */}
         <View style={styles.cardRight}>
           <XPBadge xp={defi.xp} />
           <Text style={styles.cardDuration}>{defi.duration}</Text>
         </View>
       </View>
 
-      {/* Progress bar at bottom */}
       <View style={styles.cardProgressTrack}>
         <View style={[styles.cardProgressFill, { width: `${35 + index * 12}%` }]} />
       </View>
@@ -213,14 +198,9 @@ const DefiCard = ({ defi, index }: DefiCardProps) => {
   );
 };
 
-// ─── Sparkle decorations ──────────────────────────────────────────────────────
+// ─── Sparkles ─────────────────────────────────────────────────────────────────
 const Sparkles = () => (
-  <Svg
-    width={width}
-    height={80}
-    style={styles.sparklesSvg}
-    pointerEvents="none"
-  >
+  <Svg width={width} height={80} style={styles.sparklesSvg} pointerEvents="none">
     {[
       { x: 18,       y: 18, r: 2.5 },
       { x: width-22, y: 12, r: 2   },
@@ -237,12 +217,7 @@ const Sparkles = () => (
 );
 
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
-interface TabBarProps {
-  active: TabKey;
-  onSelect: (k: TabKey) => void;
-}
-
-const TabBar = ({ active, onSelect }: TabBarProps) => (
+const TabBar = ({ active, onSelect }: { active: TabKey; onSelect: (k: TabKey) => void }) => (
   <View style={styles.tabBar}>
     {TABS.map((t) => {
       const isActive = t.key === active;
@@ -278,7 +253,7 @@ export default function DefiScreen() {
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* ── Notification + settings icons (top-right) ── */}
+      {/* ── Top icons ── */}
       <Animated.View
         style={[
           styles.topIcons,
@@ -308,7 +283,6 @@ export default function DefiScreen() {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* Sparkles background top */}
       <Sparkles />
 
       {/* ── Search bar ── */}
@@ -333,30 +307,30 @@ export default function DefiScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Section header */}
         <Text style={styles.sectionTitle}>Tes défis actuels</Text>
         <Text style={styles.sectionSubtitle}>
           Accomplis tes défis avec tes amis pour gagner des récompenses !
         </Text>
 
-        {/* Cards */}
         {DEFIS.map((d, i) => (
           <DefiCard key={d.id} defi={d} index={i} />
         ))}
 
-        {/* Bottom spacer for CTA + navbar */}
-        <View style={{ height: 140 }} />
-      </ScrollView>
-
-      {/* ── CTA "Lancer un défi" ── */}
-      <View style={styles.ctaBar}>
-        <TouchableOpacity style={styles.ctaBtn} activeOpacity={0.85} onPress={() => router.push("/frontend/screens/AmisDefis")}>
+        {/* ✅ Bouton placé directement après les cartes dans le scroll */}
+        <TouchableOpacity
+          style={styles.ctaBtn}
+          activeOpacity={0.85}
+          onPress={() => router.push("/frontend/screens/AmisDefis")}
+        >
           <Text style={styles.ctaBtnText}>Lancer un défi</Text>
         </TouchableOpacity>
-      </View>
 
-      {/* ── Bottom Navbar (composant existant) ── */}
-     <Navbar active="defis" onChange={() => {}} />
+        {/* Spacer pour la navbar */}
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {/* ── Bottom Navbar ── */}
+      <Navbar active="defis" onChange={() => {}} />
     </View>
   );
 }
@@ -368,7 +342,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Top icons ──
   topIcons: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -386,14 +359,12 @@ const styles = StyleSheet.create({
     ...SHADOWS.light,
   },
 
-  // ── Sparkles ──
   sparklesSvg: {
     position: "absolute",
     top: 0,
     left: 0,
   },
 
-  // ── Search ──
   searchContainer: {
     paddingHorizontal: SIZES.padding,
     marginTop: 10,
@@ -418,7 +389,6 @@ const styles = StyleSheet.create({
     padding: 0,
   },
 
-  // ── Tabs ──
   tabBar: {
     flexDirection: "row",
     marginHorizontal: SIZES.padding,
@@ -448,16 +418,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // ── Scroll ──
   scroll: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: SIZES.padding,
     paddingTop: 20,
+    paddingBottom: 120,
   },
 
-  // ── Section header ──
   sectionTitle: {
     fontSize: 20,
     fontWeight: "800",
@@ -471,7 +440,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // ── Card ──
   card: {
     backgroundColor: COLORS.card,
     borderRadius: SIZES.radiusLg,
@@ -492,8 +460,6 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     gap: 10,
   },
-
-  // Icon circle
   cardIconWrapper: {
     marginTop: 2,
   },
@@ -506,8 +472,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...SHADOWS.purple,
   },
-
-  // Content
   cardContent: {
     flex: 1,
   },
@@ -523,8 +487,6 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     marginBottom: 8,
   },
-
-  // Avatars
   avatarRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -553,8 +515,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 10,
     backgroundColor: "rgba(255,255,255,0.5)",
   },
-
-  // Right column
   cardRight: {
     alignItems: "flex-end",
     gap: 8,
@@ -577,8 +537,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.primary,
   },
-
-  // En cours pill
   enCoursPill: {
     backgroundColor: COLORS.secondary,
     borderRadius: SIZES.radiusFull,
@@ -591,8 +549,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.2,
   },
-
-  // Progress bar inside card
   cardProgressTrack: {
     height: 5,
     backgroundColor: COLORS.progressBg,
@@ -607,20 +563,14 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 
-  // ── CTA ──
-  ctaBar: {
-    position: "absolute",
-    left: SIZES.padding,
-    right: SIZES.padding,
-    bottom: 82, // above navbar
-    alignItems: "center",
-  },
+  // ✅ Bouton sans position absolute
   ctaBtn: {
     width: "100%",
     backgroundColor: COLORS.primary,
     borderRadius: SIZES.radiusFull,
     paddingVertical: 16,
     alignItems: "center",
+    marginTop: 10,
     ...SHADOWS.purple,
   },
   ctaBtnText: {

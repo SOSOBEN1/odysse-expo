@@ -1,19 +1,32 @@
-import { MaterialIcons } from "@expo/vector-icons";
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Text, TouchableOpacity, View, StyleSheet } from "react-native";
+import { MaterialIcons } from "@expo/vector-icons";
 
-import QuestionCard from "../components/QuestionCard";
-import WaveBackground from "../components/waveBackground";
-import BackButton from "../components/BackButton";
+import QuestionCard from "./QuestionCard";
+import WaveBackground from "./waveBackground";
+import BackButton from "./BackButton";
 
-export default function Question3Screen() {
+export default function Question4Screen() {
   const router = useRouter();
-  const [hasExam, setHasExam] = useState<string | null>(null);
+  const [followPlan, setFollowPlan] = useState<string | null>(null);
+
+  const options = [
+    "Pas du tout",
+    "Pas vraiment",
+    "Moyennement",
+    "Plutôt",
+    "Tout à fait",
+  ];
 
   return (
-    <LinearGradient colors={["#ffffff", "#EDE7FF"]} style={{ flex: 1 }}>
+    <LinearGradient colors={["#ffffff", "#EDE7FF"]} style={styles.container}>
       <WaveBackground />
 
       {/* HEADER */}
@@ -21,37 +34,43 @@ export default function Question3Screen() {
   <BackButton />
 
   <View style={styles.headerCenter}>
-    <Text style={styles.progressText}>Question 3 of 5</Text>
+    <Text style={styles.progressText}>Question 4 of 5</Text>
 
     <View style={styles.progressBar}>
-      <View style={[styles.progressFill, { width: "60%" }]} />
+      <View style={[styles.progressFill, { width: "80%" }]} />
     </View>
   </View>
 
-  <View style={{ width: 42 }} />
+  <View style={{ width: 26 }} />
 </View>
 
       {/* CARD */}
       <View style={styles.cardWrapper}>
         <QuestionCard
-          question="As-tu un examen ou un devoir important bientôt ?"
-          options={["Oui", "Non"]}
-          selectedValue={hasExam}
-          onSelect={setHasExam}
-          layout="choice"
+          question="As-tu suivi ton plan d’étude aujourd’hui ?"
+          options={options}
+          selectedValue={followPlan}
+          onSelect={setFollowPlan}
+          layout="scale"
         />
       </View>
 
       {/* BUTTONS */}
       <View style={styles.bottomButtons}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          disabled={!hasExam}
-          onPress={() => router.push("/question4")}
-          style={[styles.nextButton, { opacity: hasExam ? 1 : 0.5 }]}
+          disabled={!followPlan}
+          onPress={() => router.push("/question5")}
+          style={[
+            styles.nextButton,
+            { opacity: followPlan ? 1 : 0.5 },
+          ]}
         >
           <Text style={styles.nextText}>Next</Text>
         </TouchableOpacity>
@@ -59,8 +78,11 @@ export default function Question3Screen() {
     </LinearGradient>
   );
 }
-
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+
   header: {
     marginTop: 60,
     paddingHorizontal: 20,
@@ -92,6 +114,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#6949a8",
     borderRadius: 10,
   },
+
  cardWrapper: {
   flex: 1,
   justifyContent: "flex-start",
@@ -102,7 +125,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     marginBottom: 30,
-    marginTop: 20,
   },
 
   backButton: {

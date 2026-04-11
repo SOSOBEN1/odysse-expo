@@ -12,10 +12,10 @@ type Props = {
 const items = [
   { key: "home", label: "Accueil", icon: "home-outline", route: "/frontend/screens/Dashbord" },
   { key: "missions", label: "Missions", icon: "flag-outline",route: "/frontend/screens/Homescreen" },
-  { key: "shop", label: "Boutique", icon: "cart-outline",route: ""  },
-  { key: "badges", label: "Badges", icon: "ribbon-outline",route: ""  },
+  { key: "shop", label: "Boutique", icon: "cart-outline",route: "/frontend/screens/BoutiqueScreen"  },
+  { key: "badges", label: "Badges", icon: "ribbon-outline",route: "/frontend/screens/BadgeScreen"  },
   { key: "defis", label: "Defis", icon: "trophy-outline",route: "/frontend/screens/Defis"   },
-  { key: "profile", label: "Profil", icon: "person-outline",route: ""  },
+  { key: "profile", label: "Profil", icon: "person-outline",route: "/frontend/screens/ProfilScreen"  },
 ];
 
 export default function Navbar({ active, onChange }: Props) {

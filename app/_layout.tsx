@@ -1,10 +1,13 @@
-import { Slot } from "expo-router";
+import { UserProvider } from "./frontend/constants/UserContext";
 import { AvatarProvider } from "./frontend/constants/AvatarContext";
+import { Stack } from "expo-router";
 
-export default function Layout() {
+export default function RootLayout() {
   return (
-    <AvatarProvider>
-      <Slot />
-    </AvatarProvider>
+    <UserProvider>
+      <AvatarProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+      </AvatarProvider>
+    </UserProvider>
   );
 }

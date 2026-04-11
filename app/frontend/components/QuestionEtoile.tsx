@@ -3,9 +3,9 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import BackButton from "../components/BackButton";
-import QuestionCard from "../components/QuestionCard";
-import WaveBackground from "../components/waveBackground";
+import BackButton from "./BackButton";
+import QuestionCard from "./QuestionCard";
+import WaveBackground from "./waveBackground";
 
 export default function Question1Screen() {
   const router = useRouter();

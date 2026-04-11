@@ -4,6 +4,9 @@ import * as FileSystem from "expo-file-system/legacy";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
+import { Alert } from "react-native";
+import { useUser } from "../constants/UserContext";
+import { supabase } from "../constants/supabase";
 
 import {
   ActivityIndicator,
@@ -199,6 +202,8 @@ const avatars = [
 
 // ─── Écran principal ──────────────────────────────────────────────────────────
 export default function SetUpProfileScreen() {
+  const { userId } = useUser();
+const [loading, setLoading] = useState(false);
   const router = useRouter();
   const [gender, setGender] = useState<"Masculin" | "Feminin">("Masculin");
   const [selected, setSelected] = useState(7);
@@ -236,11 +241,45 @@ export default function SetUpProfileScreen() {
     if (first) setSelected(first.id);
   };
 
-  const handleNext = () => {
-    const chosen = avatars.find((a) => a.id === selected);
-    if (chosen) setSelectedModel(chosen.model);
-    router.push("/home");
-  };
+const handleNext = async () => {
+  const chosen = avatars.find((a) => a.id === selected);
+
+  if (!chosen) {
+    Alert.alert("Erreur", "Sélectionne un avatar");
+    return;
+  }
+
+  if (!userId) {
+    Alert.alert("Erreur", "Session introuvable, recommence l'inscription");
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const avatarName = Object.keys(chosen.model)[0]
+      ? String(chosen.model).split("/").pop()
+      : `avatar_${chosen.id}.glb`;
+
+    const { error } = await supabase
+      .from("users")
+      .update({ avatar_url: avatarName })
+      .eq("id_user", userId);
+
+    if (error) {
+      Alert.alert("Erreur", error.message);
+      return;
+    }
+
+    setSelectedModel(chosen.model);
+
+    // ✅ Revient à SetUpProfile (username) après avoir choisi l'avatar
+    router.back();
+  } catch (err) {
+    Alert.alert("Erreur", "Une erreur est survenue");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const renderItem = ({ item }: { item: (typeof avatars)[0] }) => (
     <AvatarItem

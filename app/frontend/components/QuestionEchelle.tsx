@@ -9,9 +9,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 
-import QuestionCard from "../components/QuestionCard";
-import WaveBackground from "../components/waveBackground";
-import BackButton from "../components/BackButton";
+import QuestionCard from "./QuestionCard";
+import WaveBackground from "./waveBackground";
+import BackButton from "./BackButton";
 
 export default function Question4Screen() {
   const router = useRouter();

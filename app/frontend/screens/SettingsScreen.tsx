@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, Switch, StyleSheet, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, Switch, StyleSheet, ScrollView, Dimensions } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import WaveBackground from "../components/waveBackground";
 import ChangePasswordModal from "../components/ChangePasswordModal";
-import styles from "../styles/LoginStyle"; // Réutilisation de ton style de base
+import styles from "../styles/LoginStyle"; 
+
+const { width } = Dimensions.get("window");
 
 export default function SettingsScreen() {
     const router = useRouter();
@@ -15,7 +17,6 @@ export default function SettingsScreen() {
     const [reminders, setReminders] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
 
-    // Étoiles décoratives (comme sur ton Login)
     const stars = [
         { top: 50, left: 30, size: 20, opacity: 0.6 },
         { top: 150, right: 40, size: 22, opacity: 0.7 },
@@ -50,16 +51,18 @@ export default function SettingsScreen() {
         <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
             <WaveBackground />
 
-            {/* BACK */}
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={20} color="#6949a8" />
-            </TouchableOpacity>
+            {/* HEADER : Titre centré et coloré comme les autres */}
+            <View style={localStyles.headerWrapper}>
+                <View style={localStyles.titleAbsoluteContainer}>
+                    <Text style={localStyles.mainTitleCentered}>Paramètres</Text>
+                </View>
 
-            <View style={[styles.header, { marginBottom: 20 }]}>
-                <Text style={styles.title}>Paramètres</Text>
+                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                    <Ionicons name="arrow-back" size={20} color="#6949a8" />
+                </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={{ paddingHorizontal: 20, pb: 100 }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
                 <Text style={localStyles.sectionTitle}>Notifications :</Text>
                 <SettingItem 
                     icon="notifications-outline" 
@@ -118,7 +121,6 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
             </ScrollView>
 
-            {/* ✨ Stars décoratives */}
             {stars.map((star, i) => (
                 <MaterialIcons
                     key={i}
@@ -138,7 +140,35 @@ export default function SettingsScreen() {
 }
 
 const localStyles = StyleSheet.create({
-    sectionTitle: { fontSize: 16, fontWeight: "bold", color: "#5A4C91", marginTop: 20, marginBottom: 10 },
+    headerWrapper: {
+        width: '100%',
+        height: 60,
+        marginTop: 40,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        zIndex: 10,
+    },
+    titleAbsoluteContainer: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: -1, 
+    },
+    mainTitleCentered: {
+        fontSize: 24,
+        fontWeight: "bold",
+        color: "#5A4C91", // Couleur harmonisée avec les autres titres
+    },
+    sectionTitle: { 
+        fontSize: 16, 
+        fontWeight: "bold", 
+        color: "#5A4C91", 
+        marginTop: 20, 
+        marginBottom: 10 
+    },
     cardSettings: { backgroundColor: "rgba(255,255,255,0.5)", borderRadius: 20, padding: 10 },
     settingRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
     iconContainer: { width: 40, height: 40, backgroundColor: "#F0E6FF", borderRadius: 12, justifyContent: "center", alignItems: "center" },

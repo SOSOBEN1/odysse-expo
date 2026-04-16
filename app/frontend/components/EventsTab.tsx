@@ -4,6 +4,7 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { COLORS, SHADOWS } from "../styles/theme";
 import CreateEventModal from "./CreateEventModal";
+import { useRouter } from "expo-router";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Event = {
@@ -153,9 +154,15 @@ const upcomingStyles = StyleSheet.create({
   countdown: { fontSize: 11, color: COLORS.secondary, fontWeight: "600" },
 });
 
+// ─── Props ────────────────────────────────────────────────────────────────────
+interface EventsTabProps {
+  onViewAll?: () => void;
+}
+
 // ─── Main EventsTab ───────────────────────────────────────────────────────────
-export default function EventsTab() {
+export default function EventsTab({ onViewAll }: EventsTabProps) {
   const [showModal, setShowModal] = useState(false);
+   const router = useRouter(); 
 
   const totalMissions = EVENTS.reduce((acc, e) => acc + e.total, 0);
   const doneMissions = EVENTS.reduce((acc, e) => acc + e.done, 0);
@@ -191,7 +198,6 @@ export default function EventsTab() {
           </View>
         </View>
 
-        {/* ← Bouton créer événement */}
         <TouchableOpacity style={styles.createBtn} onPress={() => setShowModal(true)}>
           <Ionicons name="add-circle-outline" size={18} color="#fff" />
           <Text style={styles.createBtnText}>Créer un événement</Text>
@@ -201,7 +207,7 @@ export default function EventsTab() {
       {/* ── Liste événements ── */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Mes événements</Text>
-        <TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push("/frontend/screens/EventsScreen")}>
           <Text style={styles.seeAll}>Voir tout</Text>
         </TouchableOpacity>
       </View>
@@ -212,7 +218,7 @@ export default function EventsTab() {
       {/* ── Événements à venir ── */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Événements à venir</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={onViewAll}>
           <Text style={styles.seeAll}>Voir tout</Text>
         </TouchableOpacity>
       </View>

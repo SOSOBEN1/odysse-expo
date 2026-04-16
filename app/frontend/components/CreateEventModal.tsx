@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { COLORS, SHADOWS } from "../styles/theme";
 
@@ -7,36 +7,43 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onCreate: (event: any) => void;
+  initialData?: any; // Ajout pour la modification
 };
 
 const EVENT_TYPES = [
-  {
-    id: "examen",
-    label: "Examen",
-    icon: "🎓",
-    image: require("../assets/images/examen.png"),
-  },
-  {
-    id: "soutenance",
-    label: "Soutenance",
-    icon: "🎓",
-    image: require("../assets/images/soutenance.png"),
-  },
-  {
-    id: "projet",
-    label: "Projet",
-    icon: "⚙️",
-    image: require("../assets/images/projet.png"),
-  },
+  { id: "examen", label: "Examen", icon: "🎓", image: require("../assets/images/examen.png") },
+  { id: "soutenance", label: "Soutenance", icon: "🎓", image: require("../assets/images/soutenance.png") },
+  { id: "projet", label: "Projet", icon: "⚙️", image: require("../assets/images/projet.png") },
 ];
 
-export default function CreateEventModal({ visible, onClose, onCreate }: Props) {
+export default function CreateEventModal({ visible, onClose, onCreate, initialData }: Props) {
   const [selectedType, setSelectedType] = useState("soutenance");
   const [eventName, setEventName] = useState("");
   const [deadline, setDeadline] = useState("");
 
+  // Remplir les champs si on modifie
+  useEffect(() => {
+    if (visible) {
+      if (initialData) {
+        setSelectedType(initialData.type || "soutenance");
+        setEventName(initialData.name || "");
+        setDeadline(initialData.deadline || "");
+      } else {
+        // Reset si c'veut créer un nouveau
+        setSelectedType("soutenance");
+        setEventName("");
+        setDeadline("");
+      }
+    }
+  }, [visible, initialData]);
+
   const handleCreate = () => {
-    onCreate({ type: selectedType, name: eventName, deadline });
+    onCreate({ 
+      ...initialData, // Garde l'ID si on modifie
+      type: selectedType, 
+      name: eventName, 
+      deadline 
+    });
     onClose();
   };
 
@@ -44,12 +51,10 @@ export default function CreateEventModal({ visible, onClose, onCreate }: Props) 
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.container}>
-          {/* Close */}
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
             <Ionicons name="close" size={20} color="#6b7280" />
           </TouchableOpacity>
 
-          {/* Type selector */}
           <Text style={styles.sectionLabel}>Type:</Text>
           <View style={styles.typeRow}>
             {EVENT_TYPES.map((t) => (
@@ -75,7 +80,6 @@ export default function CreateEventModal({ visible, onClose, onCreate }: Props) 
             ))}
           </View>
 
-          {/* Nom de l'événement */}
           <Text style={styles.sectionLabel}>Nom de l'événement:</Text>
           <TextInput
             style={styles.input}
@@ -85,7 +89,6 @@ export default function CreateEventModal({ visible, onClose, onCreate }: Props) 
             onChangeText={setEventName}
           />
 
-          {/* Date limite */}
           <Text style={styles.sectionLabel}>Date limite:</Text>
           <View style={styles.dateWrapper}>
             <TextInput
@@ -101,12 +104,12 @@ export default function CreateEventModal({ visible, onClose, onCreate }: Props) 
             </TouchableOpacity>
           </View>
 
-          {/* Bouton créer */}
           <TouchableOpacity style={styles.createBtn} onPress={handleCreate}>
-            <Text style={styles.createBtnText}>✨ Créer l'événement</Text>
+            <Text style={styles.createBtnText}>
+              {initialData ? "✨ Modifier l'événement" : "✨ Créer l'événement"}
+            </Text>
           </TouchableOpacity>
 
-          {/* Stars déco */}
           <View style={styles.starsRow}>
             {["✦", "✧", "✦", "✧", "✦"].map((s, i) => (
               <Text key={i} style={styles.star}>{s}</Text>
@@ -117,7 +120,6 @@ export default function CreateEventModal({ visible, onClose, onCreate }: Props) 
     </Modal>
   );
 }
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,

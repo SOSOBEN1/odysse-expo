@@ -13,6 +13,7 @@ import BackButton from "../components/BackButton";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
+import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 
 
 // ── Interfaces ───────────────────────────────────────────────
@@ -311,6 +312,7 @@ const styles = StyleSheet.create({
 
   editButton: {
     borderRadius: 30, overflow: "hidden", elevation: 4,
+      backgroundColor: COLORS.missionCreateBtn,
     shadowColor: "#7f5af0",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25, shadowRadius: 10,

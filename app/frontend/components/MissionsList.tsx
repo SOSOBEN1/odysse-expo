@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS, SHADOWS } from "../styles/theme";
 import CreateMissionModal from "./CreateMissionModal";
+import { useRouter } from "expo-router";
 
 type Mission = {
   id: string;
@@ -45,6 +46,7 @@ const difficultyConfig = {
   Difficile: { color: "#ef4444", bg: "#fee2e2", stars: "⭐⭐⭐" },
 };
 
+
 const SUGGESTED: SuggestedMission[] = [
   {
     id: "s1", title: "Maîtriser les algorithmes de tri",
@@ -70,6 +72,7 @@ const SUGGESTED: SuggestedMission[] = [
 
 // ─── Recent Mission Card ──────────────────────────────────────────────────────
 function RecentMissionCard({ mission }: { mission: Mission }) {
+  
   const cfg = statusConfig[mission.status];
   return (
     <View style={recentStyles.card}>
@@ -172,6 +175,7 @@ const suggestedStyles = StyleSheet.create({
 
 // ─── Main MissionsList ────────────────────────────────────────────────────────
 export default function MissionsList({ missions, onAdd }: Props) {
+  const router = useRouter(); // ✅
   const [showModal, setShowModal] = useState(false);
 
   return (
@@ -180,16 +184,26 @@ export default function MissionsList({ missions, onAdd }: Props) {
       {/* ── Missions récentes ── */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Missions récentes</Text>
-        <TouchableOpacity>
+
+        {/* ✅ "Voir tout" → navigue vers MissionsScreen */}
+        <TouchableOpacity onPress={() => router.push("/frontend/screens/Missions")}>
           <Text style={styles.seeAll}>Voir tout</Text>
         </TouchableOpacity>
       </View>
+
       <View style={styles.list}>
-        {missions.map((m) => <RecentMissionCard key={m.id} mission={m} />)}
+        {missions.length === 0 ? (
+          <Text style={styles.emptyText}>Aucune mission pour l'instant</Text>
+        ) : (
+          missions.map((m) => <RecentMissionCard key={m.id} mission={m} />)
+        )}
       </View>
 
-      {/* ← Bouton créer mission */}
-      <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)}>
+      {/* ── Bouton créer mission ── */}
+      <TouchableOpacity
+        style={styles.addBtn}
+        onPress={() => setShowModal(true)}
+      >
         <Text style={styles.addBtnText}>+ Créer une mission</Text>
       </TouchableOpacity>
 
@@ -230,8 +244,8 @@ export default function MissionsList({ missions, onAdd }: Props) {
         visible={showModal}
         onClose={() => setShowModal(false)}
         onSave={(mission) => {
-          console.log("Nouvelle mission:", mission);
           setShowModal(false);
+          onAdd(); // ✅ notifie HomeScreen de recharger les missions
         }}
       />
     </View>
@@ -248,6 +262,10 @@ const styles = StyleSheet.create({
   seeAll: { fontSize: 13, color: COLORS.primary, fontWeight: "600" },
   sectionSubtitle: { fontSize: 12, color: "#9ca3af", marginBottom: 12, marginTop: -6 },
   list: { gap: 10 },
+  emptyText: {
+    textAlign: "center", color: "#9ca3af",
+    fontSize: 13, paddingVertical: 20,
+  },
   addBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: 50,

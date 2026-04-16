@@ -12,11 +12,13 @@ import {
   Platform,
 } from "react-native";
 import Svg, { Path, Circle, Ellipse, Defs, RadialGradient, Stop } from "react-native-svg";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import HibouGuide from "../components/ui/Hibou";
 import { COLORS, SIZES, SHADOWS } from "../constants/theme";
 
 const { width, height } = Dimensions.get("window");
+
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepState = "done" | "active" | "locked";
@@ -239,6 +241,7 @@ const SpeechBubble = ({ message }: { message: string }) => (
 
 // ─── MissionMapScreen ─────────────────────────────────────────────────────────
 export default function MissionMapScreen() {
+  const { eventId, eventTitle } = useLocalSearchParams();
   const router  = useRouter();
   const [hibouMsg] = useState("Tu dois d'abord\ntrouver\nl'algorithme.");
 

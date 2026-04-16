@@ -1,6 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState } from "react";
+import { useRouter } from "expo-router";
+import { useState, useEffect } from "react";
+import SettingIcone from "../components/SettingIcone";
+import NotifIcone from "../components/NotifIcone";
+
 import {
   ScrollView,
   StyleSheet,
@@ -16,6 +20,8 @@ import Navbar from "../components/Navbar";
 import StatsBar from "../components/StatsBar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
+import { useUser } from "../constants/UserContext";
+import { supabase } from "../constants/supabase";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 
 function getTimeGreeting() {
@@ -34,31 +40,94 @@ const USER = {
   coins: 1250,
 };
 
-const STATS = {
-  terminated: 18,
-  inProgress: 5,
-  late: 2,
-  streak: 7,
-  weekTime: "12h 30",
-  successRate: 85,
+type Mission = {
+  id: string;
+  title: string;
+  tag: string;
+  duration: string;
+  status: "Terminée" | "En cours" | "En retard";
+  date: string;
 };
 
-const MISSIONS = [
-  { id: "1", title: "Réviser algorithme", tag: "Soutenance PFE", duration: "1h30", status: "Terminée" as const, date: "24/04/2024" },
-  { id: "2", title: "Corriger bugs appli", tag: "Projet mobile", duration: "1h00", status: "En cours" as const, date: "25/04/2024" },
-  { id: "3", title: "Préparer présentation", tag: "Soutenance PFE", duration: "10h00", status: "En retard" as const, date: "23/04/2024" },
-];
-
 export default function HomeScreen() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("Missions");
   const [activeNav, setActiveNav] = useState("home");
   const { selectedModel } = useAvatar();
+  const { userId } = useUser();
   const { icon: timeIcon, text: timeText } = getTimeGreeting();
   const xpPercent = (USER.xp / USER.maxXp) * 100;
 
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [stats, setStats] = useState({
+    terminated: 0,
+    inProgress: 0,
+    late: 0,
+    streak: 7,
+    weekTime: "0h 00",
+    successRate: 0,
+  });
+
+  useEffect(() => {
+    if (userId) fetchMissions();
+  }, [userId]);
+
+  const fetchMissions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("mission")
+        .select("*")
+        .order("id_mission", { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      if (!data) return;
+
+      const mapped: Mission[] = data.map((m: any) => ({
+        id: String(m.id_mission),
+        title: m.titre ?? "Sans titre",
+        tag: m.type ?? "",
+        duration: m.duree_min ? `${Math.floor(m.duree_min / 60)}h${String(m.duree_min % 60).padStart(2, "0")}` : "-",
+        status: mapStatus(m.statut),
+        date: m.created_at ? new Date(m.created_at).toLocaleDateString("fr-FR") : "-",
+      }));
+
+      setMissions(mapped);
+
+      const terminated = data.filter((m: any) => m.statut === "terminee").length;
+      const inProgress = data.filter((m: any) => m.statut === "en_cours").length;
+      const late = data.filter((m: any) => m.statut === "en_retard").length;
+      const total = terminated + inProgress + late;
+      const successRate = total > 0 ? Math.round((terminated / total) * 100) : 0;
+
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      const weekMissions = data.filter((m: any) => {
+        if (!m.created_at) return false;
+        return new Date(m.created_at) >= startOfWeek;
+      });
+      const totalMinutes = weekMissions.reduce((acc: number, m: any) => acc + (m.duree_min ?? 0), 0);
+      const weekTime = `${Math.floor(totalMinutes / 60)}h ${String(totalMinutes % 60).padStart(2, "0")}`;
+
+      setStats({ terminated, inProgress, late, streak: 7, weekTime, successRate });
+    } catch (err: any) {
+      console.error("❌ Erreur fetch missions:", err.message);
+    }
+  };
+
+  const mapStatus = (statut: string): "Terminée" | "En cours" | "En retard" => {
+    if (statut === "terminee") return "Terminée";
+    if (statut === "en_retard") return "En retard";
+    return "En cours";
+  };
+
+  const handleMissionSaved = () => {
+    fetchMissions();
+  };
+
   return (
     <View style={styles.container}>
-      {/* Wave background — top overridé pour descendre la vague */}
       <WaveBackground height={290} />
 
       <ScrollView
@@ -68,23 +137,17 @@ export default function HomeScreen() {
       >
         {/* ── Header ── */}
         <View style={styles.header}>
-          {/* Top row: coins + icons */}
           <View style={styles.topRow}>
             <View style={styles.coinsBadge}>
               <Text style={styles.coinIcon}>🪙</Text>
               <Text style={styles.coinsText}>{USER.coins.toLocaleString()}</Text>
             </View>
             <View style={styles.headerIcons}>
-              <TouchableOpacity style={styles.iconBtn}>
-                <Ionicons name="notifications-outline" size={20} color={COLORS.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconBtn}>
-                <Ionicons name="settings-outline" size={20} color={COLORS.primary} />
-              </TouchableOpacity>
+              <NotifIcone onPress={() => console.log("Notifications")} />
+              <SettingIcone onPress={() => console.log("Settings")} />
             </View>
           </View>
 
-          {/* Avatar + Info */}
           <View style={styles.profileRow}>
             <View style={styles.avatarWrapper}>
               {selectedModel ? (
@@ -107,7 +170,6 @@ export default function HomeScreen() {
                 </Text>
                 <Text style={styles.timeIcon}>{timeIcon}</Text>
               </View>
-
               <View style={styles.xpBarBg}>
                 <LinearGradient
                   colors={[COLORS.secondary, COLORS.primary]}
@@ -142,29 +204,28 @@ export default function HomeScreen() {
         {activeTab === "Missions" ? (
           <>
             <MissionProgress
-              terminated={STATS.terminated}
-              inProgress={STATS.inProgress}
-              late={STATS.late}
+              terminated={stats.terminated}
+              inProgress={stats.inProgress}
+              late={stats.late}
             />
             <StatsBar
-              streak={STATS.streak}
-              weekTime={STATS.weekTime}
-              successRate={STATS.successRate}
-              terminated={STATS.terminated}
-              inProgress={STATS.inProgress}
-              late={STATS.late}
+              streak={stats.streak}
+              weekTime={stats.weekTime}
+              successRate={stats.successRate}
+              terminated={stats.terminated}
+              inProgress={stats.inProgress}
+              late={stats.late}
             />
             <MissionsList
-              missions={MISSIONS}
-              onAdd={() => console.log("Ajouter mission")}
+              missions={missions}
+              onAdd={handleMissionSaved}
             />
           </>
         ) : (
-          <EventsTab />
+          <EventsTab onViewAll={() => router.push("/EventsScreen")} />
         )}
       </ScrollView>
 
-      {/* ── Navbar ── */}
       <Navbar active={activeNav} onChange={setActiveNav} />
     </View>
   );
@@ -174,9 +235,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f3ff" },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 20 },
-
   header: {
-    paddingTop: 30,           // ← était 54, remonté
+    paddingTop: 30,
     paddingHorizontal: SIZES.padding,
     paddingBottom: 20,
   },
@@ -199,15 +259,6 @@ const styles = StyleSheet.create({
   coinIcon: { fontSize: 16 },
   coinsText: { color: COLORS.primary, fontWeight: "700", fontSize: 15 },
   headerIcons: { flexDirection: "row", gap: 8 },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    ...SHADOWS.light,
-  },
 
   profileRow: {
     flexDirection: "row",
@@ -243,7 +294,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   levelText: { color: "#fff", fontSize: 10, fontWeight: "700" },
-
   infoBlock: { flex: 1 },
   greetingRow: {
     flexDirection: "row",
@@ -253,7 +303,6 @@ const styles = StyleSheet.create({
   greeting: { color: "#6b7280", fontSize: 14, flex: 1 },
   greetingName: { color: COLORS.primary, fontWeight: "800", fontSize: 15 },
   timeIcon: { fontSize: 20 },
-
   xpBarBg: {
     height: 8,
     backgroundColor: "#ddd6fe",
@@ -263,7 +312,6 @@ const styles = StyleSheet.create({
   },
   xpBarFill: { height: "100%", borderRadius: 10 },
   xpText: { color: "#9ca3af", fontSize: 11, marginTop: 4 },
-
   tabsRow: {
     flexDirection: "row",
     marginHorizontal: 16,

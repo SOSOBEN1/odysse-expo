@@ -244,14 +244,13 @@ export default function EventsTab({ onViewAll }: EventsTabProps) {
       </View>
 
       {/* ── Modal ── */}
-      <CreateEventModal
-        visible={showModal}
-        onClose={() => setShowModal(false)}
-        onCreate={(event) => {
-          console.log("Nouvel événement:", event);
-          setShowModal(false);
-        }}
-      />
+    <CreateEventModal
+  visible={showModal}
+  onClose={() => setShowModal(false)}
+  onCreate={() => {
+    setShowModal(false);
+  }}
+/>
     </View>
   );
 }

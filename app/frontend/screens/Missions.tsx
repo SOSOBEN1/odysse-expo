@@ -27,7 +27,7 @@ interface Mission {
   progress: number;
   urgent: boolean;
   today: boolean;
-  dateLimite: Date | null;   // ✅ date limite
+  dateLimite: Date | null;
 }
 
 interface MissionTimer {
@@ -83,6 +83,14 @@ const formatElapsed = (seconds: number): string => {
 const formatDateLimite = (date: Date): string =>
   date.toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
+// ✅ Helper : met à jour le statut dans Supabase
+const updateStatut = async (missionId: number, statut: TimerState) => {
+  await supabase
+    .from("mission")
+    .update({ statut })
+    .eq("id_mission", missionId);
+};
+
 function MissionCard({
   mission, timer, onDelete, onEdit, onStart, onPause, onFinish,
 }: {
@@ -119,14 +127,13 @@ function MissionCard({
     else onStart(mission.id);
   };
 
-  // Couleur de la deadline selon proximité
   const getDeadlineColor = () => {
     if (!mission.dateLimite) return "#6b7280";
     const diff = mission.dateLimite.getTime() - Date.now();
-    if (diff < 0) return "#e53e3e";                    // dépassée
-    if (diff < 3600 * 1000) return "#f97316";          // moins d'1h
-    if (diff < 24 * 3600 * 1000) return "#eab308";     // moins de 24h
-    return "#16a34a";                                  // ok
+    if (diff < 0)                   return "#e53e3e";
+    if (diff < 3600 * 1000)         return "#f97316";
+    if (diff < 24 * 3600 * 1000)    return "#eab308";
+    return "#16a34a";
   };
 
   return (
@@ -157,8 +164,6 @@ function MissionCard({
             </View>
             <Text style={styles.duration}>⏱ {mission.duration}</Text>
             <Text style={styles.description} numberOfLines={2}>{mission.description}</Text>
-
-            {/* ✅ Affichage de la date limite */}
             {mission.dateLimite && (
               <Text style={[styles.deadlineText, { color: getDeadlineColor() }]}>
                 🗓 Limite : {formatDateLimite(mission.dateLimite)}
@@ -247,11 +252,9 @@ export default function MissionsScreen() {
   const [timers, setTimers]                     = useState<Record<number, MissionTimer>>({});
   const intervalRefs                            = useRef<Record<number, ReturnType<typeof setInterval>>>({});
 
-  // ✅ Ref pour eviter le stale closure dans setInterval
   const missionsRef = useRef<Mission[]>([]);
   useEffect(() => { missionsRef.current = missions; }, [missions]);
 
-  // ✅ State pour MissionStatusModal
   const [statusModal, setStatusModal] = useState<{
     visible: boolean;
     type: "success" | "fail";
@@ -259,7 +262,7 @@ export default function MissionsScreen() {
     dateLimit?: string;
   }>({ visible: false, type: "success", missionTitle: "" });
 
-  // ✅ Vérification périodique des deadlines dépassées (toutes les minutes)
+  // ✅ Vérification deadlines toutes les minutes
   useEffect(() => {
     const deadlineInterval = setInterval(() => {
       setTimers(prev => {
@@ -270,19 +273,17 @@ export default function MissionsScreen() {
         missionsRef.current.forEach(mission => {
           if (!mission.dateLimite) return;
           const t = prev[mission.id];
-          // Si deadline dépassée et mission pas encore terminée/échouée
           if (mission.dateLimite.getTime() < now && (!t || (t.state !== "done" && t.state !== "fail"))) {
-            // Stopper le timer si en cours
-            if (intervalRefs.current[mission.id]) {
-              clearInterval(intervalRefs.current[mission.id]);
-            }
+            if (intervalRefs.current[mission.id]) clearInterval(intervalRefs.current[mission.id]);
             updated[mission.id] = {
               ...(t ?? { elapsed: 0, validationId: null, startedAt: null }),
               state: "fail",
             };
             changed = true;
 
-            // Ouvrir le modal fail
+            // ✅ Sync Supabase statut = "fail"
+            updateStatut(mission.id, "fail");
+
             setStatusModal({
               visible: true,
               type: "fail",
@@ -294,7 +295,7 @@ export default function MissionsScreen() {
 
         return changed ? updated : prev;
       });
-    }, 60_000); // vérification chaque minute
+    }, 60_000);
 
     return () => clearInterval(deadlineInterval);
   }, []);
@@ -311,7 +312,7 @@ export default function MissionsScreen() {
   const setTimer = (id: number, update: Partial<MissionTimer>) =>
     setTimers(prev => ({ ...prev, [id]: { ...(prev[id] ?? { state: "idle", elapsed: 0, validationId: null, startedAt: null }), ...update } }));
 
-  // ── FINISH (toujours success car manuel ou timer atteint) ──
+  // ── FINISH → success ──
   const handleFinish = async (missionId: number) => {
     const t = getTimer(missionId);
     clearInterval(intervalRefs.current[missionId]);
@@ -327,6 +328,8 @@ export default function MissionsScreen() {
       if (error) { Alert.alert("Erreur", error.message); return; }
     }
 
+    // ✅ Sync Supabase statut = "done"
+    await updateStatut(missionId, "done");
     setTimer(missionId, { state: "done" });
 
     const mission = missionsRef.current.find(m => m.id === missionId);
@@ -352,6 +355,9 @@ export default function MissionsScreen() {
       setTimer(missionId, { state: "running" });
     }
 
+    // ✅ Sync Supabase statut = "running"
+    await updateStatut(missionId, "running");
+
     if (intervalRefs.current[missionId]) clearInterval(intervalRefs.current[missionId]);
 
     intervalRefs.current[missionId] = setInterval(() => {
@@ -363,7 +369,6 @@ export default function MissionsScreen() {
         const mission = missionsRef.current.find(m => m.id === missionId);
         const estimatedSec = (parseDurationToMinutes(mission?.duration ?? "0h30") ?? 30) * 60;
 
-        // ✅ Timer atteint la durée → success automatique
         if (newElapsed >= estimatedSec) {
           clearInterval(intervalRefs.current[missionId]);
           setTimeout(() => handleFinish(missionId), 0);
@@ -375,8 +380,10 @@ export default function MissionsScreen() {
   };
 
   // ── PAUSE ──
-  const handlePause = (missionId: number) => {
+  const handlePause = async (missionId: number) => {
     clearInterval(intervalRefs.current[missionId]);
+    // ✅ Sync Supabase statut = "paused"
+    await updateStatut(missionId, "paused");
     setTimer(missionId, { state: "paused" });
   };
 
@@ -385,7 +392,7 @@ export default function MissionsScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from("mission")
-        .select(`id_mission, titre, description, duree_min, difficulte, priorite, id_boss, date_limite, boss_events ( nom )`)
+        .select(`id_mission, titre, description, duree_min, difficulte, priorite, id_boss, date_limite, statut, boss_events ( nom )`)
         .order("id_mission", { ascending: false });
 
       if (error) throw error;
@@ -416,24 +423,35 @@ export default function MissionsScreen() {
 
       setMissions(mapped);
 
-      // ✅ Vérification immédiate des deadlines dépassées au chargement
+      // ✅ Restaurer les timers depuis le statut Supabase + vérifier deadlines
       const now = Date.now();
       setTimers(prev => {
         const updated = { ...prev };
-        let changed = false;
-        mapped.forEach(mission => {
-          if (!mission.dateLimite) return;
-          const t = prev[mission.id];
-          if (mission.dateLimite.getTime() < now && (!t || (t.state !== "done" && t.state !== "fail"))) {
-            if (intervalRefs.current[mission.id]) clearInterval(intervalRefs.current[mission.id]);
-            updated[mission.id] = {
-              ...(t ?? { elapsed: 0, validationId: null, startedAt: null }),
-              state: "fail",
+
+        (data ?? []).forEach((m: any) => {
+          const existingTimer = prev[m.id_mission];
+          // Ne pas écraser un timer déjà actif en mémoire
+          if (existingTimer && (existingTimer.state === "running" || existingTimer.state === "paused")) return;
+
+          const dateLimite = m.date_limite ? new Date(m.date_limite) : null;
+
+          // Deadline dépassée → fail automatique
+          if (dateLimite && dateLimite.getTime() < now && m.statut !== "done" && m.statut !== "fail") {
+            updateStatut(m.id_mission, "fail");
+            updated[m.id_mission] = { state: "fail", elapsed: 0, validationId: null, startedAt: null };
+            return;
+          }
+
+          // Restaurer depuis Supabase
+          if (m.statut === "done" || m.statut === "fail") {
+            updated[m.id_mission] = {
+              ...(existingTimer ?? { elapsed: 0, validationId: null, startedAt: null }),
+              state: m.statut,
             };
-            changed = true;
           }
         });
-        return changed ? updated : prev;
+
+        return updated;
       });
 
     } catch (err: any) {
@@ -534,7 +552,6 @@ export default function MissionsScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* ✅ Modal success / fail */}
       <MissionStatusModal
         visible={statusModal.visible}
         type={statusModal.type}

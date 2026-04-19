@@ -184,7 +184,7 @@ export default function EventsScreen() {
                   <TouchableOpacity
                     style={[styles.seeMissionsBtn, { backgroundColor: cfg.color }]}
                     onPress={() => router.push({
-                      pathname: "/MissionMapScreen",
+                      pathname: "/frontend/screens/missionEvent",
                       params: { eventId: ev.id, eventTitle: ev.nom },
                     })}
                   >

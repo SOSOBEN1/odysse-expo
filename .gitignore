@@ -41,7 +41,6 @@ app-example
 # generated native folders
 /ios
 /android
-<<<<<<< HEAD
 
 # build
 
@@ -52,5 +51,3 @@ dist/
 android/app/build/
 *.log
 *.apk
-=======
->>>>>>> 9e5f3952051506d5014b02452d6e6149d47cceb3

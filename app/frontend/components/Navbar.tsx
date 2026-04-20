@@ -30,10 +30,10 @@ export default function Navbar({ active, onChange }: Props) {
   viewBox="0 0 400 180"  // correspond à la hauteur
   style={styles.wave}
 >
-  <Path
-    d="M0,60 C100,0 300,180 400,15 L400,170 L0,200 Z"
-    fill="rgba(255, 255, 255, 0.62)"  transform="translate(0,20)"
-  />
+<Path
+  d="M0,60 C100,0 300,180 400,50 L400,170 L0,200 Z"
+  fill="rgba(255, 255, 255, 0.62)" transform="translate(0,20)"
+/>
 </Svg>
 
       {/* 🔥 Items */}

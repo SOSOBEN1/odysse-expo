@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
   View,
@@ -14,6 +14,10 @@ import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
 import AvatarCrd from "../components/AvatarCrd";
 import { useAvatar } from "../constants/AvatarContext";
+import SettingIcone from "../components/SettingIcone";
+import NotifIcone from "../components/NotifIcone";
+import PuzzleIcone from "../components/PuzzleIcone";
+import { useRouter } from "expo-router";
 import Svg, {
   Circle,
   Path,
@@ -33,6 +37,7 @@ const USER = {
   maxXp: 1800,
   coins: 1250,
 };
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 
@@ -42,6 +47,17 @@ interface Stat {
   color: string;
   emoji: string;
 }
+  const stars = [
+  { top: 10, left: 10, size: 20, opacity: 0.6 },
+  { top: 10, right: 10, size: 12, opacity: 0.4 },
+  { bottom: 10, left: 10, size: 15, opacity: 0.5 },
+  { bottom: 10, right: 10, size: 10, opacity: 0.35 },
+  { top: 30, left: 50, size: 8, opacity: 0.25 },
+  { bottom: 40, right: 60, size: 22, opacity: 0.7 },
+  { top: 40, right: 50, size: 22, opacity: 0.7 },
+  { top: 60, left: 150, size: 14, opacity: 0.45 },
+  { bottom: 80, left: 16, size: 18, opacity: 0.55 },
+];
 
 
 interface Mission {
@@ -78,6 +94,7 @@ const DashboardHeader = () => {
   const { selectedModel } = useAvatar();
   const { icon: timeIcon, text: timeText } = getTimeGreeting();
   const xpPercent = (USER.xp / USER.maxXp) * 100;
+    const router = useRouter();
 
 
   return (
@@ -89,12 +106,9 @@ const DashboardHeader = () => {
           <Text style={headerStyles.coinsText}>{USER.coins.toLocaleString()}</Text>
         </View>
         <View style={headerStyles.headerIcons}>
-          <TouchableOpacity style={headerStyles.iconBtn}>
-            <Ionicons name="notifications-outline" size={20} color={COLORS.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity style={headerStyles.iconBtn}>
-            <Ionicons name="settings-outline" size={20} color={COLORS.primary} />
-          </TouchableOpacity>
+          <PuzzleIcone onPress={() => router.push("/frontend/screens/WorldsScreen")} />
+          <NotifIcone />
+          <SettingIcone />
         </View>
       </View>
 
@@ -103,7 +117,7 @@ const DashboardHeader = () => {
       <View style={headerStyles.profileRow}>
         <View style={headerStyles.avatarWrapper}>
           {selectedModel ? (
-            <AvatarCrd model={selectedModel}/>
+            <AvatarCrd model={selectedModel} />
           ) : (
             <View style={headerStyles.avatarPlaceholder}>
               <Text style={headerStyles.avatarEmoji}>🧑</Text>
@@ -145,10 +159,11 @@ const DashboardHeader = () => {
 // ─── HEADER STYLES ───────────────────────────────────────
 const headerStyles = StyleSheet.create({
   container: {
-    paddingTop: 60,
+    paddingTop: 30,
     paddingHorizontal: SIZES.padding,
     paddingBottom: 20,
   },
+
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -173,15 +188,7 @@ const headerStyles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    ...SHADOWS.light,
-  },
+
 
 
   profileRow: {
@@ -288,8 +295,8 @@ const statsStyles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderRadius: SIZES.radiusLarge,
     marginHorizontal: SIZES.padding,
-    padding: 16,
-    marginBottom: 14,
+    padding: 15,
+    marginBottom: 20,
   },
   row: {
     flexDirection: "row",
@@ -753,27 +760,46 @@ const CircularProgress = ({
 
 // ─── SCREEN ───────────────────────────────────────
 export default function DashboardScreen() {
+  
   return (
     <View style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
 
 
       {/* Background wave */}
-      <WaveBackground />
+      <WaveBackground height={290} />
+       <View style={styles.stars} pointerEvents="none">
+    {stars.map((s, i) => (
+      <MaterialIcons
+        key={i}
+        name="auto-awesome"
+        size={s.size}
+        color="#fff"
+        style={{
+          position: "absolute",
+          ...(s.top !== undefined ? { top: s.top } : {}),
+          ...(s.bottom !== undefined ? { bottom: s.bottom } : {}),
+          ...(s.left !== undefined ? { left: s.left } : {}),
+          ...(s.right !== undefined ? { right: s.right } : {}),
+          opacity: s.opacity,
+        }}
+      />
+    ))}
+  </View>
+      
 
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* NEW HEADER */}
-        <DashboardHeader />
-
-
+  <ScrollView showsVerticalScrollIndicator={false}>
+  <DashboardHeader />
+  <View style={{ marginTop: 23 }}>
     <StatsCard />
-        <MissionsSection />
-        <BossEventBanner />
-        <GlobalProgressSection />
-      </ScrollView>
+    <MissionsSection />
+    <BossEventBanner />
+    <GlobalProgressSection />
+  </View>
+</ScrollView>
 
-<Navbar active="home" onChange={(key) => console.log(key)} />
+      <Navbar active="home" onChange={(key) => console.log(key)} />
     </View>
   );
 }
@@ -785,6 +811,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f5f3ff",
   },
+  stars: {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  height: 290, // IMPORTANT: même hauteur que WaveBackground
+  overflow: "hidden",
+},
 });
 
 

@@ -1,55 +1,83 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
-import { Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useState, useEffect } from "react";
+import { Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert } from "react-native";
 import { COLORS, SHADOWS } from "../styles/theme";
+import { supabase } from "../constants/supabase";
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onCreate: (event: any) => void;
+  onCreate: () => void;
+  initialData?: any;
 };
 
 const EVENT_TYPES = [
-  {
-    id: "examen",
-    label: "Examen",
-    icon: "🎓",
-    image: require("../assets/images/examen.png"),
-  },
-  {
-    id: "soutenance",
-    label: "Soutenance",
-    icon: "🎓",
-    image: require("../assets/images/soutenance.png"),
-  },
-  {
-    id: "projet",
-    label: "Projet",
-    icon: "⚙️",
-    image: require("../assets/images/projet.png"),
-  },
+  { id: "examen", label: "Examen", icon: "🎓", image: require("../assets/images/examen.png") },
+  { id: "soutenance", label: "Soutenance", icon: "🎓", image: require("../assets/images/soutenance.png") },
+  { id: "projet", label: "Projet", icon: "⚙️", image: require("../assets/images/projet.png") },
 ];
 
-export default function CreateEventModal({ visible, onClose, onCreate }: Props) {
+export default function CreateEventModal({ visible, onClose, onCreate, initialData }: Props) {
   const [selectedType, setSelectedType] = useState("soutenance");
   const [eventName, setEventName] = useState("");
-  const [deadline, setDeadline] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleCreate = () => {
-    onCreate({ type: selectedType, name: eventName, deadline });
-    onClose();
+  useEffect(() => {
+    if (visible) {
+      if (initialData) {
+        setSelectedType(initialData.type_boss ?? "soutenance");
+        setEventName(initialData.nom ?? "");
+      } else {
+        setSelectedType("soutenance");
+        setEventName("");
+      }
+    }
+  }, [visible, initialData]);
+
+  const handleSave = async () => {
+    if (!eventName.trim()) {
+      Alert.alert("Erreur", "Le nom de l'événement est requis.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (initialData?.id_boss) {
+        // Modification
+        const { error } = await supabase
+          .from("boss_events")
+          .update({ nom: eventName.trim(), type_boss: selectedType })
+          .eq("id_boss", initialData.id_boss);
+        if (error) throw error;
+      } else {
+        // Création
+        const { error } = await supabase
+          .from("boss_events")
+          .insert({ nom: eventName.trim(), type_boss: selectedType });
+        if (error) throw error;
+      }
+
+      onCreate();
+      onClose();
+    } catch (err: any) {
+      Alert.alert("Erreur", err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.container}>
-          {/* Close */}
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
             <Ionicons name="close" size={20} color="#6b7280" />
           </TouchableOpacity>
 
-          {/* Type selector */}
+          <Text style={styles.title}>
+            {initialData?.id_boss ? "✏️ Modifier l'événement" : "✨ Nouvel événement"}
+          </Text>
+
           <Text style={styles.sectionLabel}>Type:</Text>
           <View style={styles.typeRow}>
             {EVENT_TYPES.map((t) => (
@@ -75,38 +103,25 @@ export default function CreateEventModal({ visible, onClose, onCreate }: Props) 
             ))}
           </View>
 
-          {/* Nom de l'événement */}
           <Text style={styles.sectionLabel}>Nom de l'événement:</Text>
           <TextInput
             style={styles.input}
-            placeholder="Ingénieur IA - Présentation"
+            placeholder="Ex: Soutenance IA..."
             placeholderTextColor="#c4b5fd"
             value={eventName}
             onChangeText={setEventName}
           />
 
-          {/* Date limite */}
-          <Text style={styles.sectionLabel}>Date limite:</Text>
-          <View style={styles.dateWrapper}>
-            <TextInput
-              style={styles.dateInput}
-              placeholder="01/12/2026"
-              placeholderTextColor="#c4b5fd"
-              value={deadline}
-              onChangeText={setDeadline}
-              keyboardType="numeric"
-            />
-            <TouchableOpacity style={styles.calendarBtn}>
-              <Ionicons name="calendar" size={20} color={COLORS.primary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Bouton créer */}
-          <TouchableOpacity style={styles.createBtn} onPress={handleCreate}>
-            <Text style={styles.createBtnText}>✨ Créer l'événement</Text>
+          <TouchableOpacity
+            style={[styles.createBtn, loading && { opacity: 0.6 }]}
+            onPress={handleSave}
+            disabled={loading}
+          >
+            <Text style={styles.createBtnText}>
+              {loading ? "Enregistrement..." : initialData?.id_boss ? "✨ Modifier" : "✨ Créer l'événement"}
+            </Text>
           </TouchableOpacity>
 
-          {/* Stars déco */}
           <View style={styles.starsRow}>
             {["✦", "✧", "✦", "✧", "✦"].map((s, i) => (
               <Text key={i} style={styles.star}>{s}</Text>
@@ -119,125 +134,23 @@ export default function CreateEventModal({ visible, onClose, onCreate }: Props) 
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
-  },
-  container: {
-    backgroundColor: "#f5f3ff",
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    padding: 24,
-    paddingBottom: 40,
-  },
-  closeBtn: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    zIndex: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    ...SHADOWS.light,
-  },
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#4c1d95",
-    marginBottom: 10,
-    marginTop: 4,
-  },
-
-  // Type cards
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
+  container: { backgroundColor: "#f5f3ff", borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24, paddingBottom: 40 },
+  closeBtn: { position: "absolute", top: 16, right: 16, zIndex: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: "#fff", justifyContent: "center", alignItems: "center", ...SHADOWS.light },
+  title: { fontSize: 18, fontWeight: "800", color: "#4c1d95", marginBottom: 20, marginTop: 4 },
+  sectionLabel: { fontSize: 14, fontWeight: "700", color: "#4c1d95", marginBottom: 10, marginTop: 4 },
   typeRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
-  typeCard: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 2,
-    borderColor: "transparent",
-    ...SHADOWS.light,
-  },
-  typeCardActive: {
-    borderColor: COLORS.primary,
-  },
-  typeImage: {
-    width: "100%",
-    height: 90,
-  },
-  typeCheck: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COLORS.primary,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  typeLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    backgroundColor: "#fff",
-    paddingVertical: 6,
-  },
+  typeCard: { flex: 1, borderRadius: 16, overflow: "hidden", borderWidth: 2, borderColor: "transparent", ...SHADOWS.light },
+  typeCardActive: { borderColor: COLORS.primary },
+  typeImage: { width: "100%", height: 90 },
+  typeCheck: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.primary, justifyContent: "center", alignItems: "center" },
+  typeLabelRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: "#fff", paddingVertical: 6 },
   typeIcon: { fontSize: 12 },
   typeLabel: { fontSize: 12, fontWeight: "600", color: "#6b7280" },
   typeLabelActive: { color: COLORS.primary },
-
-  // Inputs
-  input: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#e9d5ff",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 14,
-    color: "#1e1b4b",
-    marginBottom: 16,
-  },
-  dateWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#e9d5ff",
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
-  dateInput: {
-    flex: 1,
-    paddingVertical: 14,
-    fontSize: 14,
-    color: "#1e1b4b",
-  },
-  calendarBtn: {
-    padding: 6,
-  },
-
-  // Create button
-  createBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 50,
-    paddingVertical: 16,
-    alignItems: "center",
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
-  },
+  input: { backgroundColor: "#fff", borderRadius: 14, borderWidth: 1.5, borderColor: "#e9d5ff", paddingHorizontal: 16, paddingVertical: 14, fontSize: 14, color: "#1e1b4b", marginBottom: 24 },
+  createBtn: { backgroundColor: COLORS.primary, borderRadius: 50, paddingVertical: 16, alignItems: "center", shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6 },
   createBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
-
   starsRow: { flexDirection: "row", justifyContent: "center", gap: 8, marginTop: 16 },
   star: { color: "#c4b5fd", fontSize: 14 },
 });

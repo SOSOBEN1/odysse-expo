@@ -332,14 +332,18 @@ export default function CreateDefisScreen() {
   const updateMission = (id: number, field: keyof Mission, value: string) =>
     setMissions((prev) => prev.map((m) => (m.id === id ? { ...m, [field]: value } : m)));
 
-  const handleCreate = () => {
-    Animated.sequence([
-      Animated.spring(ctaScale, { toValue: 0.96, useNativeDriver: true, tension: 300 }),
-      Animated.spring(ctaScale, { toValue: 1,    useNativeDriver: true, tension: 200 }),
-    ]).start();
-  };
+const handleCreate = () => {
+  if (!canCreate) return; // bloque si invalide
 
-  const canCreate = missions.length === 0 || missions.every(m => m.titre.trim() !== "");
+  Animated.sequence([
+    Animated.spring(ctaScale, { toValue: 0.96, useNativeDriver: true, tension: 300 }),
+    Animated.spring(ctaScale, { toValue: 1, useNativeDriver: true, tension: 200 }),
+  ]).start(() => {
+    router.push("/frontend/screens/ProgressionDefis");
+  });
+};
+
+const canCreate = missions.length > 0 && missions.every(m => m.titre.trim() !== "");
 
   return (
     <View style={styles.screen}>
@@ -472,7 +476,7 @@ export default function CreateDefisScreen() {
           {/* ── CTA inside scroll, after missions ── */}
           <Animated.View style={[styles.ctaWrap, { transform: [{ scale: ctaScale }] }]}>
             <TouchableOpacity style={styles.ctaBtn} onPress={handleCreate} activeOpacity={0.88}>
-              <View style={styles.ctaShine} pointerEvents="none" />
+              
               <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ marginRight: 8 }}>
                 <Path d="M12 2L14.9 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L9.1 8.26L12 2Z"
                   fill="#fff" stroke="#fff" strokeWidth={1} />
@@ -482,7 +486,7 @@ export default function CreateDefisScreen() {
           </Animated.View>
 
           {/* Bottom padding so CTA clears the navbar */}
-          <View style={{ height: 100 }} />
+         <View style={{ height: 126 }} />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -774,6 +778,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     borderRadius: 32,
     paddingVertical: 17,
+   
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

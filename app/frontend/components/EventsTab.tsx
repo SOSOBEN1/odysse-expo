@@ -4,6 +4,7 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { COLORS, SHADOWS } from "../styles/theme";
 import CreateEventModal from "./CreateEventModal";
+import { useRouter } from "expo-router";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Event = {
@@ -69,12 +70,12 @@ const donut = StyleSheet.create({
 });
 
 // ─── Event Card ───────────────────────────────────────────────────────────────
-function EventCard({ event }: { event: Event }) {
+function EventCard({ event, onPress }: { event: Event; onPress: () => void }) {
   const percent = event.total > 0 ? Math.round((event.done / event.total) * 100) : 0;
   const progressColor = percent === 100 ? "#22c55e" : percent === 0 ? "#e5e7eb" : COLORS.primary;
 
   return (
-    <TouchableOpacity style={eventStyles.card} activeOpacity={0.85}>
+    <TouchableOpacity style={eventStyles.card} activeOpacity={0.85} onPress={onPress}>
       <View style={[eventStyles.iconWrapper, { backgroundColor: event.iconBg }]}>
         <Text style={eventStyles.icon}>{event.icon}</Text>
       </View>
@@ -153,9 +154,15 @@ const upcomingStyles = StyleSheet.create({
   countdown: { fontSize: 11, color: COLORS.secondary, fontWeight: "600" },
 });
 
+// ─── Props ────────────────────────────────────────────────────────────────────
+interface EventsTabProps {
+  onViewAll?: () => void;
+}
+
 // ─── Main EventsTab ───────────────────────────────────────────────────────────
-export default function EventsTab() {
+export default function EventsTab({ onViewAll }: EventsTabProps) {
   const [showModal, setShowModal] = useState(false);
+  const router = useRouter();
 
   const totalMissions = EVENTS.reduce((acc, e) => acc + e.total, 0);
   const doneMissions = EVENTS.reduce((acc, e) => acc + e.done, 0);
@@ -191,7 +198,6 @@ export default function EventsTab() {
           </View>
         </View>
 
-        {/* ← Bouton créer événement */}
         <TouchableOpacity style={styles.createBtn} onPress={() => setShowModal(true)}>
           <Ionicons name="add-circle-outline" size={18} color="#fff" />
           <Text style={styles.createBtnText}>Créer un événement</Text>
@@ -201,18 +207,24 @@ export default function EventsTab() {
       {/* ── Liste événements ── */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Mes événements</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/frontend/screens/EventsScreen")}>
           <Text style={styles.seeAll}>Voir tout</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.list}>
-        {EVENTS.map(e => <EventCard key={e.id} event={e} />)}
+        {EVENTS.map(e => (
+          <EventCard
+            key={e.id}
+            event={e}
+            onPress={() => router.push("/frontend/screens/missionEvent")}
+          />
+        ))}
       </View>
 
       {/* ── Événements à venir ── */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Événements à venir</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={onViewAll}>
           <Text style={styles.seeAll}>Voir tout</Text>
         </TouchableOpacity>
       </View>
@@ -232,14 +244,13 @@ export default function EventsTab() {
       </View>
 
       {/* ── Modal ── */}
-      <CreateEventModal
-        visible={showModal}
-        onClose={() => setShowModal(false)}
-        onCreate={(event) => {
-          console.log("Nouvel événement:", event);
-          setShowModal(false);
-        }}
-      />
+    <CreateEventModal
+  visible={showModal}
+  onClose={() => setShowModal(false)}
+  onCreate={() => {
+    setShowModal(false);
+  }}
+/>
     </View>
   );
 }

@@ -1,22 +1,22 @@
 // screens/DefierAmisScreen.tsx
-import React, { useRef, useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
   Animated,
-  StatusBar,
+  Dimensions,
   Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import Svg, { Path, Circle } from "react-native-svg";
-import { COLORS, SIZES, SHADOWS } from "../constants/theme";
-import Navbar from "../components/Navbar";
+import Svg, { Circle, Path } from "react-native-svg";
 import BackButton from "../components/BackButton";
 import InviteFriendModal from "../components/InviteFriendModal";
-import { useRouter } from "expo-router";
+import Navbar from "../components/Navbar";
+import { COLORS, SHADOWS, SIZES } from "../constants/theme";
 
 
 const { width, height } = Dimensions.get("window");
@@ -262,7 +262,7 @@ export default function DefierAmisScreen() {
         <TouchableOpacity
           style={[styles.ctaBtn, !canContinue && styles.ctaBtnDisabled]}
           activeOpacity={canContinue ? 0.85 : 1}
-            onPress={() => router.push("/frontend/screens/AmisDefis")}
+            onPress={() => router.push("/frontend/screens/createDefis")}
         >
           <Text style={styles.ctaBtnText}>Poursuivre</Text>
         </TouchableOpacity>
@@ -427,20 +427,23 @@ const styles = StyleSheet.create({
   },
 
   // ── CTA ──
+
   ctaBar: {
-    position: "absolute",
-    left: SIZES.padding,
-    right: SIZES.padding,
-    bottom: 130,
-    alignItems: "center",
-  },
+  paddingHorizontal: SIZES.padding,
+  paddingBottom: 125,       // espace entre CTA et Navbar
+  paddingTop: 12,
+  backgroundColor: COLORS.background,
+},
   ctaBtn: {
     width: "100%",
     backgroundColor: COLORS.primary,
     borderRadius: SIZES.radiusFull,
+     marginTop: -75,
     paddingVertical: 16,
     alignItems: "center",
     ...SHADOWS.purple,
+    
+    
   },
   ctaBtnDisabled: {
     backgroundColor: COLORS.primaryLight,

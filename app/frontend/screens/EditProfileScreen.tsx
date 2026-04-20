@@ -10,7 +10,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View, ViewStyle
 } from "react-native";
 import AvatarCrd from "../components/AvatarCrd";
 import BackButton from "../components/BackButton";
@@ -35,8 +35,20 @@ const STAR_POSITIONS = [
   { top: 38,  left: 180, size: 14, delay: 300 },
 ];
 
+// ── Types ───────────────────────────────────────────────────
+type AnimatedStarProps = {
+  style: ViewStyle;
+  size: number;
+  delay?: number;
+};
+
+type SuccessOverlayProps = {
+  visible: boolean;
+  onDone: () => void;
+};
+
 // ── Étoile animée ───────────────────────────────────────────
-function AnimatedStar({ style, size, delay = 0 }) {
+function AnimatedStar({ style, size, delay = 0 }: AnimatedStarProps) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.loop(
@@ -57,7 +69,7 @@ function AnimatedStar({ style, size, delay = 0 }) {
 }
 
 // ── Overlay succès ──────────────────────────────────────────
-function SuccessOverlay({ visible, onDone }) {
+function SuccessOverlay({ visible, onDone }: SuccessOverlayProps) {
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
   const owlY      = useRef(new Animated.Value(60)).current;
@@ -84,7 +96,6 @@ function SuccessOverlay({ visible, onDone }) {
   return (
     <Animated.View style={[overlayStyles.container, { opacity: fadeAnim }]}>
       <Animated.View style={[overlayStyles.card, { transform: [{ scale: scaleAnim }] }]}>
-        {/* Hibou success — même composant AvatarCrd mais avec une image PNG */}
         <Animated.Image
           source={require("../assets/Hibou/success.png")}
           style={[overlayStyles.hibou, { transform: [{ translateY: owlY }] }]}
@@ -125,6 +136,7 @@ const overlayStyles = StyleSheet.create({
 
 // ── Écran principal ─────────────────────────────────────────
 export default function EditProfileScreen() {
+  
   const router = useRouter();
   const { selectedModel, setSelectedModel } = useAvatar();
 
@@ -150,7 +162,6 @@ export default function EditProfileScreen() {
     setShowSuccess(true);
   };
 
-  // Modèle actuellement affiché en grand (celui sélectionné ou le contexte)
   const previewModel = AVATAR_OPTIONS.find((a) => a.id === selectedAvatarId)?.model ?? selectedModel;
 
   return (
@@ -208,13 +219,11 @@ export default function EditProfileScreen() {
                 ]}
                 activeOpacity={0.8}
               >
-                {/* ✅ AvatarCrd avec le .glb directement */}
                 <AvatarCrd model={av.model} bgColor="#e8e2ff" />
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* Bouton Changer Avatar → SetUpProfileScreen */}
           <TouchableOpacity
             style={styles.changeAvatarBtn}
             activeOpacity={0.85}
@@ -387,4 +396,4 @@ const styles = StyleSheet.create({
   /* Hibou */
   hibouSection: { width: "100%", alignItems: "flex-start", marginTop: 10 },
   hibouImage: { width: 180, height: 160 },
-}); 
+});

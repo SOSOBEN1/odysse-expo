@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  DimensionValue,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,9 +11,35 @@ import {
   View,
 } from "react-native";
 import BackButton from "../components/BackButton";
-import BadgeUnlockedModal from "../components/BadgeUnlockedModel"; // ← importer le modal
+import BadgeUnlockedModal from "../components/BadgeUnlockedModel";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
+
+// ── Interfaces ───────────────────────────────────────────────
+interface UnlockedBadgeProps {
+  emoji: string;
+  label: string;
+  date: string;
+  bg: string;
+  color: string;
+  onPress: () => void;
+}
+
+interface LockedBadgeProps {
+  emoji: string;
+  label: string;
+  condition: string;
+  condColor: string;
+}
+
+interface StarItem {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+  size: number;
+  opacity: number;
+}
 
 // ── Données ─────────────────────────────────────────────────
 const TOTAL_BADGES = 40;
@@ -36,22 +63,21 @@ const LOCKED_BADGES = [
   { id: 12, label: "Zen Attitude",  emoji: "🌸",  color: "#ce93d8", condition: "Condition: 7 jours\n<20% stress", condColor: "#555" },
 ];
 
-const stars = [
-  { top: 10,  left: 10,   size: 20, opacity: 0.6 },
-  { top: 10,  right: 10,  size: 12, opacity: 0.4 },
-  { bottom: 10, left: 10, size: 15, opacity: 0.5 },
-  { bottom: 10, right: 10,size: 10, opacity: 0.35 },
-  { top: 30,  left: 50,   size: 8,  opacity: 0.25 },
-  { bottom: 40, right: 60,size: 22, opacity: 0.7 },
-  { top: 40,  right: 50,  size: 22, opacity: 0.7 },
+const stars: StarItem[] = [
+  { top: 10,    left: 10,   size: 20, opacity: 0.6  },
+  { top: 10,    right: 10,  size: 12, opacity: 0.4  },
+  { bottom: 10, left: 10,  size: 15, opacity: 0.5  },
+  { bottom: 10, right: 10, size: 10, opacity: 0.35 },
+  { top: 30,    left: 50,   size: 8,  opacity: 0.25 },
+  { bottom: 40, right: 60, size: 22, opacity: 0.7  },
+  { top: 40,    right: 50,  size: 22, opacity: 0.7  },
 ];
 
-const xpPct = (UNLOCKED_COUNT / TOTAL_BADGES) * 100;
+const xpPct: DimensionValue = `${(UNLOCKED_COUNT / TOTAL_BADGES) * 100}%`;
 
 // ── Badge débloqué ──────────────────────────────────────────
-function UnlockedBadge({ emoji, label, date, bg, color, onPress }) {
+function UnlockedBadge({ emoji, label, date, bg, color, onPress }: UnlockedBadgeProps) {
   return (
-    // ← onPress pour ouvrir le modal
     <TouchableOpacity
       style={[unlockedStyles.card, { backgroundColor: bg }]}
       activeOpacity={0.85}
@@ -68,13 +94,7 @@ function UnlockedBadge({ emoji, label, date, bg, color, onPress }) {
 }
 
 const unlockedStyles = StyleSheet.create({
-  card: {
-    width: "30%",
-    borderRadius: 16,
-    padding: 8,
-    alignItems: "center",
-    marginBottom: 10,
-  },
+  card:     { width: "30%", borderRadius: 16, padding: 8, alignItems: "center", marginBottom: 10 },
   label:    { fontSize: 11, fontWeight: "800", color: "#2d1a6e", marginBottom: 6, textAlign: "center" },
   iconBox:  { width: 60, height: 60, borderRadius: 30, borderWidth: 2, backgroundColor: "#fff", justifyContent: "center", alignItems: "center", marginBottom: 6 },
   emoji:    { fontSize: 28 },
@@ -83,7 +103,7 @@ const unlockedStyles = StyleSheet.create({
 });
 
 // ── Badge verrouillé ────────────────────────────────────────
-function LockedBadge({ emoji, label, condition, condColor }) {
+function LockedBadge({ emoji, label, condition, condColor }: LockedBadgeProps) {
   return (
     <View style={lockedStyles.card}>
       <Text style={lockedStyles.label} numberOfLines={1}>{label}</Text>
@@ -101,24 +121,22 @@ function LockedBadge({ emoji, label, condition, condColor }) {
 }
 
 const lockedStyles = StyleSheet.create({
-  card:      { width: "30%", borderRadius: 16, padding: 8, alignItems: "center", marginBottom: 10, backgroundColor: "#f0ecff" },
-  label:     { fontSize: 11, fontWeight: "800", color: "#2d1a6e", marginBottom: 6, textAlign: "center" },
-  iconBox:   { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: "#d4c9ff", backgroundColor: "#e8e4f8", justifyContent: "center", alignItems: "center", marginBottom: 6, position: "relative" },
-  emoji:     { fontSize: 24, opacity: 0.5 },
+  card:        { width: "30%", borderRadius: 16, padding: 8, alignItems: "center", marginBottom: 10, backgroundColor: "#f0ecff" },
+  label:       { fontSize: 11, fontWeight: "800", color: "#2d1a6e", marginBottom: 6, textAlign: "center" },
+  iconBox:     { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: "#d4c9ff", backgroundColor: "#e8e4f8", justifyContent: "center", alignItems: "center", marginBottom: 6, position: "relative" },
+  emoji:       { fontSize: 24, opacity: 0.5 },
   lockOverlay: { position: "absolute", bottom: -4, right: -4, backgroundColor: "#7f5af0", borderRadius: 10, width: 20, height: 20, justifyContent: "center", alignItems: "center", borderWidth: 1.5, borderColor: "#fff" },
-  condition: { fontSize: 9, fontWeight: "700", textAlign: "center", lineHeight: 13 },
+  condition:   { fontSize: 9, fontWeight: "700", textAlign: "center", lineHeight: 13 },
 });
 
 // ── Écran principal ─────────────────────────────────────────
 export default function BadgesScreen() {
   const router = useRouter();
 
-  // ── État du modal ──────────────────────────────
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState({ label: "", emoji: "" });
 
-  // Ouvrir le modal avec le badge cliqué
-  const openModal = (label, emoji) => {
+  const openModal = (label: string, emoji: string) => {
     setSelectedBadge({ label, emoji });
     setModalVisible(true);
   };
@@ -169,7 +187,7 @@ export default function BadgesScreen() {
               colors={["#7f5af0", "#bbaaff"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={[styles.xpFill, { width: xpPct + "%" }]}
+              style={[styles.xpFill, { width: xpPct }]}
             />
           </View>
         </View>
@@ -191,7 +209,7 @@ export default function BadgesScreen() {
             <UnlockedBadge
               key={b.id}
               {...b}
-              onPress={() => openModal(b.label, b.emoji)} // ← ouvre le modal
+              onPress={() => openModal(b.label, b.emoji)}
             />
           ))}
         </View>
@@ -220,7 +238,7 @@ export default function BadgesScreen() {
       {/* Navbar */}
       <Navbar active="badges" onChange={() => {}} />
 
-      {/* ── Modal badge débloqué ── */}
+      {/* Modal badge débloqué */}
       <BadgeUnlockedModal
         visible={modalVisible}
         badgeName={selectedBadge.label}
@@ -232,18 +250,18 @@ export default function BadgesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  stars: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "hidden" },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 54, paddingBottom: 10, zIndex: 10 },
-  title:  { fontSize: 22, fontWeight: "900", color: "#2d1a6e", letterSpacing: 0.5 },
-  helpBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "#f0ecff", justifyContent: "center", alignItems: "center", shadowColor: "#7f5af0", shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
-  helpText: { fontSize: 16, fontWeight: "800", color: "#7f5af0" },
-  scroll: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 120 },
-  card: { backgroundColor: "#fff", borderRadius: 20, padding: 16, alignItems: "center", marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 4 },
-  trophyEmoji: { fontSize: 44, marginBottom: 6 },
-  xpLabel: { fontSize: 13, color: "#9b87c9", fontWeight: "600", marginBottom: 10 },
-  xpTrack: { width: "100%", height: 8, backgroundColor: "#e0d9ff", borderRadius: 8, overflow: "hidden" },
-  xpFill:  { height: "100%", borderRadius: 8 },
+  container:     { flex: 1 },
+  stars:         { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "hidden" },
+  header:        { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 54, paddingBottom: 10, zIndex: 10 },
+  title:         { fontSize: 22, fontWeight: "900", color: "#2d1a6e", letterSpacing: 0.5 },
+  helpBtn:       { width: 38, height: 38, borderRadius: 19, backgroundColor: "#f0ecff", justifyContent: "center", alignItems: "center", shadowColor: "#7f5af0", shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
+  helpText:      { fontSize: 16, fontWeight: "800", color: "#7f5af0" },
+  scroll:        { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 120 },
+  card:          { backgroundColor: "#fff", borderRadius: 20, padding: 16, alignItems: "center", marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 4 },
+  trophyEmoji:   { fontSize: 44, marginBottom: 6 },
+  xpLabel:       { fontSize: 13, color: "#9b87c9", fontWeight: "600", marginBottom: 10 },
+  xpTrack:       { width: "100%", height: 8, backgroundColor: "#e0d9ff", borderRadius: 8, overflow: "hidden" },
+  xpFill:        { height: "100%", borderRadius: 8 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   sectionLeft:   { flexDirection: "row", alignItems: "center" },
   sectionTitle:  { fontSize: 15, fontWeight: "800", color: "#2d1a6e" },

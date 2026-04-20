@@ -13,6 +13,7 @@ import BackButton from "../components/BackButton";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
+import { COLORS } from "../styles/theme";
 
 
 // ── Interfaces ───────────────────────────────────────────────
@@ -50,26 +51,27 @@ const USER = {
   defis: 12,
 };
 
-const BADGES = [
+const BADGES: BadgeItemProps[] = [
   { id: 1, label: "Maître de la\nTo-Do",   emoji: "📋", color: "#f9c74f" },
   { id: 2, label: "Planificateur\nExpert", emoji: "⏰", color: "#90be6d" },
   { id: 3, label: "Organisateur\nPro",     emoji: "📊", color: "#4cc9f0" },
   { id: 4, label: "Journée\nProductive",   emoji: "☀️", color: "#f8961e" },
+] as any[];
+
+const stars: StarItem[] = [
+  { top: 10,    left: 10,   size: 20, opacity: 0.6  },
+  { top: 10,    right: 10,  size: 12, opacity: 0.4  },
+  { bottom: 10, left: 10,   size: 15, opacity: 0.5  },
+  { bottom: 10, right: 10,  size: 10, opacity: 0.35 },
+  { top: 30,    left: 50,   size: 8,  opacity: 0.25 },
+  { bottom: 40, right: 60,  size: 22, opacity: 0.7  },
+  { top: 40,    right: 50,  size: 22, opacity: 0.7  },
+  { top: 60,    left: 150,  size: 14, opacity: 0.45 },
+  { bottom: 80, left: 16,   size: 18, opacity: 0.55 },
 ];
 
-const stars = [
-  { top: 10,  left: 10,   size: 20, opacity: 0.6 },
-  { top: 10,  right: 10,  size: 12, opacity: 0.4 },
-  { bottom: 10, left: 10, size: 15, opacity: 0.5 },
-  { bottom: 10, right: 10,size: 10, opacity: 0.35 },
-  { top: 30,  left: 50,   size: 8,  opacity: 0.25 },
-  { bottom: 40, right: 60,size: 22, opacity: 0.7 },
-  { top: 40,  right: 50,  size: 22, opacity: 0.7 },
-  { top: 60,  left: 150,  size: 14, opacity: 0.45 },
-  { bottom: 80, left: 16, size: 18, opacity: 0.55 },
-];
-
-function StatCard({ emoji, value, label }) {
+// ── StatCard ─────────────────────────────────────────────────
+function StatCard({ emoji, value, label }: StatCardProps) {
   return (
     <View style={statStyles.card}>
       <View style={statStyles.row}>
@@ -97,7 +99,8 @@ const statStyles = StyleSheet.create({
   label: { fontSize: 12, color: "#7f5af0", fontWeight: "600", marginTop: 4 },
 });
 
-function BadgeItem({ emoji, label, color }) {
+// ── BadgeItem ─────────────────────────────────────────────────
+function BadgeItem({ emoji, label, color }: BadgeItemProps) {
   return (
     <View style={badgeStyles.container}>
       <View style={[badgeStyles.iconBox, { backgroundColor: color + "33", borderColor: color + "55" }]}>
@@ -119,6 +122,7 @@ const badgeStyles = StyleSheet.create({
   label: { fontSize: 9.5, color: "#5c3ca8", textAlign: "center", fontWeight: "600", lineHeight: 13 },
 });
 
+// ── Écran principal ───────────────────────────────────────────
 export default function ProfileScreen() {
    const router = useRouter();
 
@@ -201,12 +205,12 @@ export default function ProfileScreen() {
           {/* Badges gagnés */}
           <Text style={styles.badgesTitle}>Badges gagnés</Text>
           <View style={styles.badgesRow}>
-            {BADGES.map((b) => (
-              <BadgeItem key={b.id} emoji={b.emoji} label={b.label} color={b.color} />
+            {BADGES.map((b, i) => (
+              <BadgeItem key={i} emoji={b.emoji} label={b.label} color={b.color} />
             ))}
           </View>
 
-          {/* ✅ Bouton Modifier profil → navigate vers edit-profile */}
+          {/* Bouton Modifier profil */}
           <TouchableOpacity
             style={styles.editButton}
             activeOpacity={0.85}
@@ -227,11 +231,7 @@ export default function ProfileScreen() {
         <View style={{ height: 20 }} />
       </ScrollView>
 
-      {/* ✅ Navbar avec active="profil" — correspond à l'onglet Profil */}
-      <Navbar active="profil" onChange={(tab) => {
-        // Si ta Navbar utilise onChange pour naviguer, tu peux gérer ici
-        // Sinon elle gère la navigation en interne
-      }} />
+      <Navbar active="profil" onChange={(tab) => {}} />
     </LinearGradient>
   );
 }
@@ -291,14 +291,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 12, elevation: 6,
   },
 
-  xpBox: { backgroundColor: "#f0edff", borderRadius: 18, padding: 14, marginBottom: 16 },
-  xpHeader: {
-    flexDirection: "row", justifyContent: "space-between",
-    alignItems: "center", marginBottom: 10,
-  },
-  xpLabel: { fontSize: 14, fontWeight: "800", color: "#2d1a6e" },
-  xpTrack: { height: 10, backgroundColor: "#d1c4e9", borderRadius: 10, overflow: "hidden" },
-  xpFill: { height: "100%", borderRadius: 10 },
+  xpBox:    { backgroundColor: "#f0edff", borderRadius: 18, padding: 14, marginBottom: 16 },
+  xpHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  xpLabel:  { fontSize: 14, fontWeight: "800", color: "#2d1a6e" },
+  xpTrack:  { height: 10, backgroundColor: "#d1c4e9", borderRadius: 10, overflow: "hidden" },
+  xpFill:   { height: "100%", borderRadius: 10 },
 
   statsGrid: {
     flexDirection: "row", flexWrap: "wrap",
@@ -315,10 +312,11 @@ const styles = StyleSheet.create({
 
   editButton: {
     borderRadius: 30, overflow: "hidden", elevation: 4,
+      backgroundColor: COLORS.missionCreateBtn,
     shadowColor: "#7f5af0",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25, shadowRadius: 10,
   },
   editGradient: { paddingVertical: 15, alignItems: "center" },
-  editText: { color: "#fff", fontWeight: "bold", fontSize: 16, letterSpacing: 0.5 },
+  editText:     { color: "#fff", fontWeight: "bold", fontSize: 16, letterSpacing: 0.5 },
 });

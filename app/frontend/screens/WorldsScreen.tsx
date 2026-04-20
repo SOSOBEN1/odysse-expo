@@ -12,13 +12,43 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ViewStyle,
 } from "react-native";
 import Navbar from "../components/Navbar";
 
+
 const { width: SW } = Dimensions.get("window");
 
-// ── Données mondes ──────────────────────────────────────────
-export const WORLDS = [
+// ── Types ────────────────────────────────────────────────────
+interface World {
+  id: string;
+  name: string;
+  subtitle: string;
+  cover: string;
+  accent: string;
+  dark: string;
+  light: string;
+  sound: number; // require() returns a number in RN
+  zones: number;
+  zonesUnlocked: number;
+  locked: boolean;
+  xpTotal: number;
+}
+
+interface AnimStarProps {
+  style: ViewStyle;
+  size: number;
+  delay: number;
+}
+
+interface WorldCardProps {
+  world: World;
+  index: number;
+  onPress: (world: World) => void;
+}
+
+// ── Données mondes ───────────────────────────────────────────
+export const WORLDS: World[] = [
   {
     id: "foret",
     name: "Monde Forêt",
@@ -119,8 +149,8 @@ export const WORLDS = [
   },
 ];
 
-// ── Étoile animée ───────────────────────────────────────────
-function AnimStar({ style, size, delay }) {
+// ── Étoile animée ─────────────────────────────────────────────
+function AnimStar({ style, size, delay }: AnimStarProps) {
   const a = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.loop(
@@ -133,14 +163,22 @@ function AnimStar({ style, size, delay }) {
     ).start();
   }, []);
   return (
-    <Animated.View style={[style, { opacity: a.interpolate({ inputRange: [0,1], outputRange: [0.15,0.8] }), transform: [{ scale: a.interpolate({ inputRange: [0,1], outputRange: [0.6,1.2] }) }] }]}>
+    <Animated.View
+      style={[
+        style,
+        {
+          opacity: a.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.8] }),
+          transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.2] }) }],
+        },
+      ]}
+    >
       <MaterialIcons name="auto-awesome" size={size} color="#c4b5fd" />
     </Animated.View>
   );
 }
 
-// ── Carte monde ─────────────────────────────────────────────
-function WorldCard({ world, index, onPress }) {
+// ── Carte monde ───────────────────────────────────────────────
+function WorldCard({ world, index, onPress }: WorldCardProps) {
   const slideY  = useRef(new Animated.Value(80)).current;
   const fadeIn  = useRef(new Animated.Value(0)).current;
   const scaleIn = useRef(new Animated.Value(0.94)).current;
@@ -177,12 +215,9 @@ function WorldCard({ world, index, onPress }) {
       >
         {/* Cover photo */}
         <View style={styles.coverWrapper}>
-          <Image
-            source={{ uri: world.cover }}
-            style={styles.coverImage}
-            resizeMode="cover"
-          />
-          {/* Overlay gradient */}
+          <Image source={{ uri: world.cover }} style={styles.coverImage} resizeMode="cover" />
+
+          {/* Overlay — LinearGradient remplacé par une View semi-transparente (pas de CSS 'background' en RN) */}
           <View style={styles.coverOverlay} />
 
           {/* Cadenas si verrouillé */}
@@ -266,21 +301,22 @@ function WorldCard({ world, index, onPress }) {
   );
 }
 
-// ── Écran ───────────────────────────────────────────────────
+// ── Écran ─────────────────────────────────────────────────────
 export default function WorldsScreen() {
-  const router    = useRouter();
+  
+  const router     = useRouter();
   const [activeNav, setActiveNav] = useState("carte");
-  const headerY   = useRef(new Animated.Value(-30)).current;
+  const headerY    = useRef(new Animated.Value(-30)).current;
   const headerFade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(headerY,   { toValue: 0, friction: 7, useNativeDriver: true }),
+      Animated.spring(headerY,    { toValue: 0, friction: 7, useNativeDriver: true }),
       Animated.timing(headerFade, { toValue: 1, duration: 500, useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const STARS = [
+  const STARS: Array<{ top?: number; left?: number; right?: number; size: number; delay: number }> = [
     { top: 14, left: 16,  size: 14, delay: 0   },
     { top: 14, right: 20, size: 10, delay: 400  },
     { top: 60, right: 8,  size: 8,  delay: 700  },
@@ -298,11 +334,16 @@ export default function WorldsScreen() {
 
       {/* Étoiles */}
       {STARS.map((s, i) => (
-        <AnimStar key={i} size={s.size} delay={s.delay}
-          style={{ position: "absolute", zIndex: 2,
-            ...(s.top   ? { top: s.top }   : {}),
-            ...(s.left  ? { left: s.left }  : {}),
-            ...(s.right ? { right: s.right } : {}),
+        <AnimStar
+          key={i}
+          size={s.size}
+          delay={s.delay}
+          style={{
+            position: "absolute",
+            zIndex: 2,
+            ...(s.top   !== undefined ? { top:   s.top   } : {}),
+            ...(s.left  !== undefined ? { left:  s.left  } : {}),
+            ...(s.right !== undefined ? { right: s.right } : {}),
           }}
         />
       ))}
@@ -320,16 +361,14 @@ export default function WorldsScreen() {
         </View>
       </Animated.View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {WORLDS.map((world, i) => (
           <WorldCard
             key={world.id}
             world={world}
             index={i}
-            onPress={(w) => router.push({ pathname: "/world-map", params: { worldId: w.id } })}
+            // onPress={(w: World) => router.push({ pathname: "/world-map", params: { worldId: w.id } })}
+            onPress={(w: World) => router.push("/frontend/screens/WorldMapScreen")}
           />
         ))}
         <View style={{ height: 20 }} />
@@ -360,7 +399,7 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   headerTitle: { fontSize: 24, fontWeight: "900", color: "#2d1a6e", letterSpacing: 0.8 },
-  headerSub:   { fontSize: 12, color: "#9b87c9",  fontWeight: "600", marginTop: 3 },
+  headerSub:   { fontSize: 12, color: "#9b87c9", fontWeight: "600", marginTop: 3 },
   headerRight: { alignItems: "flex-end" },
   xpTotalBadge: {
     backgroundColor: "#7f5af0",
@@ -388,10 +427,12 @@ const styles = StyleSheet.create({
   /* Cover photo */
   coverWrapper: { height: 180, position: "relative" },
   coverImage:   { width: "100%", height: "100%" },
+
+  // FIX — suppression de 'background' (propriété CSS web invalide en RN)
+  // Utilisez expo-linear-gradient si vous voulez un vrai dégradé
   coverOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0)",
-    background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.05) 55%)",
+    backgroundColor: "rgba(0,0,0,0.25)",
   },
 
   lockOverlay: {
@@ -421,23 +462,21 @@ const styles = StyleSheet.create({
     justifyContent: "center", alignItems: "center",
   },
 
-  coverTitleWrapper: {
-    position: "absolute", bottom: 14, left: 14, right: 14,
-  },
+  coverTitleWrapper: { position: "absolute", bottom: 14, left: 14, right: 14 },
   coverTitle:    { fontSize: 20, fontWeight: "900", color: "#fff", textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   coverSubtitle: { fontSize: 12, color: "rgba(255,255,255,0.85)", fontWeight: "600", marginTop: 2 },
 
   /* Body */
   cardBody: { paddingHorizontal: 16, paddingVertical: 14 },
 
-  progressRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  progressRow:   { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   progressTrack: { flex: 1, height: 8, backgroundColor: "#e8e0ff", borderRadius: 8, overflow: "hidden" },
   progressFill:  { height: "100%", borderRadius: 8 },
   progressPct:   { fontSize: 12, fontWeight: "800", minWidth: 34, textAlign: "right" },
 
   cardFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 
-  xpChip: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
+  xpChip:     { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
   xpChipText: { fontSize: 12, fontWeight: "700" },
 
   lockedHint: { fontSize: 11, color: "#9ca3af", fontWeight: "500", flex: 1, marginRight: 10, fontStyle: "italic" },

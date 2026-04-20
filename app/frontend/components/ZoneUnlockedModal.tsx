@@ -8,6 +8,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ViewStyle,
 } from "react-native";
 
 // ── Confetti ────────────────────────────────────────────────
@@ -29,7 +30,14 @@ const CONF_PARTICLES = [
   { x:   40, delay: 160, color: 3, size: 7  },
 ];
 
-function ConfettiParticle({ x, delay, color, size }) {
+interface ConfettiParticleProps {
+  x: number;
+  delay: number;
+  color: number;
+  size: number;
+}
+
+function ConfettiParticle({ x, delay, color, size }: ConfettiParticleProps) {
   const ty  = useRef(new Animated.Value(-15)).current;
   const op  = useRef(new Animated.Value(0)).current;
   const rot = useRef(new Animated.Value(0)).current;
@@ -69,7 +77,11 @@ function ConfettiParticle({ x, delay, color, size }) {
 }
 
 // ── Sparkle ──────────────────────────────────────────────────
-function Sparkle({ style }) {
+interface SparkleProps {
+  style: ViewStyle;
+}
+
+function Sparkle({ style }: SparkleProps) {
   const op = useRef(new Animated.Value(0.2)).current;
   const sc = useRef(new Animated.Value(0.7)).current;
 
@@ -155,7 +167,6 @@ export default function ZoneUnlockedModal({
   return (
     <Modal transparent animationType="none" visible={visible} statusBarTranslucent>
       <View style={styles.backdrop}>
-        {/* FIX #8 — justifyContent + alignItems pour centrer les particules */}
         <View
           style={[StyleSheet.absoluteFill, { justifyContent: "center", alignItems: "center" }]}
           pointerEvents="none"
@@ -181,7 +192,6 @@ export default function ZoneUnlockedModal({
           {/* Zone image */}
           <Animated.View style={[styles.imgBox, { transform: [{ scale: imgSc }] }]}>
             <Image source={{ uri: zoneImage }} style={styles.zoneImg} resizeMode="cover" />
-            {/* Vignette overlay */}
             <View style={styles.imgOverlay} />
             <View style={styles.imgBottomOverlay} />
           </Animated.View>

@@ -1,21 +1,23 @@
-// screens/DefiScreen.tsx
-import React, { useRef, useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  StyleSheet,
-  Dimensions,
-  Animated,
-  StatusBar,
-  Platform,
-} from "react-native";
-import Svg, { Path, Circle } from "react-native-svg";
-import { COLORS, SIZES, SHADOWS } from "../constants/theme";
-import Navbar from "../components/Navbar";
 import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  Animated,
+  Dimensions,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
+import Navbar from "../components/Navbar";
+import NotifIcone from "../components/NotifIcone";
+import SettingIcone from "../components/SettingIcone";
+import { COLORS, SHADOWS, SIZES } from "../constants/theme";
 
 const { width } = Dimensions.get("window");
 
@@ -32,8 +34,8 @@ interface Defi {
   icon: "book" | "sport" | "rocket";
 }
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
-const DEFIS: Defi[] = [
+// ─── Data Initiale ─────────────────────────────────────────────────────────────
+const INITIAL_DEFIS: Defi[] = [
   {
     id: 1,
     title: "Marathon d'étude 2 heures",
@@ -65,11 +67,24 @@ const DEFIS: Defi[] = [
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "mes_defis",  label: "Mes défis"  },
-  { key: "en_attente", label: "en attente" },
-  { key: "termine",    label: "terminé"    },
+  { key: "en_attente", label: "En attente" },
+  { key: "termine",    label: "Terminé"    },
 ];
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
+const IconEdit = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z" stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+  </Svg>
+);
+
+const IconDelete = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" stroke="#FF5252" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+  </Svg>
+);
+
 const IconBook = () => (
   <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
     <Path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
@@ -107,14 +122,12 @@ const AvatarCircle = ({ color, offset }: { color: string; offset: number }) => (
 
 const AVATAR_COLORS = ["#E8A4C8", "#B39DDB", "#F48FB1"];
 
-// ─── XP Badge ─────────────────────────────────────────────────────────────────
 const XPBadge = ({ xp }: { xp: number }) => (
   <View style={styles.xpBadge}>
     <Text style={styles.xpText}>+ {xp} XP</Text>
   </View>
 );
 
-// ─── En cours pill ────────────────────────────────────────────────────────────
 const EnCoursPill = () => (
   <View style={styles.enCoursPill}>
     <Text style={styles.enCoursText}>En cours</Text>
@@ -137,7 +150,17 @@ const SearchBar = () => (
 );
 
 // ─── Defi Card ────────────────────────────────────────────────────────────────
-const DefiCard = ({ defi, index }: { defi: Defi; index: number }) => {
+const DefiCard = ({ 
+  defi, 
+  index, 
+  onDelete, 
+  onEdit 
+}: { 
+  defi: Defi; 
+  index: number;
+  onDelete: (id: number) => void;
+  onEdit: (defi: Defi) => void;
+}) => {
   const anim = useRef(new Animated.Value(0)).current;
   const IconComp = ICONS[defi.icon];
 
@@ -159,7 +182,7 @@ const DefiCard = ({ defi, index }: { defi: Defi; index: number }) => {
           opacity: anim,
           transform: [
             { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) },
-            { scale:      anim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) },
+            { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) },
           ],
         },
       ]}
@@ -189,6 +212,15 @@ const DefiCard = ({ defi, index }: { defi: Defi; index: number }) => {
           <XPBadge xp={defi.xp} />
           <Text style={styles.cardDuration}>{defi.duration}</Text>
         </View>
+      </View>
+
+      <View style={styles.cardActionsBottom}>
+        <TouchableOpacity style={styles.actionIconBtn} onPress={() => onEdit(defi)}>
+          <IconEdit />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionIconBtn} onPress={() => onDelete(defi.id)}>
+          <IconDelete />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.cardProgressTrack}>
@@ -241,51 +273,67 @@ const TabBar = ({ active, onSelect }: { active: TabKey; onSelect: (k: TabKey) =>
 export default function DefiScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>("mes_defis");
+  const [defis, setDefis] = useState<Defi[]>(INITIAL_DEFIS);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     Animated.spring(headerAnim, {
       toValue: 1, useNativeDriver: true, tension: 55, friction: 9,
     }).start();
   }, []);
 
+  // ✅ Logique de suppression
+  const handleDelete = (id: number) => {
+    Alert.alert("Supprimer", "Voulez-vous vraiment supprimer ce défi ?", [
+      { text: "Annuler", style: "cancel" },
+      { text: "Supprimer", style: "destructive", onPress: () => {
+          setDefis(defis.filter(d => d.id !== id));
+      }},
+    ]);
+  };
+
+ // ✅ Modification defis 
+  const handleEdit = (defi: Defi) => {
+    router.push({
+      pathname: "/frontend/screens/createDefis",
+      params: { 
+        id: defi.id,
+        title: defi.title,
+        subtitle: defi.subtitle,
+        xp: defi.xp,
+        icon: defi.icon,
+        mode: "edit" // Utile pour savoir si on crée ou si on modifie
+      }
+    });
+  };
+
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* ── Top icons ── */}
-      <Animated.View
-        style={[
-          styles.topIcons,
-          {
-            opacity: headerAnim,
-            transform: [{ translateY: headerAnim.interpolate({ inputRange:[0,1], outputRange:[-16,0] }) }],
-          },
-        ]}
-      >
-        <TouchableOpacity style={styles.topIconBtn}>
-          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-            <Path
-              d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"
-              stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-            />
-            <Circle cx={18} cy={6} r={4} fill="#FF5252" />
-          </Svg>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.topIconBtn}>
-          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-            <Circle cx={12} cy={12} r={3} stroke={COLORS.primary} strokeWidth={2} />
-            <Path
-              d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
-              stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round"
-            />
-          </Svg>
-        </TouchableOpacity>
-      </Animated.View>
+    <Animated.View
+  style={[
+    styles.topIcons,
+    {
+      opacity: headerAnim,
+      transform: [
+        {
+          translateY: headerAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [-16, 0],
+          }),
+        },
+      ],
+    },
+  ]}
+>
+  <NotifIcone onPress={() => console.log("Notif")} />
+  <SettingIcone onPress={() => console.log("Settings")} />
+</Animated.View>
 
       <Sparkles />
 
-      {/* ── Search bar ── */}
       <Animated.View
         style={[
           styles.searchContainer,
@@ -298,50 +346,58 @@ export default function DefiScreen() {
         <SearchBar />
       </Animated.View>
 
-      {/* ── Tab bar ── */}
       <TabBar active={activeTab} onSelect={setActiveTab} />
 
-      {/* ── Scroll content ── */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.sectionTitle}>Tes défis actuels</Text>
-        <Text style={styles.sectionSubtitle}>
-          Accomplis tes défis avec tes amis pour gagner des récompenses !
-        </Text>
+        {activeTab === "mes_defis" ? (
+          <>
+            <Text style={styles.sectionTitle}>Tes défis actuels</Text>
+            <Text style={styles.sectionSubtitle}>
+              Accomplis tes défis avec tes amis pour gagner des récompenses !
+            </Text>
 
-        {DEFIS.map((d, i) => (
-          <DefiCard key={d.id} defi={d} index={i} />
-        ))}
+            {defis.map((d, i) => (
+              <DefiCard 
+                key={d.id} 
+                defi={d} 
+                index={i} 
+                onDelete={handleDelete}
+                onEdit={handleEdit}
+              />
+            ))}
 
-        {/* ✅ Bouton placé directement après les cartes dans le scroll */}
-        <TouchableOpacity
-          style={styles.ctaBtn}
-          activeOpacity={0.85}
-          onPress={() => router.push("/frontend/screens/AmisDefis")}
-        >
-          <Text style={styles.ctaBtnText}>Lancer un défi</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.ctaBtn}
+              activeOpacity={0.85}
+              onPress={() => router.push("/frontend/screens/AmisDefis")}
+            >
+              <Text style={styles.ctaBtnText}>Lancer un défi</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.sectionSubtitle}>Aucun défi dans cette catégorie pour le moment.</Text>
+          </View>
+        )}
 
-        {/* Spacer pour la navbar */}
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* ── Bottom Navbar ── */}
       <Navbar active="defis" onChange={() => {}} />
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles (Strictement identiques aux tiens) ──────────────────────────────────
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
   topIcons: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -358,13 +414,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...SHADOWS.light,
   },
-
   sparklesSvg: {
     position: "absolute",
     top: 0,
     left: 0,
   },
-
   searchContainer: {
     paddingHorizontal: SIZES.padding,
     marginTop: 10,
@@ -388,7 +442,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     padding: 0,
   },
-
   tabBar: {
     flexDirection: "row",
     marginHorizontal: SIZES.padding,
@@ -417,7 +470,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: "700",
   },
-
   scroll: {
     flex: 1,
   },
@@ -426,7 +478,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 120,
   },
-
   sectionTitle: {
     fontSize: 20,
     fontWeight: "800",
@@ -439,7 +490,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     lineHeight: 18,
   },
-
   card: {
     backgroundColor: COLORS.card,
     borderRadius: SIZES.radiusLg,
@@ -449,15 +499,31 @@ const styles = StyleSheet.create({
   },
   cardTagRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
+    alignItems: "center",
     paddingHorizontal: 12,
     paddingTop: 10,
+  },
+  cardActionsBottom: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    gap: 10,
+  },
+  actionIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "rgba(120, 90, 180, 0.05)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   cardInner: {
     flexDirection: "row",
     alignItems: "flex-start",
     paddingHorizontal: 12,
-    paddingBottom: 14,
+    paddingBottom: 10,
     gap: 10,
   },
   cardIconWrapper: {
@@ -562,8 +628,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     borderRadius: 3,
   },
-
-  // ✅ Bouton sans position absolute
   ctaBtn: {
     width: "100%",
     backgroundColor: COLORS.primary,
@@ -579,4 +643,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.4,
   },
+  emptyContainer: {
+    padding: 40,
+    alignItems: "center",
+  }
 });

@@ -17,11 +17,54 @@ import BackButton from "../components/BackButton";
 import Navbar from "../components/Navbar";
 
 const { width: SW } = Dimensions.get("window");
-const GRID_COLS   = 3;
+const GRID_COLS    = 3;
 const TOTAL_PIECES = 9;
 
-// ── Data zones (photos réelles) ─────────────────────────────
-const ZONE_PUZZLES = {
+// ── Types ────────────────────────────────────────────────────
+interface ZoneData {
+  name: string;
+  worldName: string;
+  img: string;
+  accent: string;
+  dark: string;
+  light: string;
+  piecesEarned: number;
+}
+
+type ZoneId = keyof typeof ZONE_PUZZLES;
+
+interface StarConfig {
+  top?: number;
+  left?: number;
+  right?: number;
+  size: number;
+  delay: number;
+}
+
+interface AnimStarProps {
+  style?: object;
+  size?: number;
+  delay?: number;
+  color?: string;
+}
+
+interface PuzzleCellProps {
+  index: number;
+  revealed: boolean;
+  entering: boolean;
+  imageUri: string;
+  cellSize: number;
+  accent: string;
+}
+
+interface ProgressBarProps {
+  value: number;
+  total: number;
+  accent: string;
+}
+
+// ── Data zones ───────────────────────────────────────────────
+const ZONE_PUZZLES: Record<string, ZoneData> = {
   clairiere: {
     name: "Clairière",
     worldName: "Monde Forêt",
@@ -88,30 +131,56 @@ const ZONE_PUZZLES = {
 };
 
 // ── Étoile animée ───────────────────────────────────────────
-function AnimStar({ style, size = 14, delay = 0, color = "#c4b5fd" }) {
+function AnimStar({ style, size = 14, delay = 0, color = "#c4b5fd" }: AnimStarProps) {
   const a = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
         Animated.delay(delay),
-        Animated.timing(a, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(a, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(a, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(a, {
+          toValue: 0,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
         Animated.delay(400),
       ])
     ).start();
   }, []);
+
   return (
-    <Animated.View style={[style, {
-      opacity:   a.interpolate({ inputRange: [0,1], outputRange: [0.15, 0.9] }),
-      transform: [{ scale: a.interpolate({ inputRange: [0,1], outputRange: [0.6,1.3] }) }],
-    }]}>
+    <Animated.View
+      style={[
+        style,
+        {
+          opacity: a.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.9] }),
+          transform: [
+            { scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.3] }) },
+          ],
+        },
+      ]}
+    >
       <MaterialIcons name="auto-awesome" size={size} color={color} />
     </Animated.View>
   );
 }
 
 // ── Cellule de puzzle ───────────────────────────────────────
-function PuzzleCell({ index, revealed, entering, imageUri, cellSize, accent }) {
+function PuzzleCell({
+  index,
+  revealed,
+  entering,
+  imageUri,
+  cellSize,
+  accent,
+}: PuzzleCellProps) {
   const sc    = useRef(new Animated.Value(0)).current;
   const glow  = useRef(new Animated.Value(0)).current;
   const flash = useRef(new Animated.Value(0)).current;
@@ -122,15 +191,30 @@ function PuzzleCell({ index, revealed, entering, imageUri, cellSize, accent }) {
   const imgY = -(row * cellSize);
 
   useEffect(() => {
-    Animated.spring(sc, { toValue: 1, friction: 5, delay: index * 80, useNativeDriver: true }).start();
+    Animated.spring(sc, {
+      toValue: 1,
+      friction: 5,
+      delay: index * 80,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
   useEffect(() => {
     if (revealed) {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(glow, { toValue: 1, duration: 1300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(glow, { toValue: 0, duration: 1300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(glow, {
+            toValue: 1,
+            duration: 1300,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(glow, {
+            toValue: 0,
+            duration: 1300,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
         ])
       ).start();
     }
@@ -144,11 +228,17 @@ function PuzzleCell({ index, revealed, entering, imageUri, cellSize, accent }) {
   }, [entering]);
 
   return (
-    <Animated.View style={[styles.cell, {
-      width: cellSize, height: cellSize,
-      borderColor: revealed ? accent : "rgba(255,255,255,0.25)",
-      transform: [{ scale: sc }],
-    }]}>
+    <Animated.View
+      style={[
+        styles.cell,
+        {
+          width: cellSize,
+          height: cellSize,
+          borderColor: revealed ? accent : "rgba(255,255,255,0.25)",
+          transform: [{ scale: sc }],
+        },
+      ]}
+    >
       {revealed ? (
         <>
           {/* Portion de l'image */}
@@ -167,18 +257,28 @@ function PuzzleCell({ index, revealed, entering, imageUri, cellSize, accent }) {
           </View>
 
           {/* Glow coloré */}
-          <Animated.View style={[StyleSheet.absoluteFill, {
-            backgroundColor: accent + "22",
-            borderRadius: 10,
-            opacity: glow,
-          }]} />
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                backgroundColor: accent + "22",
+                borderRadius: 10,
+                opacity: glow,
+              },
+            ]}
+          />
 
           {/* Flash blanc à l'entrée */}
-          <Animated.View style={[StyleSheet.absoluteFill, {
-            backgroundColor: "rgba(255,255,255,0.7)",
-            borderRadius: 10,
-            opacity: flash,
-          }]} />
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                backgroundColor: "rgba(255,255,255,0.7)",
+                borderRadius: 10,
+                opacity: flash,
+              },
+            ]}
+          />
 
           {/* Check */}
           <View style={[styles.cellCheck, { backgroundColor: accent }]}>
@@ -195,8 +295,9 @@ function PuzzleCell({ index, revealed, entering, imageUri, cellSize, accent }) {
 }
 
 // ── Barre de progression ────────────────────────────────────
-function ProgressBar({ value, total, accent }) {
+function ProgressBar({ value, total, accent }: ProgressBarProps) {
   const w = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     Animated.timing(w, {
       toValue: value / total,
@@ -206,12 +307,18 @@ function ProgressBar({ value, total, accent }) {
       useNativeDriver: false,
     }).start();
   }, [value]);
+
   return (
     <View style={styles.progressTrack}>
-      <Animated.View style={[styles.progressFill, {
-        backgroundColor: accent,
-        width: w.interpolate({ inputRange: [0,1], outputRange: ["0%","100%"] }),
-      }]} />
+      <Animated.View
+        style={[
+          styles.progressFill,
+          {
+            backgroundColor: accent,
+            width: w.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -219,12 +326,12 @@ function ProgressBar({ value, total, accent }) {
 // ── Écran principal ─────────────────────────────────────────
 export default function PuzzleScreen() {
   const router = useRouter();
-  const { zoneId = "clairiere" } = useLocalSearchParams();
-  const zone = ZONE_PUZZLES[zoneId] ?? ZONE_PUZZLES.clairiere;
+  const { zoneId = "clairiere" } = useLocalSearchParams<{ zoneId?: string }>();
+  const zone: ZoneData = ZONE_PUZZLES[zoneId as ZoneId] ?? ZONE_PUZZLES.clairiere;
 
-  const [pieces, setPieces]             = useState(zone.piecesEarned);
-  const [newlyRevealed, setNewlyRevealed] = useState(null);
-  const [activeNav, setActiveNav]       = useState("carte");
+  const [pieces, setPieces]               = useState<number>(zone.piecesEarned);
+  const [newlyRevealed, setNewlyRevealed] = useState<number | null>(null);
+  const [activeNav, setActiveNav]         = useState<string>("carte");
 
   const CELL_SIZE = Math.floor((SW - 32 - 16) / GRID_COLS) - 4;
 
@@ -244,7 +351,7 @@ export default function PuzzleScreen() {
 
   const isComplete = pieces >= TOTAL_PIECES;
 
-  const STARS = [
+  const STARS: StarConfig[] = [
     { top: 100, left: 14,  size: 16, delay: 0   },
     { top: 120, right: 16, size: 11, delay: 350  },
     { top: 155, right: 8,  size: 8,  delay: 650  },
@@ -262,17 +369,28 @@ export default function PuzzleScreen() {
 
       {/* Étoiles */}
       {STARS.map((s, i) => (
-        <AnimStar key={i} size={s.size} delay={s.delay} color={zone.accent}
-          style={{ position: "absolute", zIndex: 2,
-            ...(s.top   ? { top: s.top }   : {}),
-            ...(s.left  ? { left: s.left }  : {}),
-            ...(s.right ? { right: s.right } : {}),
+        <AnimStar
+          key={i}
+          size={s.size}
+          delay={s.delay}
+          color={zone.accent}
+          style={{
+            position: "absolute",
+            zIndex: 2,
+            ...(s.top   !== undefined ? { top: s.top }   : {}),
+            ...(s.left  !== undefined ? { left: s.left }  : {}),
+            ...(s.right !== undefined ? { right: s.right } : {}),
           }}
         />
       ))}
 
       {/* Header */}
-      <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerY }] }]}>
+      <Animated.View
+        style={[
+          styles.header,
+          { opacity: headerFade, transform: [{ translateY: headerY }] },
+        ]}
+      >
         <BackButton />
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{zone.name}</Text>
@@ -283,11 +401,17 @@ export default function PuzzleScreen() {
         </View>
       </Animated.View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+      >
         {/* Carte puzzle */}
-        <Animated.View style={[styles.puzzleCard, { opacity: cardFade, transform: [{ translateY: cardSlide }] }]}>
-
+        <Animated.View
+          style={[
+            styles.puzzleCard,
+            { opacity: cardFade, transform: [{ translateY: cardSlide }] },
+          ]}
+        >
           {/* Image puzzle */}
           <View style={[styles.puzzleImageContainer, { borderColor: zone.accent + "44" }]}>
 
@@ -301,7 +425,9 @@ export default function PuzzleScreen() {
 
             {/* Overlay sombre sur l'image floutée */}
             {!isComplete && (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(20,10,50,0.35)" }]} />
+              <View
+                style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(20,10,50,0.35)" }]}
+              />
             )}
 
             {/* Révélation complète */}
@@ -344,7 +470,10 @@ export default function PuzzleScreen() {
 
           {/* Bouton missions */}
           <TouchableOpacity
-            style={[styles.missionsBtn, { backgroundColor: zone.accent, borderColor: zone.accent + "88" }]}
+            style={[
+              styles.missionsBtn,
+              { backgroundColor: zone.accent, borderColor: zone.accent + "88" },
+            ]}
             onPress={() => router.push({ pathname: "/zone", params: { zoneId } })}
             activeOpacity={0.85}
           >
@@ -355,13 +484,18 @@ export default function PuzzleScreen() {
           </TouchableOpacity>
 
           {/* Info */}
-          <View style={[styles.infoCard, { backgroundColor: zone.light, borderColor: zone.accent + "33" }]}>
+          <View
+            style={[
+              styles.infoCard,
+              { backgroundColor: zone.light, borderColor: zone.accent + "33" },
+            ]}
+          >
             <Ionicons name="information-circle" size={18} color={zone.accent} />
             <Text style={[styles.infoText, { color: zone.dark }]}>
-              Complète les missions de cette zone pour débloquer toutes les pièces et révéler la photo !
+              Complète les missions de cette zone pour débloquer toutes les pièces et révéler la
+              photo !
             </Text>
           </View>
-
         </Animated.View>
 
         {/* Stats */}
@@ -446,20 +580,29 @@ const styles = StyleSheet.create({
   },
   completeBanner: {
     position: "absolute",
-    bottom: 14, left: 0, right: 0,
+    bottom: 14,
+    left: 0,
+    right: 0,
     alignItems: "center",
   },
   completeBannerText: {
-    fontSize: 20, fontWeight: "900", color: "#fff",
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#fff",
     backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 20, paddingVertical: 8,
-    borderRadius: 20, overflow: "hidden",
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    overflow: "hidden",
   },
 
   /* Grille */
   grid: {
     position: "absolute",
-    inset: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     flexDirection: "row",
     flexWrap: "wrap",
     padding: 6,
@@ -481,10 +624,15 @@ const styles = StyleSheet.create({
   },
   cellCheck: {
     position: "absolute",
-    bottom: 3, right: 3,
-    width: 16, height: 16, borderRadius: 8,
-    justifyContent: "center", alignItems: "center",
-    borderWidth: 1.5, borderColor: "#fff",
+    bottom: 3,
+    right: 3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#fff",
   },
   cellLocked: {
     flex: 1,
@@ -495,11 +643,11 @@ const styles = StyleSheet.create({
 
   /* Progression */
   progressSection: { marginBottom: 14 },
-  progressHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  progressLabel:  { fontSize: 13, fontWeight: "800", color: "#2d1a6e" },
-  progressPct:    { fontSize: 13, fontWeight: "900" },
-  progressTrack:  { height: 10, backgroundColor: "#e8e0ff", borderRadius: 10, overflow: "hidden" },
-  progressFill:   { height: "100%", borderRadius: 10 },
+  progressHeader:  { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  progressLabel:   { fontSize: 13, fontWeight: "800", color: "#2d1a6e" },
+  progressPct:     { fontSize: 13, fontWeight: "900" },
+  progressTrack:   { height: 10, backgroundColor: "#e8e0ff", borderRadius: 10, overflow: "hidden" },
+  progressFill:    { height: "100%", borderRadius: 10 },
 
   /* Bouton missions */
   missionsBtn: {
@@ -514,9 +662,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   missionsBtnIcon: {
-    width: 28, height: 28, borderRadius: 14,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#fff",
-    justifyContent: "center", alignItems: "center",
+    justifyContent: "center",
+    alignItems: "center",
   },
   missionsBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
 
@@ -536,11 +687,15 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     backgroundColor: "#fff",
-    borderRadius: 18, padding: 14,
-    alignItems: "center", gap: 4,
+    borderRadius: 18,
+    padding: 14,
+    alignItems: "center",
+    gap: 4,
     shadowColor: "#7f5af0",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08, shadowRadius: 10, elevation: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
     borderWidth: 1,
   },
   statVal:   { fontSize: 22, fontWeight: "900" },

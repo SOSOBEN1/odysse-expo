@@ -10,18 +10,41 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import BackButton from "../components/BackButton";
-import SuccessModal from '../components/SuccessModal';
-import ZoneUnlockedModal from '../components/ZoneUnlockedModal';
+import SuccessModal from "../components/SuccessModal";
+import ZoneUnlockedModal from "../components/ZoneUnlockedModal";
 
-// ── Data zones ──────────────────────────────────────────────
-const ZONES_DATA = {
-  // FORÊT
+// ── Types ────────────────────────────────────────────────────
+type Difficulty = "Facile" | "Moyen" | "Difficile";
+
+interface Mission {
+  id: number;
+  title: string;
+  reward: number;
+  xpLabel: string;
+  done: boolean;
+  diff: Difficulty;
+  icon: string;
+}
+
+interface ZoneData {
+  name: string;
+  img: string;
+  accent: string;
+  dark: string;
+  light: string;
+  puzzlePieces: number;
+  puzzleUnlocked: number;
+  missions: Mission[];
+}
+
+// ── Data zones ───────────────────────────────────────────────
+const ZONES_DATA: Record<string, ZoneData> = {
   clairiere: {
     name: "Clairière",
-    img:  "https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?w=900&q=85",
+    img: "https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?w=900&q=85",
     accent: "#22c55e", dark: "#14532d", light: "#dcfce7",
     puzzlePieces: 3, puzzleUnlocked: 2,
     missions: [
@@ -32,48 +55,80 @@ const ZONES_DATA = {
   },
   sousbois: {
     name: "Sous-bois",
-    img:  "https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?w=900&q=85",
+    img: "https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?w=900&q=85",
     accent: "#22c55e", dark: "#14532d", light: "#dcfce7",
     puzzlePieces: 3, puzzleUnlocked: 0,
     missions: [
-      { id: 1, title: "Faire une carte mentale de son cours",  reward: 20, xpLabel: "20 XP", done: false, diff: "Facile",    icon: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=120&q=70" },
-      { id: 2, title: "Technique Pomodoro : 4 sessions",       reward: 30, xpLabel: "30 XP", done: false, diff: "Moyen",     icon: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=120&q=70" },
-      { id: 3, title: "Résumer un chapitre en 1 page",         reward: 25, xpLabel: "25 XP", done: false, diff: "Difficile", icon: "https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=120&q=70" },
+      { id: 1, title: "Faire une carte mentale de son cours", reward: 20, xpLabel: "20 XP", done: false, diff: "Facile",    icon: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=120&q=70" },
+      { id: 2, title: "Technique Pomodoro : 4 sessions",      reward: 30, xpLabel: "30 XP", done: false, diff: "Moyen",     icon: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=120&q=70" },
+      { id: 3, title: "Résumer un chapitre en 1 page",        reward: 25, xpLabel: "25 XP", done: false, diff: "Difficile", icon: "https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=120&q=70" },
     ],
   },
   cascade: {
     name: "Cascade",
-    img:  "https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=900&q=85",
+    img: "https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=900&q=85",
     accent: "#22c55e", dark: "#14532d", light: "#dcfce7",
     puzzlePieces: 4, puzzleUnlocked: 0,
     missions: [
-      { id: 1, title: "Exercice de respiration anti-stress",   reward: 15, xpLabel: "15 XP", done: false, diff: "Facile",    icon: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=120&q=70" },
-      { id: 2, title: "Journaliser ses progrès du jour",       reward: 20, xpLabel: "20 XP", done: false, diff: "Facile",    icon: "https://images.unsplash.com/photo-1455390582262-044cdead277a?w=120&q=70" },
-      { id: 3, title: "Préparer son planning de la semaine",   reward: 30, xpLabel: "30 XP", done: false, diff: "Moyen",     icon: "https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=120&q=70" },
-      { id: 4, title: "Défis : zéro téléphone pendant 2h",    reward: 40, xpLabel: "40 XP", done: false, diff: "Difficile", icon: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=120&q=70" },
+      { id: 1, title: "Exercice de respiration anti-stress",  reward: 15, xpLabel: "15 XP", done: false, diff: "Facile",    icon: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=120&q=70" },
+      { id: 2, title: "Journaliser ses progrès du jour",      reward: 20, xpLabel: "20 XP", done: false, diff: "Facile",    icon: "https://images.unsplash.com/photo-1455390582262-044cdead277a?w=120&q=70" },
+      { id: 3, title: "Préparer son planning de la semaine",  reward: 30, xpLabel: "30 XP", done: false, diff: "Moyen",     icon: "https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=120&q=70" },
+      { id: 4, title: "Défis : zéro téléphone pendant 2h",   reward: 40, xpLabel: "40 XP", done: false, diff: "Difficile", icon: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=120&q=70" },
     ],
   },
 };
 
-const DIFF_COLOR = { Facile: "#22c55e", Moyen: "#f59e0b", Difficile: "#ef4444" };
+const DIFF_COLOR: Record<Difficulty, string> = {
+  Facile: "#22c55e",
+  Moyen: "#f59e0b",
+  Difficile: "#ef4444",
+};
 
-// ── Pièce puzzle avec vraie image ───────────────────────────
-function PuzzlePiece({ filled, index, accent, img }) {
-  const sc = useRef(new Animated.Value(0)).current;
+// ── Props types ──────────────────────────────────────────────
+interface PuzzlePieceProps {
+  filled: boolean;
+  index: number;
+  accent: string;
+  img: string;
+}
+
+interface MissionRowProps {
+  mission: Mission;
+  accent: string;
+  onPress: (mission: Mission) => void;
+}
+
+// ── Pièce puzzle avec vraie image ────────────────────────────
+function PuzzlePiece({ filled, index, accent, img }: PuzzlePieceProps) {
+  const sc   = useRef(new Animated.Value(0)).current;
   const glow = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.spring(sc, { toValue: 1, friction: 4, delay: index * 160, useNativeDriver: true }).start();
     if (filled) {
-      Animated.loop(Animated.sequence([
-        Animated.timing(glow, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(glow, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])).start();
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glow, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(glow, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      ).start();
     }
   }, []);
 
   return (
-    <Animated.View style={[styles.puzzlePiece, { transform: [{ scale: sc }], borderColor: filled ? accent : "#e0d9ff", shadowColor: filled ? accent : "transparent", shadowOpacity: glow, shadowRadius: 10, elevation: filled ? 4 : 0 }]}>
+    <Animated.View
+      style={[
+        styles.puzzlePiece,
+        {
+          transform: [{ scale: sc }],
+          borderColor: filled ? accent : "#e0d9ff",
+          shadowColor: filled ? accent : "transparent",
+          shadowOpacity: glow,
+          shadowRadius: 10,
+          elevation: filled ? 4 : 0,
+        },
+      ]}
+    >
       {filled ? (
         <>
           <Image source={{ uri: img }} style={styles.puzzleImg} resizeMode="cover" />
@@ -90,8 +145,8 @@ function PuzzlePiece({ filled, index, accent, img }) {
   );
 }
 
-// ── Ligne de mission ────────────────────────────────────────
-function MissionRow({ mission, accent, onPress }) {
+// ── Ligne de mission ─────────────────────────────────────────
+function MissionRow({ mission, accent, onPress }: MissionRowProps) {
   const sl = useRef(new Animated.Value(40)).current;
   const fa = useRef(new Animated.Value(0)).current;
 
@@ -139,7 +194,11 @@ function MissionRow({ mission, accent, onPress }) {
             <Ionicons name="checkmark" size={16} color="#fff" />
           </View>
         ) : (
-          <TouchableOpacity style={[styles.startBtn, { backgroundColor: accent }]} onPress={() => onPress(mission)} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={[styles.startBtn, { backgroundColor: accent }]}
+            onPress={() => onPress(mission)}
+            activeOpacity={0.85}
+          >
             <Text style={styles.startBtnText}>Start</Text>
           </TouchableOpacity>
         )}
@@ -148,24 +207,25 @@ function MissionRow({ mission, accent, onPress }) {
   );
 }
 
-// ── Écran principal ─────────────────────────────────────────
+// ── Écran principal ──────────────────────────────────────────
 export default function ZoneScreen() {
   const router = useRouter();
-  const { zoneId = "clairiere", worldId = "foret" } = useLocalSearchParams();
-  const zoneData = ZONES_DATA[zoneId] ?? ZONES_DATA.clairiere;
+  const { zoneId = "clairiere" } = useLocalSearchParams<{ zoneId?: string; worldId?: string }>();
+  const zoneData: ZoneData = ZONES_DATA[zoneId as string] ?? ZONES_DATA.clairiere;
 
-  const [missions, setMissions]             = useState(zoneData.missions);
+  const [missions, setMissions]             = useState<Mission[]>(zoneData.missions);
   const [showSuccess, setShowSuccess]       = useState(false);
   const [showUnlocked, setShowUnlocked]     = useState(false);
-  const [currentMission, setCurrentMission] = useState(null);
+  const [currentMission, setCurrentMission] = useState<Mission | null>(null);
   const [puzzleCount, setPuzzleCount]       = useState(zoneData.puzzleUnlocked);
 
-  // FIX #4 — porte le flag allDone entre le handler et le callback onContinue
   const pendingUnlock = useRef(false);
 
   const bgFade    = useRef(new Animated.Value(0)).current;
   const cardSlide = useRef(new Animated.Value(50)).current;
-  const progressW = useRef(new Animated.Value(zoneData.puzzleUnlocked / zoneData.puzzlePieces * 100)).current;
+  const progressW = useRef(
+    new Animated.Value((zoneData.puzzleUnlocked / zoneData.puzzlePieces) * 100)
+  ).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -174,27 +234,29 @@ export default function ZoneScreen() {
     ]).start();
   }, []);
 
-  const handleMissionPress = (mission) => {
+  const handleMissionPress = (mission: Mission) => {
     setCurrentMission(mission);
 
-    const newMissions = missions.map(m => m.id === mission.id ? { ...m, done: true } : m);
+    const newMissions = missions.map((m) =>
+      m.id === mission.id ? { ...m, done: true } : m
+    );
     setMissions(newMissions);
 
-    // FIX #4 — calcul sur newMissions, pas sur le state encore périmé
-    pendingUnlock.current = newMissions.every(m => m.done);
+    pendingUnlock.current = newMissions.every((m) => m.done);
 
-    // FIX — garde puzzleCount dans les bornes
     const newPuzzle = Math.min(puzzleCount + 1, zoneData.puzzlePieces);
     setPuzzleCount(newPuzzle);
     Animated.timing(progressW, {
       toValue: (newPuzzle / zoneData.puzzlePieces) * 100,
-      duration: 700, easing: Easing.out(Easing.cubic), useNativeDriver: false,
+      duration: 700,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
     }).start();
 
     setShowSuccess(true);
   };
 
-  const doneMissions = missions.filter(m => m.done).length;
+  const doneMissions = missions.filter((m) => m.done).length;
 
   return (
     <View style={styles.container}>
@@ -214,7 +276,6 @@ export default function ZoneScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-
         <Animated.View style={[styles.card, { transform: [{ translateY: cardSlide }] }]}>
 
           {/* Progression */}
@@ -226,16 +287,23 @@ export default function ZoneScreen() {
               </Text>
             </View>
             <View style={styles.progressTrack}>
-              <Animated.View style={[styles.progressFill, {
-                backgroundColor: zoneData.accent,
-                width: progressW.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }),
-              }]} />
+              <Animated.View
+                style={[
+                  styles.progressFill,
+                  {
+                    backgroundColor: zoneData.accent,
+                    width: progressW.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }),
+                  },
+                ]}
+              />
             </View>
           </View>
 
-          {/* Pièces puzzle avec images */}
+          {/* Pièces puzzle */}
           <View style={styles.puzzleSection}>
-            <Text style={styles.puzzleSectionTitle}>Pièces de puzzle {puzzleCount}/{zoneData.puzzlePieces}</Text>
+            <Text style={styles.puzzleSectionTitle}>
+              Pièces de puzzle {puzzleCount}/{zoneData.puzzlePieces}
+            </Text>
             <View style={styles.puzzleRow}>
               {Array.from({ length: zoneData.puzzlePieces }).map((_, i) => (
                 <PuzzlePiece
@@ -268,7 +336,6 @@ export default function ZoneScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* FIX #3/#5 — props corrigées : missionImg + zoneName/zoneImage */}
       <SuccessModal
         visible={showSuccess}
         xp={currentMission?.reward ?? 20}
@@ -297,12 +364,14 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 20, paddingTop: 54, paddingBottom: 12, zIndex: 10,
   },
-  headerTitle: { fontSize: 20, fontWeight: "900", color: "#fff", textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  headerTitle: {
+    fontSize: 20, fontWeight: "900", color: "#fff",
+    textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
   scroll: { paddingHorizontal: 14, paddingBottom: 40, paddingTop: 6 },
 
   card: {
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderRadius: 26, padding: 18,
+    backgroundColor: "rgba(255,255,255,0.94)", borderRadius: 26, padding: 18,
     shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 8,
   },
 
@@ -321,9 +390,9 @@ const styles = StyleSheet.create({
     overflow: "hidden", borderWidth: 2,
     shadowOffset: { width: 0, height: 3 }, elevation: 4,
   },
-  puzzleImg: { width: "100%", height: "100%" },
+  puzzleImg:          { width: "100%", height: "100%" },
   puzzleCheckOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: "center", alignItems: "center" },
-  puzzleEmpty: { width: "100%", height: "100%", backgroundColor: "#ede8ff", justifyContent: "center", alignItems: "center" },
+  puzzleEmpty:        { width: "100%", height: "100%", backgroundColor: "#ede8ff", justifyContent: "center", alignItems: "center" },
 
   missionsTitle: { fontSize: 15, fontWeight: "800", color: "#2d1a6e", marginBottom: 12 },
 
@@ -334,8 +403,8 @@ const styles = StyleSheet.create({
   },
   missionDone: { backgroundColor: "#f0fdf4", opacity: 0.85 },
 
-  missionImgBox: { width: 52, height: 52, borderRadius: 14, overflow: "hidden", position: "relative" },
-  missionImg: { width: "100%", height: "100%" },
+  missionImgBox:    { width: 52, height: 52, borderRadius: 14, overflow: "hidden", position: "relative" },
+  missionImg:       { width: "100%", height: "100%" },
   missionImgOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: "center", alignItems: "center" },
 
   missionInfo:  { flex: 1 },
@@ -345,8 +414,8 @@ const styles = StyleSheet.create({
   diffPillText: { fontSize: 10, fontWeight: "700" },
   rewardText:   { fontSize: 10, color: "#9b87c9", fontWeight: "600" },
 
-  doneBtn:  { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
-  startBtn: { borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12 },
+  doneBtn:      { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+  startBtn:     { borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12 },
   startBtnText: { color: "#fff", fontWeight: "800", fontSize: 12 },
 
   allBtn: {

@@ -19,8 +19,30 @@ import BackButton from "../components/BackButton";
 const { width: SW } = Dimensions.get("window");
 const MAP_H = 460;
 
+// ── Types ────────────────────────────────────────────────────
+interface Zone {
+  id: string;
+  name: string;
+  img: string;
+  unlocked: boolean;
+  done: boolean;
+  missions: number;
+  x: number;
+  y: number;
+}
+
+interface WorldData {
+  bg: string;
+  accent: string;
+  dark: string;
+  light: string;
+  sound: number; // require() returns a number in React Native
+  zones: Zone[];
+  connections: [string, string][];
+}
+
 // ── Zones par monde ─────────────────────────────────────────
-const ZONES_BY_WORLD = {
+const ZONES_BY_WORLD: Record<string, WorldData> = {
   foret: {
     bg: "https://images.unsplash.com/photo-1448375240586-882707db888b?w=900&q=85",
     accent: "#22c55e", dark: "#14532d", light: "#dcfce7",
@@ -108,7 +130,14 @@ const ZONES_BY_WORLD = {
 };
 
 // ── Node zone sur la carte ──────────────────────────────────
-function ZoneNode({ zone, index, accent, onPress }) {
+interface ZoneNodeProps {
+  zone: Zone;
+  index: number;
+  accent: string;
+  onPress: (zone: Zone) => void;
+}
+
+function ZoneNode({ zone, index, accent, onPress }: ZoneNodeProps) {
   const scale = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -173,7 +202,13 @@ function ZoneNode({ zone, index, accent, onPress }) {
 }
 
 // ── Ligne de connexion ──────────────────────────────────────
-function ConnLine({ from, to, accent }) {
+interface ConnLineProps {
+  from: Zone;
+  to: Zone;
+  accent: string;
+}
+
+function ConnLine({ from, to, accent }: ConnLineProps) {
   const x1 = from.x * (SW - 32) + 16;
   const y1 = from.y * MAP_H;
   const x2 = to.x   * (SW - 32) + 16;
@@ -206,10 +241,10 @@ function ConnLine({ from, to, accent }) {
 // ── Écran ───────────────────────────────────────────────────
 export default function WorldMapScreen() {
   const router = useRouter();
-  const { worldId = "foret" } = useLocalSearchParams();
+  const { worldId = "foret" } = useLocalSearchParams<{ worldId: string }>();
   const world = ZONES_BY_WORLD[worldId] ?? ZONES_BY_WORLD.foret;
 
-  const soundRef   = useRef(null);
+  const soundRef   = useRef<Audio.Sound | null>(null);
   const bgFade     = useRef(new Animated.Value(0)).current;
   const headerFade = useRef(new Animated.Value(0)).current;
   const cardSlide  = useRef(new Animated.Value(60)).current;
@@ -246,7 +281,7 @@ export default function WorldMapScreen() {
     };
   }, []);
 
-  const getZone = (id) => world.zones.find((z) => z.id === id);
+  const getZone = (id: string): Zone | undefined => world.zones.find((z) => z.id === id);
 
   return (
     <View style={styles.container}>
@@ -274,7 +309,7 @@ export default function WorldMapScreen() {
           onPress={async () => {
             if (soundRef.current) {
               const status = await soundRef.current.getStatusAsync();
-              if (status.isPlaying) soundRef.current.pauseAsync();
+              if (status.isLoaded && status.isPlaying) soundRef.current.pauseAsync();
               else soundRef.current.playAsync();
             }
           }}
@@ -301,7 +336,9 @@ export default function WorldMapScreen() {
               zone={zone}
               index={i}
               accent={world.accent}
-              onPress={(z) => router.push({ pathname: "/zone", params: { worldId, zoneId: z.id } })}
+              // onPress={(z) => router.push({ pathname: "/zone", params: { worldId, zoneId: z.id } })}
+              onPress={(z)=> router.push("/frontend/screens/ZoneScreen")}
+
             />
           ))}
         </View>

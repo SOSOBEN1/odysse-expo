@@ -1,15 +1,44 @@
 import { useEffect, useRef } from "react";
 import {
-    Animated,
-    Easing,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Easing,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
-function Confetti({ x, y, color, size, delay, rotation }) {
+interface ConfettiProps {
+  x: number;
+  y: number;
+  color: string;
+  size: number;
+  delay: number;
+  rotation: number;
+}
+
+interface SparkStarProps {
+  x: number;
+  y: number;
+  size: number;
+  delay: number;
+  color?: string;
+}
+
+interface GlowRayProps {
+  angle: number;
+  delay: number;
+}
+
+interface BadgeUnlockedModalProps {
+  visible: boolean;
+  badgeName?: string;
+  badgeEmoji?: string;
+  onClose: () => void;
+}
+
+function Confetti({ x, y, color, size, delay, rotation }: ConfettiProps) {
   const translateY = useRef(new Animated.Value(-20)).current;
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity    = useRef(new Animated.Value(0)).current;
@@ -47,7 +76,7 @@ function Confetti({ x, y, color, size, delay, rotation }) {
   );
 }
 
-function SparkStar({ x, y, size, delay, color = "#c4b5fd" }) {
+function SparkStar({ x, y, size, delay, color = "#c4b5fd" }: SparkStarProps) {
   const scale   = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -75,7 +104,7 @@ function SparkStar({ x, y, size, delay, color = "#c4b5fd" }) {
   );
 }
 
-function GlowRay({ angle, delay }) {
+function GlowRay({ angle, delay }: GlowRayProps) {
   const opacity = useRef(new Animated.Value(0)).current;
   const scale   = useRef(new Animated.Value(0.5)).current;
 
@@ -108,7 +137,7 @@ function GlowRay({ angle, delay }) {
   );
 }
 
-const CONFETTI = [
+const CONFETTI: ConfettiProps[] = [
   { x: -120, y: 180, color: "#f9c74f", size: 10, delay: 100, rotation: 2 },
   { x: 100,  y: 200, color: "#7f5af0", size: 8,  delay: 150, rotation: 3 },
   { x: -80,  y: 220, color: "#f8961e", size: 12, delay: 80,  rotation: 1.5 },
@@ -123,7 +152,7 @@ const CONFETTI = [
   { x: -30,  y: 250, color: "#90be6d", size: 8,  delay: 220, rotation: 2.5 },
 ];
 
-const SPARKS = [
+const SPARKS: SparkStarProps[] = [
   { x: 20,  y: 20,  size: 16, delay: 0,   color: "#a78bfa" },
   { x: 260, y: 30,  size: 12, delay: 300, color: "#c4b5fd" },
   { x: 10,  y: 240, size: 14, delay: 600, color: "#f9c74f" },
@@ -135,7 +164,7 @@ const SPARKS = [
 
 const RAYS = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330];
 
-export default function BadgeUnlockedModal({ visible, badgeName = "Missionnaire", badgeEmoji = "🏆", onClose }) {
+export default function BadgeUnlockedModal({ visible, badgeName = "Missionnaire", badgeEmoji = "🏆", onClose }: BadgeUnlockedModalProps) {
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const cardScale       = useRef(new Animated.Value(0.3)).current;
   const cardOpacity     = useRef(new Animated.Value(0)).current;
@@ -242,11 +271,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
-  // ── Card violet clair ──
   card: {
     width: 300,
-    backgroundColor: "#d8c9f8",       // violet clair pastel
+    backgroundColor: "#d8c9f8",
     borderRadius: 28,
     padding: 28,
     alignItems: "center",
@@ -259,21 +286,18 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#c4b5fd",
   },
-
   raysContainer: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
   },
-
   title: {
     fontSize: 26,
     fontWeight: "900",
-    color: "#3b0764",                  // violet très foncé, lisible sur fond clair
+    color: "#3b0764",
     letterSpacing: 0.5,
     marginBottom: 6,
   },
-
   badgeName: {
     fontSize: 16,
     fontWeight: "800",
@@ -281,7 +305,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     letterSpacing: 0.3,
   },
-
   badgeWrapper: {
     alignItems: "center",
     justifyContent: "center",
@@ -290,7 +313,6 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
   },
-
   glow: {
     position: "absolute",
     width: 160, height: 160,
@@ -302,7 +324,6 @@ const styles = StyleSheet.create({
     shadowRadius: 40,
     elevation: 0,
   },
-
   badgeCircle: {
     width: 130, height: 130,
     borderRadius: 65,
@@ -317,9 +338,7 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-
   badgeEmoji: { fontSize: 70 },
-
   coinBadge: {
     position: "absolute",
     bottom: 6, right: 0,
@@ -331,7 +350,6 @@ const styles = StyleSheet.create({
     borderColor: "#f9c74f",
   },
   coinText: { color: "#6d28d9", fontWeight: "800", fontSize: 13 },
-
   btn: {
     backgroundColor: "#7f5af0",
     borderRadius: 30,

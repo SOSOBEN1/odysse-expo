@@ -1,148 +1,176 @@
-
 import { Feather, FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View, Alert } from "react-native";
 import UsernameInput from "../components/UsernameInput";
 import WaveBackground from "../components/waveBackground";
 import styles from "../styles/LoginStyle";
-
+import { supabase } from "../constants/supabase";
+import { useUser } from "../constants/UserContext";
 
 export default function LoginScreen() {
-     const router = useRouter();
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [remember, setRemember] = useState(false);
-    // Tableau des étoiles avec position, taille et opacité
-    const stars = [
-        { top: 10, left: 10, size: 20, opacity: 0.6 },
-        { top: 10, right: 10, size: 12, opacity: 0.4 },
-        { bottom: 10, left: 10, size: 15, opacity: 0.5 },
-        { bottom: 10, right: 10, size: 10, opacity: 0.35 },
-        { top: 30, left: 50, size: 8, opacity: 0.25 },
-        { bottom: 40, right: 60, size: 22, opacity: 0.7 },
-        { top: 40, right: 50, size: 22, opacity: 0.7 },
-        { top: 60, left: 150, size: 14, opacity: 0.45 },
-        { bottom: 80, left: 16, size: 18, opacity: 0.55 },
-        // tu peux ajouter autant d'étoiles que tu veux
-    ];
+  const router = useRouter();
+  const { setUserId } = useUser();
 
-    return (
-        <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
-            <WaveBackground />
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-            {/* BACK */}
-            <TouchableOpacity style={styles.backBtn}  onPress={() => router.push("/frontend/screens/start")} >
-                <Ionicons name="arrow-back" size={20} color="#6949a8" />
-            </TouchableOpacity>
+  const stars = [
+    { top: 10, left: 10, size: 20, opacity: 0.6 },
+    { top: 10, right: 10, size: 12, opacity: 0.4 },
+    { bottom: 10, left: 10, size: 15, opacity: 0.5 },
+    { bottom: 10, right: 10, size: 10, opacity: 0.35 },
+    { top: 30, left: 50, size: 8, opacity: 0.25 },
+    { bottom: 40, right: 60, size: 22, opacity: 0.7 },
+    { top: 40, right: 50, size: 22, opacity: 0.7 },
+    { top: 60, left: 150, size: 14, opacity: 0.45 },
+    { bottom: 80, left: 16, size: 18, opacity: 0.55 },
+  ];
 
-            {/* HEADER */}
-            <View style={styles.header}>
-                <View style={styles.titleRow}>
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Erreur", "Remplis tous les champs");
+      return;
+    }
 
-                    <Text style={styles.title}> Welcome</Text>
-                </View>
-                <Text style={styles.subtitle}>Let’s continue your journey</Text>
+    setLoading(true);
+
+    try {
+      // Cherche l'utilisateur avec email + password
+      const { data, error } = await supabase
+        .from("users")
+        .select("id_user")
+        .eq("email", email)
+        .eq("password", password)
+        .single();
+
+      if (error || !data) {
+        Alert.alert("Erreur", "Email ou mot de passe incorrect");
+        return;
+      }
+
+      // Met à jour dernier_login
+      await supabase
+        .from("users")
+        .update({ dernier_login: new Date().toISOString() })
+        .eq("id_user", data.id_user);
+
+      // Sauvegarde l'id dans le contexte
+      setUserId(data.id_user);
+
+      router.push("/frontend/screens/QuestionPeriodicScreen");
+    } catch (err) {
+      Alert.alert("Erreur", "Une erreur est survenue");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
+      <WaveBackground />
+
+      {/* BACK */}
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.push("/frontend/screens/start")}>
+        <Ionicons name="arrow-back" size={20} color="#6949a8" />
+      </TouchableOpacity>
+
+      {/* HEADER */}
+      <View style={styles.header}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}> Welcome</Text>
+        </View>
+        <Text style={styles.subtitle}>Let's continue your journey</Text>
+      </View>
+
+      {/* CARD */}
+      <View style={styles.card}>
+        <Text style={styles.label}>Email</Text>
+        <UsernameInput
+          value={email}
+          onChange={setEmail}
+          placeholder="Enter Email Address"
+          icon="mail"
+        />
+
+        <Text style={[styles.label, { marginTop: 15 }]}>Password</Text>
+        <UsernameInput
+          value={password}
+          onChange={setPassword}
+          placeholder="Enter Password"
+          icon="lock"
+          secure
+        />
+
+        {/* Options */}
+        <View style={styles.optionsRow}>
+          <TouchableOpacity style={styles.remember} onPress={() => setRemember(!remember)}>
+            <View style={[styles.checkbox, remember && styles.checkboxActive, { marginRight: 4 }]}>
+              {remember && (
+                <Feather name="check" size={12} color="#fff" style={{ alignSelf: "center" }} />
+              )}
             </View>
+            <Text style={styles.rememberText}>Remember Password</Text>
+          </TouchableOpacity>
 
-            {/* CARD */}
-            <View style={styles.card}>
-                <Text style={styles.label}>Email</Text>
-                <UsernameInput
-                    value={email}
-                    onChange={setEmail}
-                    placeholder="Enter Email Address"
-                    icon="mail"
-                />
+          <TouchableOpacity>
+            <Text style={styles.forgot}>Forgot Password?</Text>
+          </TouchableOpacity>
+        </View>
 
-                <Text style={[styles.label, { marginTop: 15 }]}>Password</Text>
-                <UsernameInput
-                    value={password}
-                    onChange={setPassword}
-                    placeholder="Enter Password"
-                    icon="lock"
-                    secure
-                />
+        {/* Sign In Button */}
+        <TouchableOpacity style={styles.buttonWrapper} onPress={handleLogin} disabled={loading}>
+          <LinearGradient
+            colors={["#6949a8", "#9574e0", "#baaae7"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.button}
+          >
+            <Text style={styles.buttonText}>{loading ? "Connexion..." : "Sign In"}</Text>
+          </LinearGradient>
+        </TouchableOpacity>
 
-                {/* Options */}
-                <View style={styles.optionsRow}>
-                    <TouchableOpacity
-                        style={styles.remember}
-                        onPress={() => setRemember(!remember)}
-                    >
-                        <View style={[styles.checkbox, remember && styles.checkboxActive, { marginRight: 4 }]}>
-                            {remember && (
-                                <Feather
-                                    name="check"
-                                    size={12}
-                                    color="#fff"
-                                    style={{ alignSelf: "center" }}
-                                />
-                            )}
-                        </View>
-                        <Text style={styles.rememberText}>Remember Password</Text>
-                    </TouchableOpacity>
+        {/* Register */}
+        <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 15 }}>
+          <Text style={styles.registerText}>Don't have an account? </Text>
+          <Link href="/frontend/screens/Register" style={[styles.registerLink, { textDecorationLine: "underline" }]}>
+            Register Now
+          </Link>
+        </View>
 
-                    <TouchableOpacity>
-                        <Text style={styles.forgot}>Forgot Password?</Text>
-                    </TouchableOpacity>
-                </View>
+        {/* Social Buttons */}
+        <View style={styles.socialRow}>
+          <TouchableOpacity style={styles.socialBtn}>
+            <FontAwesome5 name="google" size={22} color="#EA4335" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.socialBtn}>
+            <FontAwesome5 name="apple" size={22} color="#000" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-                {/* Sign In Button */}
-                <TouchableOpacity
-                    style={styles.buttonWrapper}
-                    onPress={() => router.push("/frontend/screens/SetUpProfile")} // <-- navigation ici
-                >
-                    <LinearGradient
-                        colors={["#6949a8", "#9574e0", "#baaae7"]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.button}
-                    >
-                        <Text style={styles.buttonText}>Sign In</Text>
-                    </LinearGradient>
-                </TouchableOpacity>
-
-                {/* Register */}
-                <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 15 }}>
-                    <Text style={styles.registerText}>Don’t have an account? </Text>
-                    <Link href="/frontend/screens/Register" style={[styles.registerLink, { textDecorationLine: "underline" }]}>
-                        Register Now
-                    </Link>
-                </View>
-                {/* Social Buttons */}
-                <View style={styles.socialRow}>
-                    <TouchableOpacity style={styles.socialBtn}>
-                        <FontAwesome5 name="google" size={22} color="#EA4335" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.socialBtn}>
-                        <FontAwesome5 name="apple" size={22} color="#000" />
-                    </TouchableOpacity>
-                </View>
-
-
-            </View>
-            {/* ✨ Stars */}
-            <View style={[styles.stars, { pointerEvents: "none" }]}>
-                {stars.map((star, i) => (
-                    <MaterialIcons
-                        key={i}
-                        name="auto-awesome"
-                        size={star.size}
-                        color="#fff"
-                        style={{
-                            position: "absolute",
-                            ...(star.top !== undefined ? { top: star.top } : {}),
-                            ...(star.bottom !== undefined ? { bottom: star.bottom } : {}),
-                            ...(star.left !== undefined ? { left: star.left } : {}),
-                            ...(star.right !== undefined ? { right: star.right } : {}),
-                            opacity: star.opacity,
-                        }}
-                    />
-                ))}
-            </View>
-        </LinearGradient>
-    );
+      {/* Stars */}
+      <View style={[styles.stars, { pointerEvents: "none" }]}>
+        {stars.map((star, i) => (
+          <MaterialIcons
+            key={i}
+            name="auto-awesome"
+            size={star.size}
+            color="#fff"
+            style={{
+              position: "absolute",
+              ...(star.top !== undefined ? { top: star.top } : {}),
+              ...(star.bottom !== undefined ? { bottom: star.bottom } : {}),
+              ...(star.left !== undefined ? { left: star.left } : {}),
+              ...(star.right !== undefined ? { right: star.right } : {}),
+              opacity: star.opacity,
+            }}
+          />
+        ))}
+      </View>
+    </LinearGradient>
+  );
 }

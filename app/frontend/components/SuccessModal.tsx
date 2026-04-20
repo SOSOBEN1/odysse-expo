@@ -1,13 +1,13 @@
 import { useEffect, useRef } from "react";
 import {
-    Animated,
-    Easing,
-    Image,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Easing,
+  Image,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 // ── Confetti particle ───────────────────────────────────────
@@ -29,7 +29,13 @@ const CONF_PARTICLES = [
   { x:   50, delay: 130, color: 2 },
 ];
 
-function ConfettiParticle({ x, delay, color }) {
+interface ConfettiParticleProps {
+  x: number;
+  delay: number;
+  color: number;
+}
+
+function ConfettiParticle({ x, delay, color }: ConfettiParticleProps) {
   const ty = useRef(new Animated.Value(-10)).current;
   const op = useRef(new Animated.Value(0)).current;
   const rot = useRef(new Animated.Value(0)).current;
@@ -65,7 +71,11 @@ function ConfettiParticle({ x, delay, color }) {
 }
 
 // ── Star burst ──────────────────────────────────────────────
-function StarBurst({ visible }) {
+interface StarBurstProps {
+  visible: boolean;
+}
+
+function StarBurst({ visible }: StarBurstProps) {
   const sc   = useRef(new Animated.Value(0)).current;
   const rays = useRef(new Animated.Value(0)).current;
 
@@ -90,7 +100,11 @@ function StarBurst({ visible }) {
 }
 
 // ── Puzzle piece icon ────────────────────────────────────────
-function PuzzleWon({ visible }) {
+interface PuzzleWonProps {
+  visible: boolean;
+}
+
+function PuzzleWon({ visible }: PuzzleWonProps) {
   const sc = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
 
@@ -119,7 +133,7 @@ function PuzzleWon({ visible }) {
 interface SuccessModalProps {
   visible: boolean;
   xp: number;
-  missionImg?: string;  // FIX #6 — prop ajoutée (optionnelle)
+  missionImg?: string;
   onContinue: () => void;
 }
 
@@ -183,7 +197,6 @@ export default function SuccessModal({ visible, xp, missionImg, onContinue }: Su
           <Text style={styles.title}>Félicitations !</Text>
           <Text style={styles.subtitle}>Mission accomplie</Text>
 
-          {/* FIX #6 — image de la mission si disponible, sinon étoile */}
           {missionImg ? (
             <View style={styles.missionImgBox}>
               <Image source={{ uri: missionImg }} style={styles.missionImgFull} resizeMode="cover" />
@@ -268,7 +281,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
-  // FIX #6 — styles pour l'image de mission
   missionImgBox: {
     width: 140,
     height: 140,
@@ -285,7 +297,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  // Star (fallback sans missionImg)
   starContainer: {
     width: 120,
     height: 120,
@@ -303,7 +314,6 @@ const styles = StyleSheet.create({
   },
   starEmoji: { fontSize: 72, lineHeight: 80 },
 
-  // XP
   xpText: {
     fontSize: 40,
     fontWeight: "900",
@@ -312,7 +322,6 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
   },
 
-  // Puzzle won
   puzzleWonRow: {
     alignItems: "center",
     gap: 6,
@@ -326,7 +335,6 @@ const styles = StyleSheet.create({
   },
   puzzleEmoji: { fontSize: 30, marginTop: 4 },
 
-  // Button
   continueBtn: {
     marginTop: 22,
     backgroundColor: "#5b21b6",

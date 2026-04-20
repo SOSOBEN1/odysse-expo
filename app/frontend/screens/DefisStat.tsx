@@ -1,23 +1,21 @@
 // screens/DefisStat.tsx
-import React, { useRef, useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  Animated,
-  StatusBar,
-  Platform,
-} from "react-native";
-import Svg, { Path, Circle, Rect, G } from "react-native-svg";
-import { COLORS, SIZES, SHADOWS } from "../constants/theme";
-import Navbar from "../components/Navbar";
-import BackButton from "../components/BackButton";
 import { useRouter } from "expo-router";
-
-
+import { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
+import BackButton from "../components/BackButton";
+import Navbar from "../components/Navbar";
+import { COLORS, SHADOWS, SIZES } from "../constants/theme";
 
 const { width, height } = Dimensions.get("window");
 
@@ -90,10 +88,7 @@ const StatIcon = ({ type, size = 20 }: { type: StatCard["iconType"]; size?: numb
             d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
             fill="#E57373"
           />
-          <Path
-            d="M12 11.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"
-            fill="#fff"
-          />
+          <Path d="M12 11.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" fill="#fff" />
         </Svg>
       );
     case "knowledge":
@@ -119,9 +114,9 @@ const StatIcon = ({ type, size = 20 }: { type: StatCard["iconType"]; size?: numb
     case "organisation":
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <Rect x="3" y="4" width="18" height="18" rx="3" stroke="#4CAF50" strokeWidth={1.8} fill="none"/>
-          <Path d="M16 2v4M8 2v4M3 10h18" stroke="#4CAF50" strokeWidth={1.8} strokeLinecap="round"/>
-          <Path d="M8 14h4M8 18h8" stroke="#4CAF50" strokeWidth={1.8} strokeLinecap="round"/>
+          <Rect x="3" y="4" width="18" height="18" rx="3" stroke="#4CAF50" strokeWidth={1.8} fill="none" />
+          <Path d="M16 2v4M8 2v4M3 10h18" stroke="#4CAF50" strokeWidth={1.8} strokeLinecap="round" />
+          <Path d="M8 14h4M8 18h8" stroke="#4CAF50" strokeWidth={1.8} strokeLinecap="round" />
         </Svg>
       );
   }
@@ -153,47 +148,18 @@ const BgSparkles = () => (
     style={StyleSheet.absoluteFillObject}
     pointerEvents="none"
   >
-    {/* top-left cross */}
-    <Path
-      d="M28 90 H40 M34 84 V96"
-      stroke="#c4aaff"
-      strokeWidth={2}
-      strokeLinecap="round"
-      opacity={0.5}
-    />
-    {/* top-right cross */}
-    <Path
-      d={`M${width - 36} 140 H${width - 24} M${width - 30} 134 V146`}
-      stroke="#c4aaff"
-      strokeWidth={2}
-      strokeLinecap="round"
-      opacity={0.4}
-    />
-    {/* dots */}
+    <Path d="M28 90 H40 M34 84 V96" stroke="#c4aaff" strokeWidth={2} strokeLinecap="round" opacity={0.5} />
+    <Path d={`M${width - 36} 140 H${width - 24} M${width - 30} 134 V146`} stroke="#c4aaff" strokeWidth={2} strokeLinecap="round" opacity={0.4} />
     <Circle cx={width - 20} cy={190} r={3} fill="#d4bbff" opacity={0.5} />
     <Circle cx={20} cy={280} r={2.5} fill="#d4bbff" opacity={0.4} />
     <Circle cx={width - 30} cy={370} r={2} fill="#d4bbff" opacity={0.45} />
     <Circle cx={45} cy={440} r={3} fill="#d4bbff" opacity={0.35} />
     <Circle cx={width - 15} cy={510} r={2} fill="#d4bbff" opacity={0.4} />
-    {/* stars */}
     <Path
       d={`M${width - 55} 110 L${width - 52} 102 L${width - 49} 110 L${width - 57} 106 L${width - 47} 106 Z`}
-      fill="#d4bbff"
-      opacity={0.4}
+      fill="#d4bbff" opacity={0.4}
     />
-    <Path
-      d="M55 360 L58 352 L61 360 L53 356 L63 356 Z"
-      fill="#d4bbff"
-      opacity={0.35}
-    />
-    {/* bottom sparkle */}
-    <Path
-      d={`M${width / 2 - 10} ${height - 160} H${width / 2 + 10} M${width / 2} ${height - 170} V${height - 150}`}
-      stroke="#c4aaff"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      opacity={0.3}
-    />
+    <Path d="M55 360 L58 352 L61 360 L53 356 L63 356 Z" fill="#d4bbff" opacity={0.35} />
   </Svg>
 );
 
@@ -204,10 +170,7 @@ const HeaderIcons = () => (
       <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
         <Path
           d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"
-          stroke={COLORS.primary}
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
         />
         <Circle cx={18} cy={6} r={4} fill="#FF5252" />
       </Svg>
@@ -217,16 +180,14 @@ const HeaderIcons = () => (
         <Circle cx={12} cy={12} r={3} stroke={COLORS.primary} strokeWidth={2} />
         <Path
           d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
-          stroke={COLORS.primary}
-          strokeWidth={2}
-          strokeLinecap="round"
+          stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round"
         />
       </Svg>
     </TouchableOpacity>
   </View>
 );
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+// ─── Stat Card Item ───────────────────────────────────────────────────────────
 interface StatCardProps {
   stat: StatCard;
   selected: boolean;
@@ -270,15 +231,11 @@ const StatCardItem = ({ stat, selected, onToggle, delay }: StatCardProps) => {
       ]}
     >
       <TouchableOpacity
-        style={[
-          styles.card,
-          { backgroundColor: stat.color },
-          selected && styles.cardSelected,
-        ]}
+        style={[styles.card, { backgroundColor: stat.color }, selected && styles.cardSelected]}
         onPress={handlePress}
         activeOpacity={0.9}
       >
-        {/* Top row: icon + label */}
+        {/* Top row: icon + label + check */}
         <View style={styles.cardHeader}>
           <View style={styles.cardIconRow}>
             <StatIcon type={stat.iconType} size={20} />
@@ -328,7 +285,6 @@ export default function DefisStatScreen() {
 
   const canContinue = selected.length > 0;
 
-  // Lay out as 2-column grid
   const rows: [StatCard, StatCard | null][] = [];
   for (let i = 0; i < STATS.length; i += 2) {
     rows.push([STATS[i], STATS[i + 1] ?? null]);
@@ -338,12 +294,11 @@ export default function DefisStatScreen() {
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Background */}
       <BgSparkles />
 
       {/* Top bar */}
       <View style={styles.topBar}>
-        <BackButton  onPress={() => router.push("/frontend/screens/AmisDefis")} />
+        <BackButton onPress={() => router.push("/frontend/screens/AmisDefis")} />
         <HeaderIcons />
       </View>
 
@@ -353,17 +308,11 @@ export default function DefisStatScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Title */}
         <Animated.View
           style={{
             opacity: titleAnim,
             transform: [
-              {
-                translateY: titleAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-16, 0],
-                }),
-              },
+              { translateY: titleAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) },
             ],
           }}
         >
@@ -372,7 +321,6 @@ export default function DefisStatScreen() {
           </Text>
         </Animated.View>
 
-        {/* 2-column grid */}
         <View style={styles.grid}>
           {rows.map((row, rowIdx) => (
             <View key={rowIdx} style={styles.gridRow}>
@@ -393,32 +341,31 @@ export default function DefisStatScreen() {
           ))}
         </View>
 
-        <View style={{ height: 130 }} />
+        {/* padding bottom pour que le contenu ne soit pas caché derrière le CTA */}
+        <View style={{ height: 16 }} />
       </ScrollView>
 
-      {/* CTA */}
+      {/* ── CTA dans le flux normal, entre ScrollView et Navbar ── */}
       <View style={styles.ctaBar}>
         <TouchableOpacity
           style={[styles.ctaBtn, !canContinue && styles.ctaBtnDisabled]}
           activeOpacity={canContinue ? 0.85 : 1}
+          disabled={!canContinue}
         >
           <Text style={styles.ctaBtnText}>Poursuivre</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Navbar */}
       <Navbar active="defis" onChange={() => {}} />
     </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-const CARD_WIDTH = (width - SIZES.padding * 2 - 12) / 2;
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f3eeff", // soft lavender background matching screenshot
+    backgroundColor: COLORS.background,
   },
 
   // ── Top bar ──
@@ -440,7 +387,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.card,
     alignItems: "center",
     justifyContent: "center",
     ...SHADOWS.light,
@@ -451,6 +398,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: SIZES.padding,
     paddingTop: 22,
+    paddingBottom: 16,
   },
 
   // ── Title ──
@@ -464,18 +412,14 @@ const styles = StyleSheet.create({
   },
 
   // ── Grid ──
-  grid: {
-    gap: 12,
-  },
+  grid: { gap: 12 },
   gridRow: {
     flexDirection: "row",
     gap: 12,
   },
 
   // ── Card ──
-  cardWrapper: {
-    flex: 1,
-  },
+  cardWrapper: { flex: 1 },
   card: {
     flex: 1,
     borderRadius: SIZES.radius,
@@ -490,7 +434,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     borderWidth: 2,
   },
-
   cardHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -518,7 +461,7 @@ const styles = StyleSheet.create({
   // ── Choose button ──
   chooseBtn: {
     alignSelf: "flex-start",
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.white,
     borderRadius: 20,
     paddingVertical: 6,
     paddingHorizontal: 14,
@@ -533,7 +476,7 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   chooseBtnTextSelected: {
-    color: "#fff",
+    color: COLORS.white,
   },
 
   // ── Check badge ──
@@ -546,33 +489,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // ── CTA ──
+  // ── CTA — flux normal, plus de position absolute ──
   ctaBar: {
-    position: "absolute",
-    left: SIZES.padding,
-    right: SIZES.padding,
-    bottom: 82,
-    alignItems: "center",
+    paddingHorizontal: SIZES.padding,
+    paddingVertical: 12,
+    backgroundColor: COLORS.background,
   },
   ctaBtn: {
     width: "100%",
     backgroundColor: COLORS.primary,
-    borderRadius: 30,
+    borderRadius: SIZES.radiusFull,
     paddingVertical: 16,
     alignItems: "center",
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    ...SHADOWS.purple,
   },
   ctaBtnDisabled: {
-    backgroundColor: "#c4aaff",
+    backgroundColor: COLORS.primaryLight,
     elevation: 0,
     shadowOpacity: 0,
   },
   ctaBtnText: {
-    color: "#fff",
+    color: COLORS.white,
     fontSize: 16,
     fontWeight: "800",
     letterSpacing: 0.3,

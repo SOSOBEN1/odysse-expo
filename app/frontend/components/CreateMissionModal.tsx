@@ -165,89 +165,55 @@ export default function CreateMissionModal({ visible, onClose, onSave, initialDa
     setShowTimePicker(true);
   };
 
- const handleSave = async () => {
-  if (!title.trim()) { Alert.alert("Erreur", "Le titre est obligatoire"); return; }
-  if (difficulty === "") { Alert.alert("Erreur", "La difficulté est obligatoire"); return; }
-  if (priority === "") { Alert.alert("Erreur", "La priorité est obligatoire"); return; }
-  if (!userId) { Alert.alert("Erreur", "Utilisateur non identifié"); return; }
+  const handleSave = async () => {
+    if (!title.trim()) { Alert.alert("Erreur", "Le titre est obligatoire"); return; }
+    if (difficulty === "") { Alert.alert("Erreur", "La difficulté est obligatoire"); return; }
+    if (priority === "") { Alert.alert("Erreur", "La priorité est obligatoire"); return; }
 
-  setSaving(true);
+    setSaving(true);
+    try {
+      const gains = computeGains(difficulty as number, priority as number);
 
-  try {
-    const gains = computeGains(difficulty as number, priority as number);
+      const missionData = {
+        titre:       title.trim(),
+        description: description.trim() || null,
+        duree_min:   dureeMin ? parseInt(dureeMin) : null,
+        difficulte:  difficulty,
+        priorite:    priority,
+        date_limite: dateLimite ? dateLimite.toISOString() : null,
+        ...gains,
+        id_boss: initialData?.id_boss ?? null,
+      };
 
-    const missionData = {
-      titre:       title.trim(),
-      description: description.trim() || null,
-      duree_min:   dureeMin ? parseInt(dureeMin) : null,
-      difficulte:  difficulty,
-      priorite:    priority,
-      date_limite: dateLimite ? dateLimite.toISOString() : null,
-      ...gains,
-      id_boss: initialData?.id_boss ?? null,
-    };
+      let result;
 
-    let mission;
-
-    // ──────────────
-    // 🟣 UPDATE
-    // ──────────────
-    if (initialData?.id_mission) {
-      const { data, error } = await supabase
-        .from("mission")
-        .update(missionData)
-        .eq("id_mission", initialData.id_mission)
-        .select()
-        .single();
-
-      if (error) {
-        console.log(error);
-        throw error;
+      if (initialData?.id_mission) {
+        const { data, error } = await supabase
+          .from("mission")
+          .update(missionData)
+          .eq("id_mission", initialData.id_mission)
+          .select()
+          .single();
+        if (error) throw error;
+        result = data;
+      } else {
+        const { data, error } = await supabase
+          .from("mission")
+          .insert(missionData)
+          .select()
+          .single();
+        if (error) throw error;
+        result = data;
       }
 
-      mission = data;
-    } 
-    // ──────────────
-    // 🔵 INSERT
-    // ──────────────
-    else {
-      const { data, error } = await supabase
-        .from("mission")
-        .insert(missionData)
-        .select()
-        .single();
-
-      if (error) {
-        console.log(error);
-        throw error;
-      }
-
-      mission = data;
-
-      // ✅ LIAISON USER ↔ MISSION
-      const { error: linkError } = await supabase
-        .from("mission_validation")
-        .insert({
-          id_user: userId,
-          id_mission: mission.id_mission,
-          date_debut: new Date().toISOString(),
-        });
-
-      if (linkError) {
-        console.log(linkError);
-        throw linkError;
-      }
+      onSave(result);
+      onClose();
+    } catch (err: any) {
+      Alert.alert("Erreur", `Impossible d'enregistrer : ${err.message}`);
+    } finally {
+      setSaving(false);
     }
-
-    onSave(mission);
-    onClose();
-
-  } catch (err: any) {
-    Alert.alert("Erreur", `Impossible d'enregistrer : ${err.message}`);
-  } finally {
-    setSaving(false);
-  }
-};
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>

@@ -1,13 +1,15 @@
-import { Feather, FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
+
+import { Feather, FontAwesome5, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
-import { Text, TouchableOpacity, View, Alert } from "react-native";
+import { Text, TouchableOpacity, View, Alert, StyleSheet } from "react-native";
 import UsernameInput from "../components/UsernameInput";
 import WaveBackground from "../components/waveBackground";
-import styles from "../styles/LoginStyle";
+import BackButton from "../components/BackButton";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
+import { COLORS } from "../styles/theme";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -39,7 +41,6 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      // Cherche l'utilisateur avec email + password
       const { data, error } = await supabase
         .from("users")
         .select("id_user")
@@ -52,13 +53,11 @@ export default function LoginScreen() {
         return;
       }
 
-      // Met à jour dernier_login
       await supabase
         .from("users")
         .update({ dernier_login: new Date().toISOString() })
         .eq("id_user", data.id_user);
 
-      // Sauvegarde l'id dans le contexte
       setUserId(data.id_user);
 
       router.push("/frontend/screens/QuestionPeriodicScreen");
@@ -74,9 +73,7 @@ export default function LoginScreen() {
       <WaveBackground />
 
       {/* BACK */}
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.push("/frontend/screens/start")}>
-        <Ionicons name="arrow-back" size={20} color="#6949a8" />
-      </TouchableOpacity>
+      <BackButton onPress={() => router.push("/frontend/screens/start")} />
 
       {/* HEADER */}
       <View style={styles.header}>
@@ -124,7 +121,7 @@ export default function LoginScreen() {
         {/* Sign In Button */}
         <TouchableOpacity style={styles.buttonWrapper} onPress={handleLogin} disabled={loading}>
           <LinearGradient
-            colors={["#6949a8", "#9574e0", "#baaae7"]}
+            colors={[COLORS.primary, COLORS.secondary, "#baaae7"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.button}
@@ -136,7 +133,10 @@ export default function LoginScreen() {
         {/* Register */}
         <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 15 }}>
           <Text style={styles.registerText}>Don't have an account? </Text>
-          <Link href="/frontend/screens/Register" style={[styles.registerLink, { textDecorationLine: "underline" }]}>
+          <Link
+            href="/frontend/screens/Register"
+            style={[styles.registerLink, { textDecorationLine: "underline" }]}
+          >
             Register Now
           </Link>
         </View>
@@ -174,3 +174,145 @@ export default function LoginScreen() {
     </LinearGradient>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 50,
+  },
+
+  header: {
+    marginTop: 40,
+    marginBottom: 20,
+  },
+
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+
+  subtitle: {
+    marginTop: 8,
+    fontSize: 16,
+    color: COLORS.primary,
+    fontWeight: "bold",
+  },
+
+  card: {
+    backgroundColor: COLORS.card,
+    borderRadius: 25,
+    padding: 20,
+    marginTop: 25,
+  },
+
+  label: {
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 8,
+    color: COLORS.text,
+  },
+
+  optionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+    alignItems: "center",
+  },
+
+  remember: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1,
+    borderRadius: 4,
+    borderColor: "#aaa",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+
+  checkboxActive: {
+    backgroundColor: "#0043a7",
+    borderColor: "#0043a7",
+  },
+
+  rememberText: {
+    fontSize: 13,
+    color: "#333",
+    fontWeight: "bold",
+  },
+
+  forgot: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: "bold",
+  },
+
+  buttonWrapper: {
+    marginTop: 20,
+  },
+
+  button: {
+    height: 50,
+    borderRadius: 15,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 7,
+    width: 250,
+    alignSelf: "center",
+  },
+
+  buttonText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
+  registerText: {
+    fontSize: 13,
+    textAlign: "center",
+    color: COLORS.text,
+  },
+
+  registerLink: {
+    color: COLORS.primary,
+    fontWeight: "bold",
+  },
+
+  socialRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 20,
+    marginTop: 20,
+  },
+
+  socialBtn: {
+    width: 55,
+    height: 55,
+    borderRadius: 30,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 5,
+  },
+
+  stars: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 0,
+  },
+});

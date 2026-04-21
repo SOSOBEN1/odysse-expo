@@ -3,6 +3,7 @@
 export const COLORS = {
   primary:           "#6949a8",
   secondary:         "#9574e0",
+  tertiary:          "#baaae7",
   background:        "#ffffff",
   card:              "#fdfdff",
   text:              "#000",
@@ -20,7 +21,16 @@ export const COLORS = {
 
   // UI Controls
   switchTrackOff:    "#D1D1D1",
-  iconBg:            "#F0E6FF",
+  // iconBg:            "#F0E6FF",
+  iconBg:            "#e8e0ff", 
+
+
+   // Checkbox
+  checkboxBorder:    "#aaa",
+  checkboxActive:    "#0043a7",
+
+  // Social icons
+  googleRed:         "#EA4335",
 
   // Logout button
   logoutStart:       "#FF9AA2",

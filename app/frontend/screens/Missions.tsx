@@ -130,9 +130,9 @@ function MissionCard({
   const getDeadlineColor = () => {
     if (!mission.dateLimite) return "#6b7280";
     const diff = mission.dateLimite.getTime() - Date.now();
-    if (diff < 0)                   return "#e53e3e";
-    if (diff < 3600 * 1000)         return "#f97316";
-    if (diff < 24 * 3600 * 1000)    return "#eab308";
+    if (diff < 0)                return "#e53e3e";
+    if (diff < 3600 * 1000)      return "#f97316";
+    if (diff < 24 * 3600 * 1000) return "#eab308";
     return "#16a34a";
   };
 
@@ -280,10 +280,7 @@ export default function MissionsScreen() {
               state: "fail",
             };
             changed = true;
-
-            // ✅ Sync Supabase statut = "fail"
             updateStatut(mission.id, "fail");
-
             setStatusModal({
               visible: true,
               type: "fail",
@@ -304,7 +301,10 @@ export default function MissionsScreen() {
     return () => { Object.values(intervalRefs.current).forEach(clearInterval); };
   }, []);
 
-  useFocusEffect(useCallback(() => { fetchMissions(); }, []));
+  // ✅ Rechargement à chaque focus
+  useFocusEffect(useCallback(() => {
+    if (userId) fetchMissions();
+  }, [userId]));
 
   const getTimer = (id: number): MissionTimer =>
     timers[id] ?? { state: "idle", elapsed: 0, validationId: null, startedAt: null };
@@ -328,7 +328,6 @@ export default function MissionsScreen() {
       if (error) { Alert.alert("Erreur", error.message); return; }
     }
 
-    // ✅ Sync Supabase statut = "done"
     await updateStatut(missionId, "done");
     setTimer(missionId, { state: "done" });
 
@@ -355,7 +354,6 @@ export default function MissionsScreen() {
       setTimer(missionId, { state: "running" });
     }
 
-    // ✅ Sync Supabase statut = "running"
     await updateStatut(missionId, "running");
 
     if (intervalRefs.current[missionId]) clearInterval(intervalRefs.current[missionId]);
@@ -382,31 +380,49 @@ export default function MissionsScreen() {
   // ── PAUSE ──
   const handlePause = async (missionId: number) => {
     clearInterval(intervalRefs.current[missionId]);
-    // ✅ Sync Supabase statut = "paused"
     await updateStatut(missionId, "paused");
     setTimer(missionId, { state: "paused" });
   };
 
+  // ── FETCH MISSIONS ──────────────────────────────────────────────────────────
   const fetchMissions = async () => {
+    if (!userId) return;
     try {
       setLoading(true);
+
+      // ✅ FIX 1 — Récupère uniquement les missions de cet utilisateur
+      const { data: userValidations, error: errV } = await supabase
+        .from("mission_validation")
+        .select("id_mission, id_validation, date_debut")
+        .eq("id_user", userId);
+
+      if (errV) throw errV;
+
+      const userMissionIds = [...new Set((userValidations ?? []).map((v: any) => v.id_mission))];
+
+      if (userMissionIds.length === 0) {
+        setMissions([]);
+        setLoading(false);
+        return;
+      }
+
+      // ✅ FIX 2 — Filtre par les IDs de l'utilisateur
       const { data, error } = await supabase
         .from("mission")
         .select(`id_mission, titre, description, duree_min, difficulte, priorite, id_boss, date_limite, statut, boss_events ( nom )`)
+        .in("id_mission", userMissionIds)
         .order("id_mission", { ascending: false });
 
       if (error) throw error;
 
+      // Missions faites aujourd'hui
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
-
-      const { data: validations } = await supabase
-        .from("mission_validation")
-        .select("id_mission")
-        .gte("date_debut", todayStart.toISOString())
-        .lte("date_debut", todayEnd.toISOString());
-
-      const todayIds = new Set((validations ?? []).map((v: any) => v.id_mission));
+      const todayIds = new Set(
+        (userValidations ?? [])
+          .filter((v: any) => v.date_debut && new Date(v.date_debut) >= todayStart && new Date(v.date_debut) <= todayEnd)
+          .map((v: any) => v.id_mission)
+      );
 
       const mapped: Mission[] = (data ?? []).map((m: any) => ({
         id:          m.id_mission,
@@ -423,31 +439,44 @@ export default function MissionsScreen() {
 
       setMissions(mapped);
 
-      // ✅ Restaurer les timers depuis le statut Supabase + vérifier deadlines
+      // ✅ FIX 3 — Restauration correcte des timers depuis le statut Supabase
       const now = Date.now();
       setTimers(prev => {
         const updated = { ...prev };
 
         (data ?? []).forEach((m: any) => {
           const existingTimer = prev[m.id_mission];
-          // Ne pas écraser un timer déjà actif en mémoire
+
+          // Ne pas écraser un timer actif en mémoire (running/paused)
           if (existingTimer && (existingTimer.state === "running" || existingTimer.state === "paused")) return;
 
           const dateLimite = m.date_limite ? new Date(m.date_limite) : null;
 
-          // Deadline dépassée → fail automatique
-          if (dateLimite && dateLimite.getTime() < now && m.statut !== "done" && m.statut !== "fail") {
+          // ✅ Deadline dépassée ET pas encore marquée fail → auto fail
+          if (
+            dateLimite &&
+            dateLimite.getTime() < now &&
+            m.statut !== "done" &&
+            m.statut !== "fail"
+          ) {
             updateStatut(m.id_mission, "fail");
             updated[m.id_mission] = { state: "fail", elapsed: 0, validationId: null, startedAt: null };
             return;
           }
 
-          // Restaurer depuis Supabase
-          if (m.statut === "done" || m.statut === "fail") {
+          // ✅ FIX PRINCIPAL — Restaurer done/fail/paused depuis Supabase
+          // Avant : seuls "done" et "fail" étaient restaurés, "paused" était ignoré
+          if (m.statut === "done" || m.statut === "fail" || m.statut === "paused") {
             updated[m.id_mission] = {
-              ...(existingTimer ?? { elapsed: 0, validationId: null, startedAt: null }),
-              state: m.statut,
+              elapsed:       existingTimer?.elapsed ?? 0,
+              validationId:  existingTimer?.validationId ?? null,
+              startedAt:     existingTimer?.startedAt ?? null,
+              state:         m.statut as TimerState,
             };
+          }
+          // "running" en DB mais pas en mémoire → on le remet à "paused" (timer perdu au refresh)
+          else if (m.statut === "running" && !existingTimer) {
+            updated[m.id_mission] = { state: "paused", elapsed: 0, validationId: null, startedAt: null };
           }
         });
 

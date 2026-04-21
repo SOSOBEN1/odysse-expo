@@ -6,7 +6,6 @@ import {
 } from "react-native";
 import Svg, { Path, Circle } from "react-native-svg";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../constants/supabase";
 import { COLORS, SIZES, SHADOWS } from "../constants/theme";
@@ -17,6 +16,7 @@ const { width } = Dimensions.get("window");
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MissionStatus = "locked" | "active" | "in_progress" | "paused" | "done";
 
+// ✅ Correspond exactement au schéma DB de la table mission
 interface Mission {
   id_mission: number;
   titre: string;
@@ -31,8 +31,8 @@ interface Mission {
   organisation_gain: number;
   date_limite: string | null;
   id_boss: number;
-  // status géré localement (pas en DB dans ton schéma)
-  localStatus: MissionStatus;
+  statut: string; // 'idle' | 'running' | 'paused' | 'done' | 'fail' (valeur DB)
+  localStatus: MissionStatus; // statut calculé localement pour l'UI
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -42,18 +42,27 @@ const PRIO_COLORS: Record<number, string> = {
   1: "#6EE7B7", 2: "#60A5FA", 3: "#FBBF24", 4: "#F87171",
 };
 const DIFF_ICONS: Record<number, string> = { 1: "⚡", 2: "🔥", 3: "💀" };
-const MAP_STEP = 150; // px entre chaque nœud
+const MAP_STEP = 150;
 
-// ─── Calcul des positions en zigzag ──────────────────────────────────────────
+// ✅ Convertit le statut DB en statut UI local
+const dbStatusToLocal = (statut: string): MissionStatus => {
+  switch (statut) {
+    case "done":    return "done";
+    case "running": return "in_progress";
+    case "paused":  return "paused";
+    case "fail":    return "locked";
+    default:        return "active"; // 'idle' → disponible
+  }
+};
+
 const getNodePosition = (index: number): { top: number; isLeft: boolean } => ({
   top: 60 + index * MAP_STEP,
   isLeft: index % 2 === 0,
 });
 
-// ─── SVG Trail dynamique ──────────────────────────────────────────────────────
+// ─── SVG Trail ───────────────────────────────────────────────────────────────
 const TrailPath = ({ count }: { count: number }) => {
   if (count === 0) return null;
-  const cx = width / 2;
   let d = "";
   for (let i = 0; i < count; i++) {
     const { top, isLeft } = getNodePosition(i);
@@ -68,24 +77,16 @@ const TrailPath = ({ count }: { count: number }) => {
     }
   }
   const mapH = 60 + count * MAP_STEP + 100;
-
   const sparkles: { x: number; y: number }[] = [];
   for (let i = 0; i < count - 1; i++) {
     const { top: t1, isLeft: l1 } = getNodePosition(i);
-    const { top: t2, isLeft: l2 } = getNodePosition(i + 1);
-    sparkles.push({
-      x: (l1 ? width * 0.28 : width * 0.72),
-      y: (t1 + t2) / 2,
-    });
+    const { top: t2 } = getNodePosition(i + 1);
+    sparkles.push({ x: l1 ? width * 0.28 : width * 0.72, y: (t1 + t2) / 2 });
   }
-
   return (
     <Svg width={width} height={mapH} style={StyleSheet.absoluteFillObject} pointerEvents="none">
-      {/* Ombre */}
       <Path d={d} stroke="#C4B5E8" strokeWidth={24} strokeLinecap="round" fill="none" opacity={0.3} />
-      {/* Chemin principal */}
-      <Path d={d} stroke="#E9D5FF" strokeWidth={14} strokeLinecap="round" fill="none"
-        strokeDasharray="2 20" />
+      <Path d={d} stroke="#E9D5FF" strokeWidth={14} strokeLinecap="round" fill="none" strokeDasharray="2 20" />
       {sparkles.map((s, i) => (
         <React.Fragment key={i}>
           <Circle cx={s.x} cy={s.y} r={3.5} fill="#fff" opacity={0.7} />
@@ -110,15 +111,7 @@ const ProgressBar = ({ progress }: { progress: number }) => {
   );
 };
 
-// ─── Mission Card (nœud sur la carte) ────────────────────────────────────────
-interface MissionNodeProps {
-  mission: Mission;
-  index: number;
-  onPress: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}
-
+// ─── Status Config ────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<MissionStatus, { color: string; bg: string; icon: string; label: string }> = {
   locked:      { color: "#9CA3AF", bg: "#F3F4F6", icon: "🔒", label: "Verrouillée" },
   active:      { color: "#7C3AED", bg: "#EDE9FE", icon: "⭐", label: "Disponible" },
@@ -126,6 +119,15 @@ const STATUS_CONFIG: Record<MissionStatus, { color: string; bg: string; icon: st
   paused:      { color: "#3B82F6", bg: "#EFF6FF", icon: "⏸️", label: "En pause" },
   done:        { color: "#10B981", bg: "#D1FAE5", icon: "✅", label: "Terminée" },
 };
+
+// ─── Mission Node ─────────────────────────────────────────────────────────────
+interface MissionNodeProps {
+  mission: Mission;
+  index: number;
+  onPress: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
 
 const MissionNode = ({ mission, index, onPress, onEdit, onDelete }: MissionNodeProps) => {
   const { top, isLeft } = getNodePosition(index);
@@ -137,7 +139,6 @@ const MissionNode = ({ mission, index, onPress, onEdit, onDelete }: MissionNodeP
     Animated.spring(anim, {
       toValue: 1, delay: index * 100, useNativeDriver: true, tension: 60, friction: 8,
     }).start();
-
     if (mission.localStatus === "in_progress" || mission.localStatus === "active") {
       Animated.loop(
         Animated.sequence([
@@ -156,19 +157,16 @@ const MissionNode = ({ mission, index, onPress, onEdit, onDelete }: MissionNodeP
       isLeft ? styles.nodeLeft : styles.nodeRight,
       { top, opacity: anim, transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] },
     ]}>
-      {/* Badge statut */}
       <View style={[styles.statusBadge, { backgroundColor: cfg.color }]}>
         <Text style={styles.statusBadgeText}>{cfg.label}</Text>
       </View>
-
-      <Animated.View style={[{ transform: [{ scale: pulse }] }]}>
+      <Animated.View style={{ transform: [{ scale: pulse }] }}>
         <TouchableOpacity
           style={[styles.nodeCard, { backgroundColor: cfg.bg, borderColor: cfg.color + "55" }]}
           onPress={onPress}
           disabled={isLocked}
           activeOpacity={0.85}
         >
-          {/* Icône + titre */}
           <View style={styles.nodeTop}>
             <View style={[styles.nodeIconBox, { backgroundColor: cfg.color }]}>
               <Text style={styles.nodeIcon}>{cfg.icon}</Text>
@@ -187,8 +185,6 @@ const MissionNode = ({ mission, index, onPress, onEdit, onDelete }: MissionNodeP
               </View>
             </View>
           </View>
-
-          {/* Gains */}
           {!isLocked && (
             <View style={styles.gainsRow}>
               <Text style={styles.gainChip}>🏆 +{mission.xp_gain} XP</Text>
@@ -200,8 +196,6 @@ const MissionNode = ({ mission, index, onPress, onEdit, onDelete }: MissionNodeP
               )}
             </View>
           )}
-
-          {/* Actions edit/delete */}
           {!isLocked && (
             <View style={styles.nodeActions}>
               <TouchableOpacity style={styles.actionBtn} onPress={onEdit}>
@@ -231,15 +225,11 @@ interface MissionDetailModalProps {
 const MissionDetailModal = ({ mission, visible, onClose, onStart, onPause, onComplete }: MissionDetailModalProps) => {
   if (!mission) return null;
   const cfg = STATUS_CONFIG[mission.localStatus];
-
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={detailStyles.overlay}>
         <View style={detailStyles.container}>
-          {/* Handle */}
           <View style={detailStyles.handle} />
-
-          {/* Header */}
           <View style={[detailStyles.header, { backgroundColor: cfg.color + "22" }]}>
             <Text style={detailStyles.headerIcon}>{cfg.icon}</Text>
             <View style={{ flex: 1 }}>
@@ -252,17 +242,13 @@ const MissionDetailModal = ({ mission, visible, onClose, onStart, onPause, onCom
               <Ionicons name="close" size={20} color="#6B7280" />
             </TouchableOpacity>
           </View>
-
           <ScrollView contentContainerStyle={detailStyles.body} showsVerticalScrollIndicator={false}>
-            {/* Description */}
             {mission.description && (
               <View style={detailStyles.section}>
                 <Text style={detailStyles.sectionTitle}>📋 Description</Text>
                 <Text style={detailStyles.desc}>{mission.description}</Text>
               </View>
             )}
-
-            {/* Infos */}
             <View style={detailStyles.infoGrid}>
               <View style={detailStyles.infoCard}>
                 <Text style={detailStyles.infoEmoji}>{DIFF_ICONS[mission.difficulte]}</Text>
@@ -293,8 +279,6 @@ const MissionDetailModal = ({ mission, visible, onClose, onStart, onPause, onCom
                 </View>
               )}
             </View>
-
-            {/* Gains */}
             <View style={detailStyles.section}>
               <Text style={detailStyles.sectionTitle}>✨ Gains</Text>
               <View style={detailStyles.gainsGrid}>
@@ -312,8 +296,6 @@ const MissionDetailModal = ({ mission, visible, onClose, onStart, onPause, onCom
                 ))}
               </View>
             </View>
-
-            {/* CTA Buttons */}
             <View style={detailStyles.ctaGroup}>
               {mission.localStatus === "active" && (
                 <TouchableOpacity style={[detailStyles.ctaBtn, { backgroundColor: "#7C3AED" }]} onPress={onStart}>
@@ -366,16 +348,14 @@ export default function MissionMapScreen() {
 
   const [missions, setMissions] = useState<Mission[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [editData, setEditData] = useState<any>(null);
 
-  // statuts locaux : id_mission -> MissionStatus
-  const [localStatuses, setLocalStatuses] = useState<Record<number, MissionStatus>>({});
-
-  // ── Chargement des missions liées à cet événement ──────────────────────────
+  // ─── Fetch missions depuis Supabase ──────────────────────────────────────
+  // ✅ FIX — fetchMissions recharge depuis la DB à chaque fois
+  // Les missions sont liées au boss via id_boss (pas à un user directement)
   const fetchMissions = useCallback(async () => {
     if (!eventId) return;
     try {
@@ -388,28 +368,24 @@ export default function MissionMapScreen() {
 
       if (error) throw error;
 
-      // Calcul des statuts : la 1ère non-terminée est "active", les suivantes "locked"
-      const statuses: Record<number, MissionStatus> = {};
-      let firstActiveSet = false;
-      (data ?? []).forEach((m, i) => {
-        const prev = statuses;
-        const prevDone = i === 0 || Object.values(statuses).every(s => s === "done") ||
-          (data[i - 1] && (localStatuses[data[i - 1].id_mission] === "done" || statuses[data[i - 1].id_mission] === "done"));
+      const raw = data ?? [];
 
-        if (localStatuses[m.id_mission]) {
-          statuses[m.id_mission] = localStatuses[m.id_mission];
-        } else if (!firstActiveSet) {
-          statuses[m.id_mission] = "active";
-          firstActiveSet = true;
-        } else {
-          statuses[m.id_mission] = "locked";
+      // ✅ FIX — logique de déverrouillage basée sur statut DB réel
+      // La première mission non-done est "active", les suivantes sont "locked"
+      let firstUnlockedFound = false;
+      const withStatus: Mission[] = raw.map((m) => {
+        const dbLocal = dbStatusToLocal(m.statut);
+        // Si la mission est déjà done/in_progress/paused en DB, on respecte ça
+        if (dbLocal === "done" || dbLocal === "in_progress" || dbLocal === "paused") {
+          return { ...m, localStatus: dbLocal };
         }
+        // Sinon (idle/fail) : la première non-traitée est active, les autres locked
+        if (!firstUnlockedFound) {
+          firstUnlockedFound = true;
+          return { ...m, localStatus: "active" as MissionStatus };
+        }
+        return { ...m, localStatus: "locked" as MissionStatus };
       });
-
-      const withStatus: Mission[] = (data ?? []).map((m, i) => ({
-        ...m,
-        localStatus: localStatuses[m.id_mission] ?? (i === 0 ? "active" : "locked"),
-      }));
 
       setMissions(withStatus);
     } catch (err: any) {
@@ -417,60 +393,56 @@ export default function MissionMapScreen() {
     } finally {
       setLoading(false);
     }
-  }, [eventId, localStatuses]);
+  }, [eventId]);
 
-  useFocusEffect(useCallback(() => { fetchMissions(); }, [eventId]));
+  // ✅ FIX — chargement au montage (useEffect remplace useFocusEffect)
+  useEffect(() => {
+    fetchMissions();
+  }, [fetchMissions]);
 
-  // Recalcul des statuts après changement de localStatuses
-  const getMissionsWithStatuses = (raw: Mission[]): Mission[] => {
-    let firstActiveFound = false;
-    return raw.map((m) => {
-      const ls = localStatuses[m.id_mission];
-      if (ls) return { ...m, localStatus: ls };
-      if (!firstActiveFound) { firstActiveFound = true; return { ...m, localStatus: "active" }; }
-      return { ...m, localStatus: "locked" };
-    });
+  // ── Actions (mettent à jour le statut en DB + localement) ────────────────
+
+  const updateMissionStatut = async (id_mission: number, statut: string) => {
+    const { error } = await supabase
+      .from("mission")
+      .update({ statut })
+      .eq("id_mission", id_mission);
+    if (error) Alert.alert("Erreur", error.message);
   };
 
-  // Recompute lors du changement de statuts locaux
-  useEffect(() => {
-    setMissions(prev => {
-      let firstActiveFound = false;
-      return prev.map((m) => {
-        const ls = localStatuses[m.id_mission];
-        if (ls) return { ...m, localStatus: ls };
-        if (!firstActiveFound) { firstActiveFound = true; return { ...m, localStatus: "active" }; }
-        return { ...m, localStatus: "locked" };
-      });
-    });
-  }, [localStatuses]);
-
-  // ── Actions sur les missions ───────────────────────────────────────────────
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!selectedMission) return;
-    setLocalStatuses(prev => ({ ...prev, [selectedMission.id_mission]: "in_progress" }));
+    await updateMissionStatut(selectedMission.id_mission, "running");
+    setMissions(prev => prev.map(m =>
+      m.id_mission === selectedMission.id_mission ? { ...m, localStatus: "in_progress" } : m
+    ));
     setSelectedMission(prev => prev ? { ...prev, localStatus: "in_progress" } : null);
   };
 
-  const handlePause = () => {
+  const handlePause = async () => {
     if (!selectedMission) return;
-    setLocalStatuses(prev => ({ ...prev, [selectedMission.id_mission]: "paused" }));
+    await updateMissionStatut(selectedMission.id_mission, "paused");
+    setMissions(prev => prev.map(m =>
+      m.id_mission === selectedMission.id_mission ? { ...m, localStatus: "paused" } : m
+    ));
     setSelectedMission(prev => prev ? { ...prev, localStatus: "paused" } : null);
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (!selectedMission) return;
     const id = selectedMission.id_mission;
+    await updateMissionStatut(id, "done");
 
-    setLocalStatuses(prev => {
-      const updated = { ...prev, [id]: "done" as MissionStatus };
-      // Déverrouiller la suivante
-      const currentIndex = missions.findIndex(m => m.id_mission === id);
-      const next = missions[currentIndex + 1];
-      if (next && !prev[next.id_mission]) {
-        updated[next.id_mission] = "active";
-      }
-      return updated;
+    setMissions(prev => {
+      const currentIndex = prev.findIndex(m => m.id_mission === id);
+      return prev.map((m, i) => {
+        if (m.id_mission === id) return { ...m, localStatus: "done" as MissionStatus };
+        // Déverrouiller la mission suivante
+        if (i === currentIndex + 1 && m.localStatus === "locked") {
+          return { ...m, localStatus: "active" as MissionStatus };
+        }
+        return m;
+      });
     });
 
     setDetailVisible(false);
@@ -498,28 +470,25 @@ export default function MissionMapScreen() {
 
   const handleEdit = (mission: Mission) => {
     setEditData({
-      id_mission:         mission.id_mission,
-      titre:              mission.titre,
-      description:        mission.description,
-      duree_min:          mission.duree_min,
-      difficulte:         mission.difficulte,
-      priorite:           mission.priorite,
-      date_limite:        mission.date_limite,
-      id_boss:            mission.id_boss,
+      id_mission:   mission.id_mission,
+      titre:        mission.titre,
+      description:  mission.description,
+      duree_min:    mission.duree_min,
+      difficulte:   mission.difficulte,
+      priorite:     mission.priorite,
+      date_limite:  mission.date_limite,
+      id_boss:      mission.id_boss,
     });
     setCreateModalVisible(true);
   };
 
-  const handleSave = (saved: any) => {
-    setMissions(prev => {
-      const exists = prev.find(m => m.id_mission === saved.id_mission);
-      const withStatus = { ...saved, localStatus: localStatuses[saved.id_mission] ?? "active" };
-      if (exists) return prev.map(m => m.id_mission === saved.id_mission ? withStatus : m);
-      return [...prev, { ...withStatus, localStatus: prev.length === 0 ? "active" : "locked" }];
-    });
+  // ✅ FIX — handleSave recharge depuis Supabase au lieu de manipuler le state manuellement
+  // Garantit que les missions nouvellement créées (insérées en DB par CreateMissionModal) apparaissent
+  const handleSave = () => {
+    fetchMissions();
   };
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
+  // ── Stats ──────────────────────────────────────────────────────────────────
   const doneCount = missions.filter(m => m.localStatus === "done").length;
   const progress = missions.length > 0 ? doneCount / missions.length : 0;
   const totalXP = missions.filter(m => m.localStatus === "done").reduce((acc, m) => acc + m.xp_gain, 0);
@@ -571,8 +540,6 @@ export default function MissionMapScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={{ height: mapH, width }}>
-
-            {/* Étoiles déco */}
             <Svg width={width} height={mapH} style={StyleSheet.absoluteFillObject} pointerEvents="none">
               {Array.from({ length: 20 }, (_, i) => {
                 const sx = 10 + ((i * 73) % (width - 20));
@@ -601,8 +568,6 @@ export default function MissionMapScreen() {
                     onDelete={() => handleDelete(mission)}
                   />
                 ))}
-
-                {/* Trophée en bas si tout complété */}
                 {doneCount === missions.length && missions.length > 0 && (
                   <View style={[styles.trophyWrapper, { top: mapH - 100 }]}>
                     <Text style={styles.trophyEmoji}>🏆</Text>
@@ -615,7 +580,7 @@ export default function MissionMapScreen() {
         </ScrollView>
       )}
 
-      {/* ── CTA Créer mission ── */}
+      {/* ── CTA ── */}
       <View style={styles.ctaBar}>
         <TouchableOpacity
           style={styles.ctaBtn}
@@ -626,7 +591,7 @@ export default function MissionMapScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Mission Detail Modal ── */}
+      {/* ── Modals ── */}
       <MissionDetailModal
         mission={selectedMission}
         visible={detailVisible}
@@ -636,11 +601,15 @@ export default function MissionMapScreen() {
         onComplete={handleComplete}
       />
 
-      {/* ── Create / Edit Modal ── */}
       <CreateMissionModal
         visible={createModalVisible}
         onClose={() => { setCreateModalVisible(false); setEditData(null); }}
-        onSave={(saved) => { handleSave(saved); setCreateModalVisible(false); setEditData(null); }}
+        onSave={() => {
+          // ✅ FIX — recharge depuis Supabase pour afficher la mission créée/modifiée
+          handleSave();
+          setCreateModalVisible(false);
+          setEditData(null);
+        }}
         initialData={editData}
       />
     </View>
@@ -650,8 +619,6 @@ export default function MissionMapScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F5F3FF" },
-
-  // Header
   header: {
     flexDirection: "row", alignItems: "center",
     paddingTop: Platform.OS === "android" ? 44 : 56,
@@ -666,10 +633,7 @@ const styles = StyleSheet.create({
   },
   headerCenter: { flex: 1, alignItems: "center", paddingHorizontal: 10 },
   projectTitle: { fontSize: 18, fontWeight: "800", color: "#2D1A5E", marginBottom: 8 },
-  progressTrack: {
-    width: "100%", height: 8, backgroundColor: "#E9D5FF",
-    borderRadius: 4, overflow: "hidden",
-  },
+  progressTrack: { width: "100%", height: 8, backgroundColor: "#E9D5FF", borderRadius: 4, overflow: "hidden" },
   progressFill: { height: "100%", backgroundColor: COLORS.primary, borderRadius: 4 },
   progressLabel: { fontSize: 12, color: "#7C3AED", marginTop: 4, fontWeight: "600" },
   headerRight: { alignItems: "center" },
@@ -679,8 +643,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: "#F59E0B",
   },
   xpBadgeText: { fontSize: 13, fontWeight: "800", color: "#92400E" },
-
-  // Map
   mapScroll: { flex: 1 },
   loader: { flex: 1, alignItems: "center", justifyContent: "center" },
   loaderEmoji: { fontSize: 48, marginBottom: 12 },
@@ -689,8 +651,6 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 56, marginBottom: 12 },
   emptyText: { fontSize: 17, fontWeight: "800", color: "#4C1D95", textAlign: "center" },
   emptySubText: { fontSize: 14, color: "#7C3AED", marginTop: 6 },
-
-  // Nodes
   nodeWrapper: { position: "absolute", zIndex: 4, maxWidth: width * 0.52 },
   nodeLeft: { left: 12 },
   nodeRight: { right: 12 },
@@ -700,10 +660,7 @@ const styles = StyleSheet.create({
     marginLeft: 10, marginBottom: -10, zIndex: 2,
   },
   statusBadgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
-  nodeCard: {
-    borderRadius: 18, padding: 12, borderWidth: 1.5,
-    ...SHADOWS.medium,
-  },
+  nodeCard: { borderRadius: 18, padding: 12, borderWidth: 1.5, ...SHADOWS.medium },
   nodeTop: { flexDirection: "row", alignItems: "center", gap: 8 },
   nodeIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   nodeIcon: { fontSize: 20 },
@@ -725,16 +682,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(124,58,237,0.08)",
     alignItems: "center", justifyContent: "center",
   },
-
-  // Trophy
-  trophyWrapper: {
-    position: "absolute", left: 0, right: 0,
-    alignItems: "center", zIndex: 5,
-  },
+  trophyWrapper: { position: "absolute", left: 0, right: 0, alignItems: "center", zIndex: 5 },
   trophyEmoji: { fontSize: 52 },
   trophyText: { fontSize: 16, fontWeight: "800", color: "#92400E", marginTop: 4 },
-
-  // CTA
   ctaBar: {
     position: "absolute", bottom: 0, left: 0, right: 0,
     paddingBottom: Platform.OS === "ios" ? 30 : 18,
@@ -760,10 +710,7 @@ const detailStyles = StyleSheet.create({
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     maxHeight: "88%", paddingTop: 8,
   },
-  handle: {
-    width: 40, height: 4, backgroundColor: "#D1D5DB",
-    borderRadius: 2, alignSelf: "center", marginBottom: 12,
-  },
+  handle: { width: 40, height: 4, backgroundColor: "#D1D5DB", borderRadius: 2, alignSelf: "center", marginBottom: 12 },
   header: {
     flexDirection: "row", alignItems: "center", gap: 12,
     paddingHorizontal: 20, paddingVertical: 14,
@@ -771,10 +718,7 @@ const detailStyles = StyleSheet.create({
   },
   headerIcon: { fontSize: 36 },
   title: { fontSize: 18, fontWeight: "800", color: "#2D1A5E", flex: 1 },
-  statusPill: {
-    alignSelf: "flex-start", borderRadius: 20,
-    paddingHorizontal: 10, paddingVertical: 3, marginTop: 4,
-  },
+  statusPill: { alignSelf: "flex-start", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, marginTop: 4 },
   statusPillText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   closeBtn: {
     width: 32, height: 32, borderRadius: 16,

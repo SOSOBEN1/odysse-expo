@@ -81,9 +81,9 @@ export default function LoginScreen() {
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.title}> Welcome</Text>
+          <Text style={styles.title}> Bienvenue</Text>
         </View>
-        <Text style={styles.subtitle}>Let's continue your journey</Text>
+        <Text style={styles.subtitle}>Poursuivez votre aventure</Text>
       </View>
 
       {/* CARD */}
@@ -113,11 +113,11 @@ export default function LoginScreen() {
                 <Feather name="check" size={12} color="#fff" style={{ alignSelf: "center" }} />
               )}
             </View>
-            <Text style={styles.rememberText}>Remember Password</Text>
+            <Text style={styles.rememberText}>Se souvenir de moi</Text>
           </TouchableOpacity>
 
           <TouchableOpacity>
-            <Text style={styles.forgot}>Forgot Password?</Text>
+            <Text style={styles.forgot}>Mot de passe oublié?</Text>
           </TouchableOpacity>
         </View>
 
@@ -129,15 +129,16 @@ export default function LoginScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.button}
           >
-            <Text style={styles.buttonText}>{loading ? "Connexion..." : "Sign In"}</Text>
+            <Text style={styles.buttonText}>{loading ? "Connexion..." : "Se connecter"}</Text>
           </LinearGradient>
         </TouchableOpacity>
 
         {/* Register */}
         <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 15 }}>
-          <Text style={styles.registerText}>Don't have an account? </Text>
+          <Text style={styles.registerText}>
+Vous n'avez pas de compte ? </Text>
           <Link href="/frontend/screens/Register" style={[styles.registerLink, { textDecorationLine: "underline" }]}>
-            Register Now
+            S'inscrire
           </Link>
         </View>
 

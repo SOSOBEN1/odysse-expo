@@ -1,10 +1,14 @@
-
+// screens/ProgressionDefiScreen.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Animated,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -14,270 +18,492 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import {
+  ajouterTempsEtude,
+  calculerEtSauvegarderScore,
+  getClassementDefi,
+  getDefiById,
+  getMissionsDefi,
+  getParticipantsDefi,
+} from "../../../backend/DefisService";
 import BackButton from "../components/BackButton";
 import Navbar from "../components/Navbar";
 import { COLORS, SHADOWS, SIZES } from "../constants/theme";
-// ─── Types ───────────────────────────────────────────────────────────────────
-type TabType = "missions" | "activite";
+import { useUser } from "../constants/UserContext";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface Participant {
   id: number;
   name: string;
   minutes: number;
   avatar: string;
+  score?: number;
 }
 
-interface Objective {
+interface MissionItem {
   id: number;
   title: string;
   description: string;
   accomplishedBy: string;
   status: "completed" | "in_progress" | "pending";
-  progress?: number; // 0-100 for in_progress
-  timeInfo?: string; // e.g. "30 min"
+  progress?: number;
+  timeInfo?: string;
+  xp_gain?: number;
+  difficulte?: number;
 }
 
-interface ActivityItem {
-  id: number;
-  user: string;
+interface ClassementItem {
+  rang: number;
+  name: string;
+  score: number;
   avatar: string;
-  action: string;
-  time: string;
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const PARTICIPANTS: Participant[] = [
-  { id: 1, name: "Mélanie", minutes: 45, avatar: "👩‍🦰" },
-  { id: 2, name: "Antoine", minutes: 30, avatar: "👦" },
-  { id: 3, name: "David",   minutes: 15, avatar: "🧑" },
-  { id: 4, name: "Tom",     minutes: 0,  avatar: "👱" },
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const formatMinutes = (mins: number) => {
+  if (mins <= 0) return "0 min";
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
+};
+
+const AVATAR_COLORS = [
+  "#E8A4C8", "#B39DDB", "#F48FB1", "#90CAF9", "#A5D6A7", "#FFCC80",
 ];
+const MEDAL = ["🥇", "🥈", "🥉"];
 
-const OBJECTIVES: Objective[] = [
-  {
-    id: 1,
-    title: "Objectif 1",
-    description: "Étudier pendant",
-    accomplishedBy: "Mélanie",
-    status: "completed",
-    timeInfo: "30 min",
-  },
-  {
-    id: 2,
-    title: "Objectif 2",
-    description: "Réviser ses notes",
-    accomplishedBy: "Antoine",
-    status: "completed",
-    timeInfo: "20 min",
-  },
-  {
-    id: 3,
-    title: "Objectif 3",
-    description: "Terminer l'étude de",
-    accomplishedBy: ":",
-    status: "in_progress",
-    progress: 75,
-  },
-];
+// ─── ObjectiveCard ────────────────────────────────────────────────────────────
+function ObjectiveCard({ mission, index }: { mission: MissionItem; index: number }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(anim, { toValue: 1, delay: index * 80, useNativeDriver: true, tension: 60, friction: 10 }).start();
+  }, []);
 
-const ACTIVITY: ActivityItem[] = [
-  { id: 1, user: "Mélanie", avatar: "👩‍🦰", action: "a complété l'objectif 1",      time: "Il y a 5 min" },
-  { id: 2, user: "Antoine", avatar: "👦",   action: "a rejoint le défi",            time: "Il y a 12 min" },
-  { id: 3, user: "David",   avatar: "🧑",   action: "a ajouté 15 min d'étude",      time: "Il y a 20 min" },
-  { id: 4, user: "Tom",     avatar: "👱",   action: "a complété l'objectif 2",      time: "Il y a 30 min" },
-];
-
-const TOTAL_GOAL_MINUTES = 120; // 2h
-
-// ─── Component ───────────────────────────────────────────────────────────────
-export default function ProgressionDefiScreen() {
-  const router = useRouter();
-  const [activeNav, setActiveNav] = useState("defis");
-  const [activeTab, setActiveTab] = useState<TabType>("missions");
-  const [participants, setParticipants] = useState<Participant[]>(PARTICIPANTS);
-  const [showAddTime, setShowAddTime] = useState(false);
-  const [addMinutes, setAddMinutes] = useState("");
-
-  const totalStudied = participants.reduce((sum, p) => sum + p.minutes, 0);
-  const progressRatio = Math.min(totalStudied / TOTAL_GOAL_MINUTES, 1);
-  const totalHours = Math.floor(totalStudied / 60);
-  const totalMins  = totalStudied % 60;
-  const goalHours  = Math.floor(TOTAL_GOAL_MINUTES / 60);
-
-  const handleAddTime = () => {
-    const mins = parseInt(addMinutes, 10);
-    if (!isNaN(mins) && mins > 0) {
-      setParticipants((prev) =>
-        prev.map((p) =>
-          p.id === 1 ? { ...p, minutes: p.minutes + mins } : p
-        )
-      );
-    }
-    setAddMinutes("");
-    setShowAddTime(false);
-  };
+  const isCompleted  = mission.status === "completed";
+  const isInProgress = mission.status === "in_progress";
+  const isPending    = mission.status === "pending";
 
   return (
+    <Animated.View style={[
+      styles.objCard,
+      { opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0,1], outputRange: [15,0] }) }] },
+      isCompleted  && styles.objCardCompleted,
+      isInProgress && styles.objCardInProgress,
+    ]}>
+      {/* Icône statut */}
+      <View style={[
+        styles.objIconWrap,
+        isCompleted  && styles.objIconCompleted,
+        isInProgress && styles.objIconInProgress,
+        isPending    && styles.objIconPending,
+      ]}>
+        {isCompleted  && <Ionicons name="checkmark"        size={16} color="#fff" />}
+        {isInProgress && <Ionicons name="time-outline"     size={16} color="#fff" />}
+        {isPending    && <Ionicons name="ellipse-outline"  size={18} color={COLORS.primaryLight} />}
+      </View>
+
+      <View style={styles.objInfo}>
+        <Text style={styles.objTitle} numberOfLines={1}>{mission.title}</Text>
+        {mission.description ? (
+          <Text style={styles.objSub} numberOfLines={2}>{mission.description}</Text>
+        ) : null}
+        {isCompleted && (
+          <Text style={styles.objAccomplishedBy}>✅ {mission.accomplishedBy}</Text>
+        )}
+        {isInProgress && (
+          <Text style={styles.objAccomplishedBy}>⏳ En cours...</Text>
+        )}
+      </View>
+
+      <View style={styles.objRight}>
+        {isCompleted && mission.timeInfo ? (
+          <>
+            <Text style={styles.objCompletedLabel}>Complété</Text>
+            <Text style={styles.objTimeInfo}>{mission.timeInfo}</Text>
+          </>
+        ) : null}
+        {isInProgress && mission.progress !== undefined ? (
+          <View style={styles.progressCircle}>
+            <Text style={styles.progressCircleText}>{mission.progress}%</Text>
+          </View>
+        ) : null}
+        {mission.xp_gain ? (
+          <Text style={styles.objXp}>+{mission.xp_gain} XP</Text>
+        ) : null}
+      </View>
+    </Animated.View>
+  );
+}
+
+// ─── ClassementRow ────────────────────────────────────────────────────────────
+function ClassementRow({ item, index }: { item: ClassementItem; index: number }) {
+  const color = AVATAR_COLORS[index % AVATAR_COLORS.length];
+  return (
+    <View style={[styles.rankRow, index === 0 && styles.rankRowFirst]}>
+      <Text style={styles.rankMedal}>{MEDAL[index] ?? `${index + 1}.`}</Text>
+      <View style={[styles.rankAvatar, { backgroundColor: color }]}>
+        <Text style={styles.rankAvatarText}>
+          {item.avatar ? item.avatar.slice(0, 2).toUpperCase() : "??"}
+        </Text>
+      </View>
+      <Text style={styles.rankName} numberOfLines={1}>{item.name}</Text>
+      <View style={styles.rankScoreBadge}>
+        <Text style={styles.rankScore}>{item.score} pts</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+export default function ProgressionDefiScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const { userId } = useUser();
+
+  const id_defi   = params.defiId   ? Number(params.defiId)   : 0;
+  const defi_nom  = params.defiNom  ? String(params.defiNom)  : "Défi";
+  const defi_desc = params.defiDesc ? String(params.defiDesc) : "";
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  type TabType = "missions" | "classement";
+  const [activeTab,    setActiveTab]    = useState<TabType>("missions");
+  const [activeNav,    setActiveNav]    = useState("defis");
+  const [loading,      setLoading]      = useState(true);
+  const [savingScore,  setSavingScore]  = useState(false);
+  const [showAddTime,  setShowAddTime]  = useState(false);
+  const [addMinutes,   setAddMinutes]   = useState("");
+  const [selectedMission, setSelectedMission] = useState<MissionItem | null>(null);
+
+  const [defiInfo,      setDefiInfo]      = useState<any>(null);
+  const [participants,  setParticipants]  = useState<Participant[]>([]);
+  const [missions,      setMissions]      = useState<MissionItem[]>([]);
+  const [classement,    setClassement]    = useState<ClassementItem[]>([]);
+
+  const headerAnim = useRef(new Animated.Value(0)).current;
+
+  // ── Chargement ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 55, friction: 9 }).start();
+    chargerDonnees();
+  }, []);
+
+  const chargerDonnees = async () => {
+    setLoading(true);
+    await Promise.all([chargerDefi(), chargerMissions(), chargerParticipants(), chargerClassement()]);
+    setLoading(false);
+  };
+
+  const chargerDefi = async () => {
+    const { data } = await getDefiById(id_defi);
+    if (data) setDefiInfo(data);
+  };
+
+  const chargerMissions = async () => {
+    const { data } = await getMissionsDefi(id_defi);
+    if (data) {
+      setMissions(data.map((m: any) => ({
+        id:             m.id_mission,
+        title:          m.titre ?? "Mission",
+        description:    m.description ?? "",
+        accomplishedBy: m.users?.prenom ?? "—",
+        status:
+          m.statut === "termine"   ? "completed"  :
+          m.statut === "en_cours"  ? "in_progress" : "pending",
+        progress:   m.progression ?? undefined,
+        timeInfo:   m.duree_min ? `${m.duree_min} min` : undefined,
+        xp_gain:    m.xp_gain,
+        difficulte: m.difficulte,
+      })));
+    }
+  };
+
+  const chargerParticipants = async () => {
+    const { data } = await getParticipantsDefi(id_defi);
+    if (!data) return;
+
+    // Grouper par user
+    const map = new Map<number, Participant>();
+    data.forEach((v: any) => {
+      const uid = v.id_user;
+      if (!map.has(uid)) {
+        map.set(uid, {
+          id:      uid,
+          name:    v.users?.prenom ?? "?",
+          minutes: 0,
+          avatar:  v.users?.prenom?.slice(0, 2).toUpperCase() ?? "??",
+        });
+      }
+      const p = map.get(uid)!;
+      p.minutes += v.mission?.duree_min ?? 0;
+    });
+    setParticipants([...map.values()].sort((a, b) => b.minutes - a.minutes));
+  };
+
+  const chargerClassement = async () => {
+    const { data } = await getClassementDefi(id_defi);
+    if (data) {
+      setClassement(data.map((r: any, i: number) => ({
+        rang:   i + 1,
+        name:   r.users?.prenom ?? "?",
+        score:  r.score ?? 0,
+        avatar: r.users?.prenom?.slice(0, 2).toUpperCase() ?? "??",
+      })));
+    }
+  };
+
+  // ── Ajouter du temps ───────────────────────────────────────────────────────
+  const handleAddTime = async () => {
+    const mins = parseInt(addMinutes, 10);
+    if (isNaN(mins) || mins <= 0) {
+      Alert.alert("Erreur", "Entre un nombre de minutes valide.");
+      return;
+    }
+    if (!selectedMission) {
+      Alert.alert("Erreur", "Sélectionne une mission.");
+      return;
+    }
+    if (!userId) return;
+
+    // XP proportionnel à la durée (formule simplifiée)
+    const diff    = selectedMission.difficulte ?? 1;
+    const xp_gain = Math.round((mins / (selectedMission.timeInfo ? parseInt(selectedMission.timeInfo) || 30 : 30)) * (selectedMission.xp_gain ?? 10));
+
+    const { error } = await ajouterTempsEtude(userId, selectedMission.id, mins, xp_gain);
+
+    if (error) {
+      Alert.alert("Erreur", "Impossible d'enregistrer le temps.");
+    } else {
+      setAddMinutes("");
+      setShowAddTime(false);
+      setSelectedMission(null);
+      await chargerDonnees();
+    }
+  };
+
+  // ── Calculer & sauvegarder le score ───────────────────────────────────────
+  const handleSauvegarderScore = async () => {
+    if (!userId || !defiInfo) return;
+    setSavingScore(true);
+    const { data: validations } = await getParticipantsDefi(id_defi);
+    const mesValidations = (validations ?? []).filter((v: any) => v.id_user === userId);
+    await calculerEtSauvegarderScore(
+      id_defi,
+      userId,
+      mesValidations,
+      defiInfo.date_debut,
+      defiInfo.date_fin ?? new Date().toISOString(),
+    );
+    await chargerClassement();
+    setSavingScore(false);
+    Alert.alert("✅ Score sauvegardé !", "Ton score a été enregistré dans le classement.");
+    setActiveTab("classement");
+  };
+
+  // ── Calcul progression ────────────────────────────────────────────────────
+  const objectif_minutes = defiInfo?.objectif_minutes ?? 120;
+  const totalMinutes     = participants.reduce((s, p) => s + p.minutes, 0);
+  const progressRatio    = Math.min(totalMinutes / objectif_minutes, 1);
+  const totalH           = Math.floor(totalMinutes / 60);
+  const totalM           = totalMinutes % 60;
+  const goalH            = Math.floor(objectif_minutes / 60);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       <LinearGradient colors={["#D8CCFF", "#E8DFFA", "#EDE8FB"]} style={styles.gradient}>
 
         {/* ── Header ── */}
-        <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>Progression du défi</Text>
-          <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconBtn}>
-              <View>
-                <Ionicons name="notifications-outline" size={22} color={COLORS.primary} />
-                <View style={styles.badge}><Text style={styles.badgeText}>1</Text></View>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Ionicons name="settings-outline" size={22} color={COLORS.primary} />
-            </TouchableOpacity>
+        <Animated.View style={[styles.header, {
+          opacity: headerAnim,
+          transform: [{ translateY: headerAnim.interpolate({ inputRange: [0,1], outputRange: [-16,0] }) }],
+        }]}>
+          <BackButton onPress={() => router.back()} />
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{defi_nom}</Text>
+            {defi_desc ? <Text style={styles.headerSubtitle} numberOfLines={1}>{defi_desc}</Text> : null}
           </View>
-        </View>
+          <TouchableOpacity style={styles.refreshBtn} onPress={chargerDonnees}>
+            <Ionicons name="refresh-outline" size={20} color={COLORS.primary} />
+          </TouchableOpacity>
+        </Animated.View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-
-          {/* ── Challenge Banner ── */}
-          <View style={[styles.challengeBanner, SHADOWS.light]}>
-            <Text style={styles.sparkle}>✦</Text>
-            <Text style={styles.sparkleR}>✦</Text>
-            <Text style={styles.challengeTitle}>Marathon d'étude 2 heures</Text>
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>En cours</Text>
-            </View>
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Chargement du défi...</Text>
           </View>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-          {/* ── Progress Card ── */}
-          <View style={[styles.progressCard, SHADOWS.light]}>
-            <Text style={styles.progressLabel}>
-              Temps total étudié :{" "}
-              <Text style={styles.progressValue}>
-                {totalHours}h{totalMins > 0 ? `${totalMins.toString().padStart(2,"0")}` : ""}
-                /{goalHours}h
-              </Text>
-            </Text>
-
-            {/* Progress bar */}
-            <View style={styles.progressTrack}>
-              <LinearGradient
-                colors={["#664e97", "#906ce6", "#c182de" ]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.progressFill, { width: `${Math.round(progressRatio * 100)}%` }]}
-              />
-            </View>
-
-            {/* Participant avatars */}
-            <View style={styles.participantsRow}>
-              {participants.map((p) => (
-                <View key={p.id} style={styles.participantItem}>
-                  <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarEmoji}>{p.avatar}</Text>
-                  </View>
-                  <Text style={styles.participantName}>{p.name}</Text>
-                  <Text style={styles.participantTime}>
-                    {p.minutes > 0
-                      ? p.minutes >= 60
-                        ? `${Math.floor(p.minutes/60)}h${p.minutes%60>0?p.minutes%60+"m":""}`
-                        : `${p.minutes} min`
-                      : "0 m"}
+            {/* ── Carte progression ── */}
+            <View style={[styles.progressCard, SHADOWS.light]}>
+              <View style={styles.progressHeader}>
+                <View>
+                  <Text style={styles.progressTitle}>Temps étudié</Text>
+                  <Text style={styles.progressValue}>
+                    {totalH > 0 ? `${totalH}h${totalM > 0 ? String(totalM).padStart(2,"0") : ""}` : `${totalM} min`}
+                    <Text style={styles.progressGoal}> / {goalH}h</Text>
                   </Text>
                 </View>
-              ))}
-            </View>
-
-            {/* Add time button */}
-            <TouchableOpacity
-              style={styles.addTimeBtn}
-              onPress={() => setShowAddTime(true)}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={[COLORS.primary, COLORS.secondary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.addTimeBtnGrad}
-              >
-                <Text style={styles.addTimeBtnText}>Ajouter du temps</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-
-          {/* ── Tabs ── */}
-          <View style={styles.tabRow}>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === "missions" && styles.tabActive]}
-              onPress={() => setActiveTab("missions")}
-            >
-              <Text style={[styles.tabText, activeTab === "missions" && styles.tabTextActive]}>
-                Tableau des missions
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === "activite" && styles.tabActive]}
-              onPress={() => setActiveTab("activite")}
-            >
-              <Text style={[styles.tabText, activeTab === "activite" && styles.tabTextActive]}>
-                Fil d'activité
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* ── Tab Content ── */}
-          {activeTab === "missions" ? (
-            <View style={styles.objectivesList}>
-              {OBJECTIVES.map((obj) => (
-                <ObjectiveCard key={obj.id} objective={obj} />
-              ))}
-            </View>
-          ) : (
-            <View style={styles.activityList}>
-              {ACTIVITY.map((item) => (
-                <View key={item.id} style={[styles.activityItem, SHADOWS.light]}>
-                  <View style={styles.activityAvatar}>
-                    <Text style={styles.activityEmoji}>{item.avatar}</Text>
-                  </View>
-                  <View style={styles.activityInfo}>
-                    <Text style={styles.activityText}>
-                      <Text style={styles.activityUser}>{item.user}</Text>
-                      {" "}{item.action}
-                    </Text>
-                    <Text style={styles.activityTime}>{item.time}</Text>
-                  </View>
+                <View style={styles.progressPct}>
+                  <Text style={styles.progressPctText}>{Math.round(progressRatio * 100)}%</Text>
                 </View>
+              </View>
+
+              <View style={styles.progressTrack}>
+                <LinearGradient
+                  colors={["#664e97", "#906ce6", "#c182de"]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={[styles.progressFill, { width: `${Math.round(progressRatio * 100)}%` }]}
+                />
+              </View>
+
+              {/* Participants */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
+                <View style={styles.participantsRow}>
+                  {participants.length === 0 ? (
+                    <Text style={styles.noDataText}>Aucun participant actif pour l'instant</Text>
+                  ) : participants.map((p, i) => (
+                    <View key={p.id} style={styles.participantItem}>
+                      <View style={[styles.avatarCircle, { backgroundColor: AVATAR_COLORS[i % AVATAR_COLORS.length] }]}>
+                        <Text style={styles.avatarText}>{p.avatar}</Text>
+                      </View>
+                      <Text style={styles.participantName} numberOfLines={1}>{p.name}</Text>
+                      <Text style={styles.participantTime}>{formatMinutes(p.minutes)}</Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+
+              {/* Boutons */}
+              <View style={styles.cardBtnsRow}>
+                <TouchableOpacity
+                  style={styles.addTimeBtn}
+                  onPress={() => setShowAddTime(true)}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={[COLORS.primary, COLORS.secondary]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={styles.btnGrad}
+                  >
+                    <Ionicons name="add-circle-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+                    <Text style={styles.btnText}>Ajouter du temps</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.scoreBtn, savingScore && { opacity: 0.5 }]}
+                  onPress={handleSauvegarderScore}
+                  disabled={savingScore}
+                  activeOpacity={0.85}
+                >
+                  {savingScore
+                    ? <ActivityIndicator size="small" color={COLORS.primary} />
+                    : <Text style={styles.scoreBtnText}>💾 Mon score</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* ── Tabs ── */}
+            <View style={styles.tabRow}>
+              {(["missions", "classement"] as TabType[]).map(tab => (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.tab, activeTab === tab && styles.tabActive]}
+                  onPress={() => setActiveTab(tab)}
+                >
+                  <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                    {tab === "missions" ? "📋 Missions" : "🏆 Classement"}
+                  </Text>
+                </TouchableOpacity>
               ))}
             </View>
-          )}
 
-          <View style={{ height: 110 }} />
-        </ScrollView>
+            {/* ── Contenu tabs ── */}
+            {activeTab === "missions" ? (
+              <View style={styles.list}>
+                {missions.length === 0 ? (
+                  <Text style={styles.noDataText}>Aucune mission dans ce défi.</Text>
+                ) : missions.map((m, i) => (
+                  <ObjectiveCard key={m.id} mission={m} index={i} />
+                ))}
+              </View>
+            ) : (
+              <View style={styles.list}>
+                {classement.length === 0 ? (
+                  <View style={styles.emptyClassement}>
+                    <Text style={styles.emptyClassementIcon}>🏆</Text>
+                    <Text style={styles.emptyClassementTitle}>Classement vide</Text>
+                    <Text style={styles.emptyClassementSub}>
+                      Les scores apparaîtront ici une fois que les participants auront sauvegardé leur progression.
+                    </Text>
+                  </View>
+                ) : classement.map((item, i) => (
+                  <ClassementRow key={i} item={item} index={i} />
+                ))}
+              </View>
+            )}
 
-        {/* ── Add Time Modal ── */}
+            <View style={{ height: 120 }} />
+          </ScrollView>
+        )}
+
+        {/* ── Modal ajouter du temps ── */}
         <Modal visible={showAddTime} transparent animationType="slide">
           <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowAddTime(false)} />
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Ajouter du temps</Text>
+            <Text style={styles.modalTitle}>Ajouter du temps d'étude</Text>
+
+            {/* Sélection de la mission */}
+            <Text style={styles.modalLabel}>Mission concernée</Text>
+            <ScrollView style={styles.missionPicker} showsVerticalScrollIndicator={false}>
+              {missions.map(m => (
+                <TouchableOpacity
+                  key={m.id}
+                  style={[styles.missionPickerItem, selectedMission?.id === m.id && styles.missionPickerItemSelected]}
+                  onPress={() => setSelectedMission(m)}
+                >
+                  <Text style={[styles.missionPickerText, selectedMission?.id === m.id && styles.missionPickerTextSelected]}>
+                    {m.title}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={[styles.modalLabel, { marginTop: 12 }]}>Minutes étudiées</Text>
             <TextInput
               style={styles.timeInput}
-              placeholder="Minutes étudiées..."
+              placeholder="ex: 45"
               placeholderTextColor={COLORS.textLight}
               keyboardType="numeric"
               value={addMinutes}
               onChangeText={setAddMinutes}
             />
+
+            {addMinutes && !isNaN(parseInt(addMinutes)) ? (
+              <View style={styles.xpPreview}>
+                <Text style={styles.xpPreviewText}>
+                  ≈ +{Math.round(parseInt(addMinutes) / 30 * (selectedMission?.xp_gain ?? 10))} XP estimés
+                </Text>
+              </View>
+            ) : null}
+
             <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleAddTime}>
               <LinearGradient
                 colors={[COLORS.primary, COLORS.secondary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.modalConfirmGrad}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.btnGrad}
               >
-                <Text style={styles.modalConfirmText}>Confirmer</Text>
+                <Text style={styles.btnText}>Confirmer</Text>
               </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => { setShowAddTime(false); setSelectedMission(null); }}>
+              <Text style={styles.modalCancelText}>Annuler</Text>
             </TouchableOpacity>
           </View>
         </Modal>
@@ -288,248 +514,210 @@ export default function ProgressionDefiScreen() {
   );
 }
 
-// ─── ObjectiveCard ────────────────────────────────────────────────────────────
-function ObjectiveCard({ objective }: { objective: Objective }) {
-  const isCompleted  = objective.status === "completed";
-  const isInProgress = objective.status === "in_progress";
-
-  return (
-    <View style={[styles.objCard, SHADOWS.light]}>
-      {/* Status icon */}
-      {isCompleted ? (
-        <View style={styles.objCheckCircle}>
-          <Ionicons name="checkmark" size={16} color="#fff" />
-        </View>
-      ) : (
-        <View style={styles.objPendingCircle}>
-          <Ionicons name="ellipse-outline" size={20} color={COLORS.primaryLight} />
-        </View>
-      )}
-
-      {/* Info */}
-      <View style={styles.objInfo}>
-        <Text style={styles.objTitle}>
-          <Text style={styles.objTitleBold}>{objective.title}: </Text>
-          {objective.description}
-        </Text>
-        <Text style={styles.objSub}>Accompli par {objective.accomplishedBy}</Text>
-      </View>
-
-      {/* Right side */}
-      {isCompleted && (
-        <View style={styles.objRight}>
-          <Text style={styles.objCompleted}>Complété</Text>
-          {objective.timeInfo && (
-            <Text style={styles.objTime}>{objective.timeInfo}</Text>
-          )}
-        </View>
-      )}
-      {isInProgress && objective.progress !== undefined && (
-        <View style={styles.progressCircleWrapper}>
-          <View style={styles.progressCircle}>
-            <Text style={styles.progressCircleText}>{objective.progress}%</Text>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-}
-
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#D8CCFF" },
+  safe:     { flex: 1, backgroundColor: "#D8CCFF" },
   gradient: { flex: 1 },
 
   header: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection:     "row",
+    alignItems:        "center",
     paddingHorizontal: SIZES.padding,
-    paddingTop: 45,
-    paddingBottom: 8,
+    paddingTop:        Platform.OS === "android" ? 50 : 58,
+    paddingBottom:     10,
+    gap:               10,
   },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: COLORS.white,
-    alignItems: "center", justifyContent: "center",
-    ...SHADOWS.light,
-  },
-  headerTitle: {
-    flex: 1, textAlign: "center",
-    fontSize: 18, fontWeight: "700", color: COLORS.text,
-  },
-  headerIcons: { flexDirection: "row", gap: 8 },
-  iconBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: COLORS.white,
-    alignItems: "center", justifyContent: "center",
-    ...SHADOWS.light,
-  },
-  badge: {
-    position: "absolute", top: -4, right: -4,
-    backgroundColor: COLORS.notifBadge,
-    borderRadius: 8, minWidth: 16, height: 16,
-    alignItems: "center", justifyContent: "center", paddingHorizontal: 3,
-  },
-  badgeText: { color: "#fff", fontSize: 9, fontWeight: "700" },
+  headerCenter:   { flex: 1 },
+  headerTitle:    { fontSize: 17, fontWeight: "800", color: "#17063B" },
+  headerSubtitle: { fontSize: 12, color: "rgba(100,70,160,0.6)", marginTop: 1 },
+  refreshBtn:     { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.8)",
+                    alignItems: "center", justifyContent: "center", ...SHADOWS.light },
 
-  scroll: { paddingHorizontal: SIZES.padding, paddingTop: 8 },
+  loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  loadingText: { fontSize: 14, color: "rgba(100,70,160,0.6)", fontWeight: "600" },
 
-  // Challenge banner
-  challengeBanner: {
-    backgroundColor: COLORS.white,
-    borderRadius: SIZES.radiusLg,
-    padding: 16,
-    alignItems: "center",
-    position: "relative",
-    marginBottom: 12,
-    overflow: "hidden",
-  },
-  sparkle:  { position: "absolute", top: 10, left: 14,  fontSize: 16, color: COLORS.primaryLight },
-  sparkleR: { position: "absolute", top: 10, right: 14, fontSize: 12, color: COLORS.primaryLight },
-  challengeTitle: { fontSize: 16, fontWeight: "700", color: COLORS.text, marginBottom: 8 },
-  statusBadge: {
-    backgroundColor: COLORS.primary,
-    borderRadius: SIZES.radiusFull,
-    paddingHorizontal: 16, paddingVertical: 4,
-  },
-  statusText: { color: COLORS.white, fontSize: 13, fontWeight: "600" },
+  scroll: { paddingHorizontal: SIZES.padding, paddingTop: 10 },
 
-  // Progress card
+  // ── Progress card ──
   progressCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: SIZES.radiusLg,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderRadius:    SIZES.radiusLg,
+    padding:         16,
+    marginBottom:    14,
   },
-  progressLabel: { fontSize: 14, color: COLORS.textLight, marginBottom: 10 },
-  progressValue: { fontWeight: "800", color: COLORS.text, fontSize: 16 },
+  progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
+  progressTitle:  { fontSize: 12, color: "rgba(100,70,160,0.6)", fontWeight: "600", marginBottom: 2 },
+  progressValue:  { fontSize: 26, fontWeight: "800", color: "#17063B" },
+  progressGoal:   { fontSize: 14, color: "rgba(100,70,160,0.5)", fontWeight: "600" },
+  progressPct: {
+    backgroundColor: COLORS.primary,
+    borderRadius:    20,
+    paddingHorizontal: 12,
+    paddingVertical:   6,
+  },
+  progressPctText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   progressTrack: {
-    height: 12,
-    backgroundColor: COLORS.progressBg,
-    borderRadius: SIZES.radiusFull,
-    overflow: "hidden",
-    marginBottom: 16,
+    height:          10,
+    backgroundColor: "rgba(180,160,220,0.25)",
+    borderRadius:    5,
+    overflow:        "hidden",
+    marginBottom:    14,
   },
-  progressFill: {
-    height: "100%",
-    borderRadius: SIZES.radiusFull,
-  },
+  progressFill: { height: "100%", borderRadius: 5 },
 
-  participantsRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 16,
-  },
-  participantItem: { alignItems: "center", gap: 4 },
+  participantsRow: { flexDirection: "row", gap: 14, paddingVertical: 4, paddingHorizontal: 2 },
+  participantItem: { alignItems: "center", gap: 4, width: 58 },
   avatarCircle: {
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: COLORS.primaryPale,
-    borderWidth: 2, borderColor: COLORS.primaryLight,
+    width: 48, height: 48, borderRadius: 24,
     alignItems: "center", justifyContent: "center",
   },
-  avatarEmoji:      { fontSize: 30 },
-  participantName:  { fontSize: 12, fontWeight: "600", color: COLORS.text },
-  participantTime:  { fontSize: 11, color: COLORS.textLight },
+  avatarText:       { fontSize: 16, fontWeight: "800", color: "#fff" },
+  participantName:  { fontSize: 11, fontWeight: "700", color: "#3D1F7A", textAlign: "center", width: 58 },
+  participantTime:  { fontSize: 10, color: "rgba(100,70,160,0.6)" },
 
-  addTimeBtn: { borderRadius: SIZES.radiusFull, overflow: "hidden" },
-  addTimeBtnGrad: { paddingVertical: 10, alignItems: "center", borderRadius: SIZES.radiusFull },
-  addTimeBtnText: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
+  cardBtnsRow: { flexDirection: "row", gap: 10, marginTop: 14 },
+  addTimeBtn:  { flex: 2, borderRadius: 32, overflow: "hidden" },
+  scoreBtn: {
+    flex: 1, borderRadius: 32, borderWidth: 2, borderColor: COLORS.primary,
+    alignItems: "center", justifyContent: "center", paddingVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.8)",
+  },
+  scoreBtnText: { fontSize: 12, fontWeight: "700", color: COLORS.primary },
+  btnGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center",
+             paddingVertical: 11, paddingHorizontal: 14, borderRadius: 32 },
+  btnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
 
-  // Tabs
+  noDataText: { fontSize: 13, color: "rgba(100,70,160,0.5)", textAlign: "center", padding: 20 },
+
+  // ── Tabs ──
   tabRow: {
-    flexDirection: "row",
-    backgroundColor: COLORS.white,
-    borderRadius: SIZES.radiusLg,
-    padding: 4,
-    marginBottom: 12,
+    flexDirection:    "row",
+    backgroundColor:  "rgba(255,255,255,0.7)",
+    borderRadius:     SIZES.radiusLg,
+    padding:          4,
+    marginBottom:     12,
     ...SHADOWS.light,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: SIZES.radius,
-    alignItems: "center",
-  },
-  tabActive: { backgroundColor: COLORS.primaryPale },
-  tabText: { fontSize: 13, fontWeight: "600", color: COLORS.textLight },
-  tabTextActive: { color: COLORS.primary, fontWeight: "700" },
+  tab:           { flex: 1, paddingVertical: 9, borderRadius: SIZES.radius, alignItems: "center" },
+  tabActive:     { backgroundColor: "rgba(149,116,224,0.15)" },
+  tabText:       { fontSize: 13, fontWeight: "600", color: COLORS.textLight },
+  tabTextActive: { color: COLORS.primary, fontWeight: "800" },
 
-  // Objective cards
-  objectivesList: { gap: 10 },
+  list: { gap: 10 },
+
+  // ── Objective cards ──
   objCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: SIZES.radiusLg,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderRadius:    SIZES.radiusLg,
+    padding:         14,
+    flexDirection:   "row",
+    alignItems:      "center",
+    gap:             10,
+    borderWidth:     1,
+    borderColor:     "transparent",
+    ...SHADOWS.light,
   },
-  objCheckCircle: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: COLORS.success,
-    alignItems: "center", justifyContent: "center",
-  },
-  objPendingCircle: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: COLORS.primaryPale,
-    alignItems: "center", justifyContent: "center",
-  },
-  objInfo: { flex: 1 },
-  objTitle: { fontSize: 14, color: COLORS.text },
-  objTitleBold: { fontWeight: "700" },
-  objSub: { fontSize: 12, color: COLORS.textLight, marginTop: 2 },
-  objRight: { alignItems: "flex-end", gap: 2 },
-  objCompleted: { fontSize: 13, fontWeight: "700", color: COLORS.success },
-  objTime: { fontSize: 12, color: COLORS.textLight },
+  objCardCompleted:  { borderColor: "rgba(34,197,94,0.25)", backgroundColor: "rgba(240,255,244,0.9)" },
+  objCardInProgress: { borderColor: "rgba(149,116,224,0.3)" },
 
-  progressCircleWrapper: { alignItems: "center", justifyContent: "center" },
+  objIconWrap:       { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  objIconCompleted:  { backgroundColor: "#22c55e" },
+  objIconInProgress: { backgroundColor: COLORS.primary },
+  objIconPending:    { backgroundColor: "rgba(180,160,220,0.2)" },
+
+  objInfo:           { flex: 1 },
+  objTitle:          { fontSize: 13, fontWeight: "700", color: "#17063B", marginBottom: 2 },
+  objSub:            { fontSize: 11, color: "rgba(100,70,160,0.6)", lineHeight: 15 },
+  objAccomplishedBy: { fontSize: 11, color: "rgba(100,70,160,0.7)", marginTop: 3, fontWeight: "600" },
+
+  objRight:          { alignItems: "flex-end", gap: 4, minWidth: 60 },
+  objCompletedLabel: { fontSize: 11, fontWeight: "700", color: "#22c55e" },
+  objTimeInfo:       { fontSize: 11, color: "rgba(100,70,160,0.6)" },
+  objXp:             { fontSize: 11, fontWeight: "700", color: COLORS.primary },
+
   progressCircle: {
-    width: 46, height: 46, borderRadius: 23,
+    width: 44, height: 44, borderRadius: 22,
     borderWidth: 3, borderColor: COLORS.primary,
-    alignItems: "center", justifyContent: "center",
-    backgroundColor: COLORS.primaryPale,
-  },
-  progressCircleText: { fontSize: 12, fontWeight: "700", color: COLORS.primary },
-
-  // Activity
-  activityList: { gap: 10 },
-  activityItem: {
-    backgroundColor: COLORS.white,
-    borderRadius: SIZES.radiusLg,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  activityAvatar: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.primaryPale,
+    backgroundColor: "rgba(149,116,224,0.1)",
     alignItems: "center", justifyContent: "center",
   },
-  activityEmoji: { fontSize: 22 },
-  activityInfo: { flex: 1 },
-  activityText: { fontSize: 13, color: COLORS.text },
-  activityUser: { fontWeight: "700" },
-  activityTime: { fontSize: 11, color: COLORS.textLight, marginTop: 2 },
+  progressCircleText: { fontSize: 11, fontWeight: "700", color: COLORS.primary },
 
-  // Modal
-  modalOverlay: { flex: 1, backgroundColor: "#00000033" },
+  // ── Classement ──
+  rankRow: {
+    flexDirection:   "row",
+    alignItems:      "center",
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderRadius:    SIZES.radiusLg,
+    padding:         12,
+    gap:             10,
+    ...SHADOWS.light,
+  },
+  rankRowFirst: { backgroundColor: "rgba(255,215,0,0.12)", borderWidth: 1, borderColor: "rgba(255,180,0,0.3)" },
+  rankMedal:    { fontSize: 22, width: 30, textAlign: "center" },
+  rankAvatar: {
+    width: 38, height: 38, borderRadius: 19,
+    alignItems: "center", justifyContent: "center",
+  },
+  rankAvatarText: { fontSize: 13, fontWeight: "800", color: "#fff" },
+  rankName:       { flex: 1, fontSize: 14, fontWeight: "700", color: "#17063B" },
+  rankScoreBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius:    20,
+    paddingHorizontal: 10,
+    paddingVertical:   4,
+  },
+  rankScore: { color: "#fff", fontSize: 12, fontWeight: "800" },
+
+  emptyClassement:      { alignItems: "center", paddingVertical: 40, gap: 10 },
+  emptyClassementIcon:  { fontSize: 48 },
+  emptyClassementTitle: { fontSize: 18, fontWeight: "800", color: "#17063B" },
+  emptyClassementSub:   { fontSize: 13, color: "rgba(100,70,160,0.6)", textAlign: "center", lineHeight: 18 },
+
+  // ── Modal ──
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)" },
   modalSheet: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: SIZES.radiusLg,
-    borderTopRightRadius: SIZES.radiusLg,
-    padding: 24,
+    backgroundColor:       "#fff",
+    borderTopLeftRadius:   SIZES.radiusLg,
+    borderTopRightRadius:  SIZES.radiusLg,
+    padding:               24,
+    paddingBottom:         40,
   },
-  modalTitle: { fontSize: 18, fontWeight: "700", color: COLORS.text, marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: "800", color: "#17063B", marginBottom: 16 },
+  modalLabel: { fontSize: 13, fontWeight: "700", color: "#3D1F7A", marginBottom: 8 },
+
+  missionPicker: { maxHeight: 140, marginBottom: 4 },
+  missionPickerItem: {
+    paddingVertical:   10,
+    paddingHorizontal: 12,
+    borderRadius:      10,
+    marginBottom:      4,
+    backgroundColor:   "rgba(180,160,220,0.1)",
+  },
+  missionPickerItemSelected: { backgroundColor: `${COLORS.primary}20`, borderWidth: 1, borderColor: COLORS.primary },
+  missionPickerText:         { fontSize: 13, color: "#3D1F7A", fontWeight: "500" },
+  missionPickerTextSelected: { color: COLORS.primary, fontWeight: "700" },
+
   timeInput: {
-    borderWidth: 1, borderColor: COLORS.border,
-    borderRadius: SIZES.radius,
-    padding: 12,
-    fontSize: 15,
-    color: COLORS.text,
-    marginBottom: 16,
+    borderWidth:     1.5,
+    borderColor:     "rgba(180,160,220,0.4)",
+    borderRadius:    SIZES.radius,
+    padding:         12,
+    fontSize:        16,
+    color:           "#17063B",
+    fontWeight:      "600",
+    marginBottom:    8,
   },
-  modalConfirmBtn: { borderRadius: SIZES.radiusFull, overflow: "hidden" },
-  modalConfirmGrad: { paddingVertical: 13, alignItems: "center", borderRadius: SIZES.radiusFull },
-  modalConfirmText: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
+  xpPreview: {
+    backgroundColor: "rgba(149,116,224,0.1)",
+    borderRadius:    10,
+    padding:         10,
+    marginBottom:    12,
+    alignItems:      "center",
+  },
+  xpPreviewText: { fontSize: 13, fontWeight: "700", color: COLORS.primary },
+
+  modalConfirmBtn: { borderRadius: 32, overflow: "hidden", marginBottom: 10 },
+  modalCancelBtn:  { alignItems: "center", paddingVertical: 10 },
+  modalCancelText: { fontSize: 14, color: "rgba(100,70,160,0.5)", fontWeight: "600" },
 });

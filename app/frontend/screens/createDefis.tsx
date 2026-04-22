@@ -641,7 +641,7 @@ export default function CreateDefisScreen() {
 
           {/* ── Aperçu des amis ── */}
           <View style={styles.friendsSection}>
-            <Text style={styles.friendsSectionLabel}>👥 Tes amis pourront rejoindre :</Text>
+            <Text style={styles.friendsSectionLabel}> Tes amis pourront rejoindre :</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.friendsRow} style={styles.friendsScroll}>
               {friendsLoading ? (

@@ -6,6 +6,8 @@ import {
   Alert,
   Animated,
   Dimensions,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -16,7 +18,7 @@ import {
   View,
 } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
-import { deleteDefi, getDefisByStatut } from "../../../backend/DefisService";
+import { deleteDefi, getDefisByStatut, updateDefi } from "../../../backend/DefisService";
 import Navbar from "../components/Navbar";
 import NotifIcone from "../components/NotifIcone";
 import SettingIcone from "../components/SettingIcone";
@@ -30,18 +32,30 @@ const { width } = Dimensions.get("window");
 type TabKey = "mes_defis" | "en_attente" | "termine";
 
 interface Defi {
-  id:           number;
-  title:        string;
-  subtitle:     string;
-  xp:           number;
-  duration:     string;
-  participants: number;
-  icon:         "book" | "sport" | "rocket";
-  statut:       string;
-  date_debut:   string | null;
-  date_fin:     string | null;
+  id:               number;
+  title:            string;
+  subtitle:         string;
+  xp:               number;
+  duration:         string;
+  participants:     number;
+  icon:             "book" | "sport" | "rocket";
+  statut:           string;
+  date_debut:       string | null;
+  date_fin:         string | null;
   objectif_minutes: number;
-  progression:  number; // 0–100 calculé dynamiquement
+  progression:      number;
+}
+
+interface MissionLocal {
+  id_mission:  number;
+  titre:       string;
+  description: string;
+  duree_min:   number;
+  difficulte:  1 | 2 | 3;
+  xp_gain:     number;
+  date_limite: string;
+  statut:      string;
+  dirty:       boolean;
 }
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -51,6 +65,11 @@ const TABS: { key: TabKey; label: string }[] = [
 ];
 
 const AVATAR_COLORS = ["#E8A4C8", "#B39DDB", "#F48FB1"];
+const DIFF_LABELS: Record<1|2|3, string> = { 1: "Facile", 2: "Moyen", 3: "Difficile" };
+const DIFF_COLORS: Record<1|2|3, string> = { 1: "#22c55e", 2: "#F59E0B", 3: "#EF4444" };
+type IconKey = "book" | "sport" | "rocket";
+const ICON_OPTIONS: IconKey[] = ["book", "sport", "rocket"];
+const ICON_LABELS: Record<IconKey, string> = { book: "📚 Étude", sport: "⚽ Sport", rocket: "🚀 Projet" };
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 const IconEdit = () => (
@@ -69,13 +88,13 @@ const IconDelete = () => (
   </Svg>
 );
 
-const IconBook   = () => (
+const IconBook = () => (
   <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
     <Path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
     <Path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
   </Svg>
 );
-const IconSport  = () => (
+const IconSport = () => (
   <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
     <Circle cx={12} cy={12} r={9} stroke="#fff" strokeWidth={2} />
     <Path d="M12 3C8 7 8 17 12 21M12 3C16 7 16 17 12 21M3 12h18" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
@@ -88,6 +107,12 @@ const IconRocket = () => (
     <Circle cx={12} cy={10} r={2} fill="#fff" />
   </Svg>
 );
+const IconClose = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path d="M18 6L6 18M6 6l12 12" stroke={COLORS.text} strokeWidth={2.2} strokeLinecap="round" />
+  </Svg>
+);
+
 const ICONS = { book: IconBook, sport: IconSport, rocket: IconRocket };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -110,11 +135,10 @@ const AvatarCircle = ({ color, offset }: { color: string; offset: number }) => (
 // ─── Pill statut ──────────────────────────────────────────────────────────────
 const StatutPill = ({ statut }: { statut: string }) => {
   const cfg = {
-    actif:      { bg: COLORS.secondary, text: "En cours"  },
+    actif:      { bg: COLORS.secondary, text: "En cours"   },
     en_attente: { bg: "#F59E0B",        text: "En attente" },
     termine:    { bg: "#22c55e",        text: "Terminé"    },
   }[statut] ?? { bg: COLORS.secondary, text: statut };
-
   return (
     <View style={[styles.statutPill, { backgroundColor: cfg.bg }]}>
       <Text style={styles.statutText}>{cfg.text}</Text>
@@ -126,8 +150,8 @@ const StatutPill = ({ statut }: { statut: string }) => {
 const DefiCard = ({
   defi, index, onDelete, onEdit, onPress,
 }: {
-  defi: Defi;
-  index: number;
+  defi:     Defi;
+  index:    number;
   onDelete: (id: number) => void;
   onEdit:   (defi: Defi) => void;
   onPress:  (defi: Defi) => void;
@@ -148,7 +172,6 @@ const DefiCard = ({
       ],
     }]}>
       <TouchableOpacity onPress={() => onPress(defi)} activeOpacity={0.92}>
-        {/* Tag row */}
         <View style={styles.cardTagRow}>
           <StatutPill statut={defi.statut} />
           {defi.date_fin && (
@@ -157,15 +180,10 @@ const DefiCard = ({
             </Text>
           )}
         </View>
-
-        {/* Inner */}
         <View style={styles.cardInner}>
           <View style={styles.cardIconWrapper}>
-            <View style={styles.cardIconCircle}>
-              <IconComp />
-            </View>
+            <View style={styles.cardIconCircle}><IconComp /></View>
           </View>
-
           <View style={styles.cardContent}>
             <Text style={styles.cardTitle} numberOfLines={1}>{defi.title}</Text>
             <Text style={styles.cardSubtitle} numberOfLines={2}>{defi.subtitle}</Text>
@@ -180,7 +198,6 @@ const DefiCard = ({
               )}
             </View>
           </View>
-
           <View style={styles.cardRight}>
             <View style={styles.xpBadge}>
               <Text style={styles.xpText}>+{defi.xp} XP</Text>
@@ -189,15 +206,12 @@ const DefiCard = ({
             <Text style={styles.cardObjectif}>🎯 {defi.objectif_minutes} min</Text>
           </View>
         </View>
-
-        {/* Progression bar */}
         <View style={styles.cardProgressTrack}>
           <View style={[styles.cardProgressFill, { width: `${defi.progression}%` }]} />
         </View>
         <Text style={styles.cardProgressLabel}>{defi.progression}% accompli</Text>
       </TouchableOpacity>
 
-      {/* Actions */}
       <View style={styles.cardActionsBottom}>
         <TouchableOpacity style={styles.actionIconBtn} onPress={() => onEdit(defi)}>
           <IconEdit />
@@ -262,17 +276,390 @@ const Sparkles = () => (
   </Svg>
 );
 
+// ─── EditModal ────────────────────────────────────────────────────────────────
+const EditModal = ({
+  defi,
+  visible,
+  onClose,
+  onSaved,
+}: {
+  defi:    Defi | null;
+  visible: boolean;
+  onClose: () => void;
+  onSaved: (updatedDefi: Defi, missions: MissionLocal[]) => void;
+}) => {
+  // champs défi
+  const [nom,         setNom]         = useState("");
+  const [description, setDescription] = useState("");
+  const [xp,          setXp]          = useState("");
+  const [icon,        setIcon]        = useState<IconKey>("rocket");
+  const [dateDebut,   setDateDebut]   = useState("");
+  const [dateFin,     setDateFin]     = useState("");
+  const [objMin,      setObjMin]      = useState("");
+  const [statut,      setStatut]      = useState("actif");
+
+  // missions
+  const [missions,    setMissions]    = useState<MissionLocal[]>([]);
+  const [loadingM,    setLoadingM]    = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [openIdx,     setOpenIdx]     = useState<number | null>(null);
+
+  // pré-remplir quand le modal s'ouvre
+  useEffect(() => {
+    if (!defi || !visible) return;
+    setNom(defi.title);
+    setDescription(defi.subtitle);
+    setXp(String(defi.xp));
+    setIcon(defi.icon);
+    setDateDebut(defi.date_debut?.slice(0, 10) ?? "");
+    setDateFin(defi.date_fin?.slice(0, 10) ?? "");
+    setObjMin(String(defi.objectif_minutes));
+    setStatut(defi.statut);
+    setOpenIdx(null);
+    loadMissions(defi.id);
+  }, [visible, defi]);
+
+  const loadMissions = async (id_defi: number) => {
+    setLoadingM(true);
+    const { data } = await supabase
+      .from("mission")
+      .select("id_mission, titre, description, statut, duree_min, difficulte, xp_gain, date_limite")
+      .eq("id_defi", id_defi)
+      .order("id_mission");
+    if (data) {
+      setMissions(data.map((m: any) => ({
+        id_mission:  m.id_mission,
+        titre:       m.titre        ?? "",
+        description: m.description  ?? "",
+        duree_min:   m.duree_min    ?? 30,
+        difficulte:  (m.difficulte  ?? 1) as 1|2|3,
+        xp_gain:     m.xp_gain      ?? 50,
+        date_limite: m.date_limite?.slice(0,10) ?? "",
+        statut:      m.statut       ?? "actif",
+        dirty:       false,
+      })));
+    }
+    setLoadingM(false);
+  };
+
+  const updateMission = (idx: number, patch: Partial<MissionLocal>) =>
+    setMissions(prev => prev.map((m, i) => i === idx ? { ...m, ...patch, dirty: true } : m));
+
+  const deleteMission = (idx: number) => {
+    Alert.alert("Supprimer", "Supprimer cette mission ?", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer", style: "destructive",
+        onPress: async () => {
+          const m = missions[idx];
+          if (m.id_mission > 0) {
+            await supabase.from("mission").delete().eq("id_mission", m.id_mission);
+          }
+          setMissions(prev => prev.filter((_, i) => i !== idx));
+          if (openIdx === idx) setOpenIdx(null);
+        },
+      },
+    ]);
+  };
+
+  const addMission = () => {
+    const newM: MissionLocal = {
+      id_mission: -(Date.now()),
+      titre: "", description: "", duree_min: 30, difficulte: 1,
+      xp_gain: 50, date_limite: dateFin, statut: "actif", dirty: true,
+    };
+    setMissions(prev => [...prev, newM]);
+    setOpenIdx(missions.length); // ouvrir la nouvelle
+  };
+
+  const handleSave = async () => {
+    if (!defi || !nom.trim()) {
+      Alert.alert("Champ requis", "Le nom du défi est obligatoire.");
+      return;
+    }
+    setSaving(true);
+    try {
+      // 1. Update défi
+      const { error: errD } = await updateDefi(defi.id, {
+        nom:              nom.trim(),
+        description:      description.trim(),
+        xp:               parseInt(xp) || 400,
+        icon,
+        date_debut:       dateDebut || undefined,
+        date_fin:         dateFin   || undefined,
+        objectif_minutes: parseInt(objMin) || 120,
+        statut:           statut as any,
+      });
+      if (errD) throw new Error(errD.message);
+
+      // 2. Update / insert missions dirty
+      for (const m of missions) {
+        if (!m.dirty) continue;
+        const payload = {
+          titre:       m.titre,
+          description: m.description,
+          duree_min:   m.duree_min,
+          difficulte:  m.difficulte,
+          xp_gain:     m.xp_gain,
+          date_limite: m.date_limite || null,
+          statut:      m.statut,
+          id_defi:     defi.id,
+        };
+        if (m.id_mission > 0) {
+          await supabase.from("mission").update(payload).eq("id_mission", m.id_mission);
+        } else {
+          await supabase.from("mission").insert(payload);
+        }
+      }
+
+      // Construire le défi mis à jour pour l'UI
+      const updatedDefi: Defi = {
+        ...defi,
+        title:            nom.trim(),
+        subtitle:         description.trim(),
+        xp:               parseInt(xp) || 400,
+        icon,
+        date_debut:       dateDebut || null,
+        date_fin:         dateFin   || null,
+        objectif_minutes: parseInt(objMin) || 120,
+        statut,
+        duration:         formatDuration(dateDebut || null, dateFin || null),
+      };
+
+      onSaved(updatedDefi, missions);
+      onClose();
+    } catch (e: any) {
+      Alert.alert("Erreur", e.message ?? "Une erreur est survenue.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!defi) return null;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <View style={modal.container}>
+
+          {/* Header modal */}
+          <View style={modal.header}>
+            <View>
+              <Text style={modal.headerTitle}>✏️ Modifier le défi</Text>
+              <Text style={modal.headerSub}>#{defi.id} · {defi.title}</Text>
+            </View>
+            <TouchableOpacity style={modal.closeBtn} onPress={onClose}>
+              <IconClose />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={modal.scroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* ── Infos défi ──────────────────────────────────────────────── */}
+            <SectionLabel text="📋 Informations du défi" />
+
+            <ModalField label="Nom du défi *" value={nom} onChange={setNom} placeholder="Ex : 30 jours de lecture" />
+            <ModalField label="Description" value={description} onChange={setDescription}
+              placeholder="Décris l'objectif..." multiline />
+
+            <View style={modal.row2}>
+              <View style={{ flex: 1 }}>
+                <ModalField label="XP" value={xp} onChange={setXp} keyboard="numeric" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ModalField label="Objectif (min)" value={objMin} onChange={setObjMin} keyboard="numeric" />
+              </View>
+            </View>
+
+            <View style={modal.row2}>
+              <View style={{ flex: 1 }}>
+                <ModalField label="Date début" value={dateDebut} onChange={setDateDebut} placeholder="YYYY-MM-DD" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ModalField label="Date fin" value={dateFin} onChange={setDateFin} placeholder="YYYY-MM-DD" />
+              </View>
+            </View>
+
+            {/* Icône */}
+            <Text style={modal.label}>Icône</Text>
+            <View style={modal.iconRow}>
+              {ICON_OPTIONS.map(k => {
+                const IC = ICONS[k];
+                const active = icon === k;
+                return (
+                  <TouchableOpacity key={k}
+                    style={[modal.iconOpt, active && modal.iconOptActive]}
+                    onPress={() => setIcon(k)}>
+                    <View style={[modal.iconCircle, active && modal.iconCircleActive]}>
+                      <IC />
+                    </View>
+                    <Text style={[modal.iconLabel, active && modal.iconLabelActive]}>
+                      {ICON_LABELS[k]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Statut */}
+            <Text style={modal.label}>Statut</Text>
+            <View style={modal.row2}>
+              {(["actif", "en_attente", "termine"] as const).map(s => (
+                <TouchableOpacity key={s}
+                  style={[modal.statutBtn, statut === s && modal.statutBtnActive]}
+                  onPress={() => setStatut(s)}>
+                  <Text style={[modal.statutText, statut === s && modal.statutTextActive]}>
+                    {s === "actif" ? "En cours" : s === "en_attente" ? "En attente" : "Terminé"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* ── Missions ─────────────────────────────────────────────────── */}
+            <SectionLabel text={`🎯 Missions (${missions.length})`} />
+
+            {loadingM ? (
+              <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 16 }} />
+            ) : missions.length === 0 ? (
+              <Text style={modal.emptyMissions}>Aucune mission. Ajoutes-en une !</Text>
+            ) : (
+              missions.map((m, i) => (
+                <View key={`${m.id_mission}-${i}`} style={modal.missionCard}>
+                  {/* Header mission */}
+                  <TouchableOpacity
+                    style={modal.missionHeader}
+                    onPress={() => setOpenIdx(openIdx === i ? null : i)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={modal.missionBadge}>
+                      <Text style={modal.missionBadgeText}>{i + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={modal.missionTitle} numberOfLines={1}>
+                        {m.titre || "Mission sans titre"}
+                      </Text>
+                      <Text style={modal.missionMeta}>
+                        ⏱ {m.duree_min} min · {DIFF_LABELS[m.difficulte]} · ⚡ {m.xp_gain} XP
+                      </Text>
+                    </View>
+                    <Text style={modal.chevron}>{openIdx === i ? "▲" : "▼"}</Text>
+                  </TouchableOpacity>
+
+                  {/* Body mission */}
+                  {openIdx === i && (
+                    <View style={modal.missionBody}>
+                      <ModalField label="Titre" value={m.titre}
+                        onChange={v => updateMission(i, { titre: v })} placeholder="Titre de la mission" />
+                      <ModalField label="Description" value={m.description}
+                        onChange={v => updateMission(i, { description: v })} multiline />
+
+                      <View style={modal.row2}>
+                        <View style={{ flex: 1 }}>
+                          <ModalField label="Durée (min)" value={String(m.duree_min)}
+                            onChange={v => updateMission(i, { duree_min: parseInt(v)||0 })} keyboard="numeric" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <ModalField label="XP gain" value={String(m.xp_gain)}
+                            onChange={v => updateMission(i, { xp_gain: parseInt(v)||0 })} keyboard="numeric" />
+                        </View>
+                      </View>
+
+                      <Text style={modal.label}>Difficulté</Text>
+                      <View style={modal.diffRow}>
+                        {([1,2,3] as const).map(d => (
+                          <TouchableOpacity key={d}
+                            style={[modal.diffBtn, m.difficulte === d && { backgroundColor: DIFF_COLORS[d], borderColor: DIFF_COLORS[d] }]}
+                            onPress={() => updateMission(i, { difficulte: d })}>
+                            <Text style={[modal.diffText, m.difficulte === d && { color: "#fff" }]}>
+                              {DIFF_LABELS[d]}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      <ModalField label="Date limite" value={m.date_limite}
+                        onChange={v => updateMission(i, { date_limite: v })} placeholder="YYYY-MM-DD" />
+
+                      <TouchableOpacity style={modal.deleteMissionBtn} onPress={() => deleteMission(i)}>
+                        <Text style={modal.deleteMissionText}>🗑 Supprimer cette mission</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ))
+            )}
+
+            {/* Ajouter mission */}
+            <TouchableOpacity style={modal.addMissionBtn} onPress={addMission}>
+              <Text style={modal.addMissionText}>＋ Ajouter une mission</Text>
+            </TouchableOpacity>
+
+            {/* Bouton Enregistrer */}
+            <TouchableOpacity
+              style={[modal.saveBtn, saving && { opacity: 0.6 }]}
+              onPress={handleSave}
+              disabled={saving}
+              activeOpacity={0.85}
+            >
+              {saving
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={modal.saveBtnText}>💾 Enregistrer les modifications</Text>
+              }
+            </TouchableOpacity>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+};
+
+// ─── Petits composants du modal ───────────────────────────────────────────────
+const SectionLabel = ({ text }: { text: string }) => (
+  <View style={modal.sectionWrap}>
+    <Text style={modal.sectionText}>{text}</Text>
+  </View>
+);
+
+const ModalField = ({
+  label, value, onChange, placeholder, multiline = false, keyboard = "default",
+}: {
+  label: string; value: string; onChange: (v: string) => void;
+  placeholder?: string; multiline?: boolean; keyboard?: "default" | "numeric";
+}) => (
+  <View style={{ marginBottom: 6 }}>
+    <Text style={modal.label}>{label}</Text>
+    <TextInput
+      style={[modal.input, multiline && modal.inputMulti]}
+      value={value}
+      onChangeText={onChange}
+      placeholder={placeholder ?? ""}
+      placeholderTextColor={COLORS.textLight}
+      multiline={multiline}
+      keyboardType={keyboard}
+    />
+  </View>
+);
+
 // ─── DefiScreen ───────────────────────────────────────────────────────────────
 export default function DefiScreen() {
   const router   = useRouter();
   const { userId } = useUser();
 
-  const [activeTab,   setActiveTab]   = useState<TabKey>("mes_defis");
-  const [defis,       setDefis]       = useState<Defi[]>([]);
-  const [filtered,    setFiltered]    = useState<Defi[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [search,      setSearch]      = useState("");
-  const [refreshing,  setRefreshing]  = useState(false);
+  const [activeTab,  setActiveTab]  = useState<TabKey>("mes_defis");
+  const [defis,      setDefis]      = useState<Defi[]>([]);
+  const [filtered,   setFiltered]   = useState<Defi[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [search,     setSearch]     = useState("");
+
+  // Modal edit
+  const [editingDefi, setEditingDefi] = useState<Defi | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
 
@@ -282,37 +669,27 @@ export default function DefiScreen() {
 
   useEffect(() => { loadDefis(); }, [activeTab]);
 
-  // Filtre par recherche
   useEffect(() => {
-    if (!search.trim()) {
-      setFiltered(defis);
-    } else {
-      const q = search.toLowerCase();
-      setFiltered(defis.filter(d =>
-        d.title.toLowerCase().includes(q) || d.subtitle.toLowerCase().includes(q)
-      ));
-    }
+    if (!search.trim()) { setFiltered(defis); return; }
+    const q = search.toLowerCase();
+    setFiltered(defis.filter(d =>
+      d.title.toLowerCase().includes(q) || d.subtitle.toLowerCase().includes(q)
+    ));
   }, [search, defis]);
 
-  // ── Calcul progression d'un défi basé sur les missions ──────────────────────
   const calculerProgression = async (id_defi: number): Promise<number> => {
     const { data: missions } = await supabase
-      .from("mission")
-      .select("statut")
-      .eq("id_defi", id_defi);
-
+      .from("mission").select("statut").eq("id_defi", id_defi);
     if (!missions || missions.length === 0) return 0;
     const terminees = missions.filter((m: any) => m.statut === "termine").length;
     return Math.round((terminees / missions.length) * 100);
   };
 
-  // ── Nb de participants (depuis mission_validation) ───────────────────────────
   const getNbParticipants = async (id_defi: number): Promise<number> => {
     const { data } = await supabase
       .from("mission_validation")
       .select("id_user, mission!inner(id_defi)")
       .eq("mission.id_defi", id_defi);
-
     if (!data) return 1;
     const uniques = new Set(data.map((r: any) => r.id_user));
     return Math.max(1, uniques.size);
@@ -320,17 +697,11 @@ export default function DefiScreen() {
 
   const loadDefis = useCallback(async () => {
     setLoading(true);
-
     const statutMap: Record<TabKey, string> = {
-      mes_defis:  "actif",
-      en_attente: "en_attente",
-      termine:    "termine",
+      mes_defis: "actif", en_attente: "en_attente", termine: "termine",
     };
-
     const { data, error } = await getDefisByStatut(userId ?? 1, statutMap[activeTab]);
-
     if (!error && data) {
-      // Enrichir chaque défi avec progression et participants
       const enriched: Defi[] = await Promise.all(
         data.map(async (d: any) => {
           const [progression, participants] = await Promise.all([
@@ -344,7 +715,7 @@ export default function DefiScreen() {
             xp:               d.xp ?? 400,
             duration:         formatDuration(d.date_debut, d.date_fin),
             participants,
-            icon:             (d.icon as "book" | "sport" | "rocket") ?? "rocket",
+            icon:             (d.icon as IconKey) ?? "rocket",
             statut:           d.statut ?? "actif",
             date_debut:       d.date_debut ?? null,
             date_fin:         d.date_fin   ?? null,
@@ -357,11 +728,9 @@ export default function DefiScreen() {
     } else {
       setDefis([]);
     }
-
     setLoading(false);
   }, [activeTab, userId]);
 
-  // ── Supprimer ──────────────────────────────────────────────────────────────
   const handleDelete = (id: number) => {
     Alert.alert("Supprimer", "Veux-tu vraiment supprimer ce défi ?", [
       { text: "Annuler", style: "cancel" },
@@ -376,30 +745,21 @@ export default function DefiScreen() {
     ]);
   };
 
-  // ── Modifier ───────────────────────────────────────────────────────────────
+  // Ouvrir le modal d'édition
   const handleEdit = (defi: Defi) => {
-    router.push({
-      pathname: "/frontend/screens/createDefis",
-      params: {
-        id:       defi.id,
-        title:    defi.title,
-        subtitle: defi.subtitle,
-        xp:       defi.xp,
-        icon:     defi.icon,
-        mode:     "edit",
-      },
-    });
+    setEditingDefi(defi);
+    setModalVisible(true);
   };
 
-  // ── Ouvrir la progression ──────────────────────────────────────────────────
+  // Appelé quand le modal confirme l'enregistrement
+  const handleSaved = (updatedDefi: Defi) => {
+    setDefis(prev => prev.map(d => d.id === updatedDefi.id ? updatedDefi : d));
+  };
+
   const handlePress = (defi: Defi) => {
     router.push({
       pathname: "/frontend/screens/ProgressionDefiScreen",
-      params: {
-        defiId:   defi.id,
-        defiNom:  defi.title,
-        defiDesc: defi.subtitle,
-      },
+      params: { defiId: defi.id, defiNom: defi.title, defiDesc: defi.subtitle },
     });
   };
 
@@ -433,23 +793,21 @@ export default function DefiScreen() {
         showsVerticalScrollIndicator={false}
       >
         {activeTab === "mes_defis" && (
-          <>
-            <View style={styles.sectionHeaderRow}>
-              <View>
-                <Text style={styles.sectionTitle}>Tes défis actifs</Text>
-                <Text style={styles.sectionSubtitle}>
-                  {filtered.length} défi{filtered.length !== 1 ? "s" : ""} en cours
-                </Text>
-              </View>
-              <TouchableOpacity style={styles.refreshIconBtn} onPress={loadDefis}>
-                <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                  <Path d="M1 4v6h6M23 20v-6h-6" stroke={COLORS.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15"
-                    stroke={COLORS.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
-              </TouchableOpacity>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Tes défis actifs</Text>
+              <Text style={styles.sectionSubtitle}>
+                {filtered.length} défi{filtered.length !== 1 ? "s" : ""} en cours
+              </Text>
             </View>
-          </>
+            <TouchableOpacity style={styles.refreshIconBtn} onPress={loadDefis}>
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                <Path d="M1 4v6h6M23 20v-6h-6" stroke={COLORS.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                <Path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15"
+                  stroke={COLORS.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
         )}
 
         {loading ? (
@@ -462,9 +820,7 @@ export default function DefiScreen() {
             <Text style={styles.emptyIcon}>
               {activeTab === "mes_defis" ? "🚀" : activeTab === "en_attente" ? "⏳" : "🏆"}
             </Text>
-            <Text style={styles.emptyTitle}>
-              {search ? "Aucun résultat" : "Aucun défi ici"}
-            </Text>
+            <Text style={styles.emptyTitle}>{search ? "Aucun résultat" : "Aucun défi ici"}</Text>
             <Text style={styles.emptySubtitle}>
               {search
                 ? `Aucun défi ne correspond à "${search}"`
@@ -475,10 +831,7 @@ export default function DefiScreen() {
           </View>
         ) : (
           filtered.map((d, i) => (
-            <DefiCard
-              key={d.id}
-              defi={d}
-              index={i}
+            <DefiCard key={d.id} defi={d} index={i}
               onDelete={handleDelete}
               onEdit={handleEdit}
               onPress={handlePress}
@@ -500,66 +853,144 @@ export default function DefiScreen() {
       </ScrollView>
 
       <Navbar active="defis" onChange={() => {}} />
+
+      {/* ── Modal d'édition ───────────────────────────────────────────────── */}
+      <EditModal
+        defi={editingDefi}
+        visible={modalVisible}
+        onClose={() => { setModalVisible(false); setEditingDefi(null); }}
+        onSaved={(updatedDefi) => {
+          handleSaved(updatedDefi);
+          setModalVisible(false);
+          setEditingDefi(null);
+        }}
+      />
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: COLORS.background },
-
-  topIcons: {
+// ─── Modal Styles ─────────────────────────────────────────────────────────────
+const modal = StyleSheet.create({
+  container:   { flex: 1, backgroundColor: COLORS.background },
+  header: {
     flexDirection:     "row",
-    justifyContent:    "flex-end",
-    paddingTop:        Platform.OS === "android" ? 44 : 58,
+    justifyContent:    "space-between",
+    alignItems:        "center",
+    paddingTop:        Platform.OS === "ios" ? 20 : 16,
     paddingHorizontal: SIZES.padding,
-    gap:               8,
-  },
-  sparklesSvg:      { position: "absolute", top: 0, left: 0 },
-  searchContainer:  { paddingHorizontal: SIZES.padding, marginTop: 10, marginBottom: 4 },
-  searchWrapper:    { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.card,
-                      borderRadius: SIZES.radiusFull, paddingHorizontal: 14, paddingVertical: 10, ...SHADOWS.light },
-  searchIcon:       { marginRight: 8 },
-  searchInput:      { flex: 1, fontSize: 15, color: COLORS.text, padding: 0 },
-
-  tabBar: {
-    flexDirection:   "row",
-    marginHorizontal: SIZES.padding,
-    marginTop:        14,
-    backgroundColor:  COLORS.card,
-    borderRadius:     SIZES.radiusFull,
-    padding:          4,
+    paddingBottom:     16,
+    backgroundColor:   COLORS.card,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.background,
     ...SHADOWS.light,
   },
-  tabItem:       { flex: 1, paddingVertical: 9, alignItems: "center", borderRadius: SIZES.radiusFull },
-  tabItemActive: { backgroundColor: COLORS.primary, ...SHADOWS.purple },
-  tabLabel:      { fontSize: 13, fontWeight: "600", color: COLORS.textLight },
-  tabLabelActive:{ color: COLORS.white, fontWeight: "700" },
-
-  scroll:        { flex: 1 },
-  scrollContent: { paddingHorizontal: SIZES.padding, paddingTop: 20, paddingBottom: 120 },
-
-  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between",
-                      alignItems: "center", marginBottom: 16 },
-  sectionTitle:     { fontSize: 20, fontWeight: "800", color: COLORS.text },
-  sectionSubtitle:  { fontSize: 13, color: COLORS.textLight, marginTop: 2 },
-  refreshIconBtn:   { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.card,
-                      alignItems: "center", justifyContent: "center", ...SHADOWS.light },
-
-  loadingWrap: { paddingVertical: 60, alignItems: "center", gap: 12 },
-  loadingText: { fontSize: 14, color: COLORS.textLight, fontWeight: "600" },
-
-  card: {
-    backgroundColor: COLORS.card,
-    borderRadius:    SIZES.radiusLg,
-    marginBottom:    14,
-    overflow:        "hidden",
-    ...SHADOWS.medium,
+  headerTitle: { fontSize: 17, fontWeight: "800", color: COLORS.text },
+  headerSub:   { fontSize: 12, color: COLORS.textLight, marginTop: 2 },
+  closeBtn: {
+    width: 36, height: 36, borderRadius: 12,
+    backgroundColor: COLORS.background,
+    alignItems: "center", justifyContent: "center",
   },
-  cardTagRow:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-                   paddingHorizontal: 12, paddingTop: 10 },
-  cardDateLabel: { fontSize: 11, color: COLORS.textLight, fontWeight: "600" },
+  scroll: { paddingHorizontal: SIZES.padding, paddingTop: 16 },
 
+  sectionWrap: {
+    marginTop: 20, marginBottom: 10,
+    borderLeftWidth: 3, borderLeftColor: COLORS.primary, paddingLeft: 10,
+  },
+  sectionText: { fontSize: 14, fontWeight: "800", color: COLORS.text },
+
+  label: { fontSize: 11, fontWeight: "700", color: COLORS.textLight, marginBottom: 5, marginTop: 10 },
+  input: {
+    backgroundColor: COLORS.card,
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, color: COLORS.text, ...SHADOWS.light,
+  },
+  inputMulti: { minHeight: 64, textAlignVertical: "top" },
+  row2: { flexDirection: "row", gap: 8 },
+
+  iconRow:        { flexDirection: "row", gap: 8, marginBottom: 4 },
+  iconOpt:        { flex: 1, alignItems: "center", paddingVertical: 8, backgroundColor: COLORS.card,
+                    borderRadius: 10, borderWidth: 2, borderColor: "transparent", ...SHADOWS.light },
+  iconOptActive:  { borderColor: COLORS.primary },
+  iconCircle:     { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.textLight+"33",
+                    alignItems: "center", justifyContent: "center", marginBottom: 3 },
+  iconCircleActive: { backgroundColor: COLORS.secondary },
+  iconLabel:      { fontSize: 10, color: COLORS.textLight, fontWeight: "600", textAlign: "center" },
+  iconLabelActive:{ color: COLORS.primary, fontWeight: "700" },
+
+  statutBtn:       { flex: 1, paddingVertical: 8, borderRadius: 20, backgroundColor: COLORS.card,
+                     alignItems: "center", borderWidth: 2, borderColor: "transparent", ...SHADOWS.light },
+  statutBtnActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + "18" },
+  statutText:      { fontSize: 11, color: COLORS.textLight, fontWeight: "600" },
+  statutTextActive:{ color: COLORS.primary, fontWeight: "700" },
+
+  emptyMissions: { color: COLORS.textLight, textAlign: "center", paddingVertical: 16, fontSize: 13 },
+
+  missionCard: { backgroundColor: COLORS.card, borderRadius: 12, marginBottom: 8, overflow: "hidden", ...SHADOWS.light },
+  missionHeader: { flexDirection: "row", alignItems: "center", padding: 10, gap: 8 },
+  missionBadge: { width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center" },
+  missionBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  missionTitle: { fontSize: 13, fontWeight: "700", color: COLORS.text },
+  missionMeta:  { fontSize: 11, color: COLORS.textLight, marginTop: 1 },
+  chevron:      { fontSize: 11, color: COLORS.textLight },
+  missionBody:  { paddingHorizontal: 12, paddingBottom: 12, borderTopWidth: 1, borderTopColor: COLORS.background },
+
+  diffRow: { flexDirection: "row", gap: 6, marginBottom: 4 },
+  diffBtn: { flex: 1, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.card,
+             alignItems: "center", borderWidth: 2, borderColor: COLORS.background },
+  diffText: { fontSize: 11, fontWeight: "700", color: COLORS.textLight },
+
+  deleteMissionBtn: { marginTop: 10, paddingVertical: 8, backgroundColor: "#FFF0F0", borderRadius: 8, alignItems: "center" },
+  deleteMissionText:{ color: "#EF4444", fontSize: 12, fontWeight: "700" },
+
+  addMissionBtn: {
+    borderWidth: 2, borderColor: COLORS.primary, borderStyle: "dashed",
+    borderRadius: 10, paddingVertical: 12, alignItems: "center", marginTop: 8, marginBottom: 16,
+  },
+  addMissionText: { color: COLORS.primary, fontSize: 14, fontWeight: "800" },
+
+  saveBtn: {
+    backgroundColor: COLORS.primary, borderRadius: 30,
+    paddingVertical: 15, alignItems: "center", marginTop: 8, ...SHADOWS.purple,
+  },
+  saveBtnText: { color: "#fff", fontSize: 15, fontWeight: "800", letterSpacing: 0.4 },
+});
+
+// ─── Main Styles ──────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: COLORS.background },
+  topIcons: {
+    flexDirection: "row", justifyContent: "flex-end",
+    paddingTop: Platform.OS === "android" ? 44 : 58,
+    paddingHorizontal: SIZES.padding, gap: 8,
+  },
+  sparklesSvg:     { position: "absolute", top: 0, left: 0 },
+  searchContainer: { paddingHorizontal: SIZES.padding, marginTop: 10, marginBottom: 4 },
+  searchWrapper:   { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.card,
+                     borderRadius: SIZES.radiusFull, paddingHorizontal: 14, paddingVertical: 10, ...SHADOWS.light },
+  searchIcon:      { marginRight: 8 },
+  searchInput:     { flex: 1, fontSize: 15, color: COLORS.text, padding: 0 },
+  tabBar:          { flexDirection: "row", marginHorizontal: SIZES.padding, marginTop: 14,
+                     backgroundColor: COLORS.card, borderRadius: SIZES.radiusFull,
+                     padding: 4, ...SHADOWS.light },
+  tabItem:         { flex: 1, paddingVertical: 9, alignItems: "center", borderRadius: SIZES.radiusFull },
+  tabItemActive:   { backgroundColor: COLORS.primary, ...SHADOWS.purple },
+  tabLabel:        { fontSize: 13, fontWeight: "600", color: COLORS.textLight },
+  tabLabelActive:  { color: COLORS.white, fontWeight: "700" },
+  scroll:          { flex: 1 },
+  scrollContent:   { paddingHorizontal: SIZES.padding, paddingTop: 20, paddingBottom: 120 },
+  sectionHeaderRow:{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  sectionTitle:    { fontSize: 20, fontWeight: "800", color: COLORS.text },
+  sectionSubtitle: { fontSize: 13, color: COLORS.textLight, marginTop: 2 },
+  refreshIconBtn:  { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.card,
+                     alignItems: "center", justifyContent: "center", ...SHADOWS.light },
+  loadingWrap:     { paddingVertical: 60, alignItems: "center", gap: 12 },
+  loadingText:     { fontSize: 14, color: COLORS.textLight, fontWeight: "600" },
+  card:            { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLg, marginBottom: 14,
+                     overflow: "hidden", ...SHADOWS.medium },
+  cardTagRow:      { flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+                     paddingHorizontal: 12, paddingTop: 10 },
+  cardDateLabel:   { fontSize: 11, color: COLORS.textLight, fontWeight: "600" },
   cardInner:       { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 12,
                      paddingBottom: 10, gap: 10, marginTop: 8 },
   cardIconWrapper: { marginTop: 2 },
@@ -568,54 +999,36 @@ const styles = StyleSheet.create({
   cardContent:     { flex: 1 },
   cardTitle:       { fontSize: 14, fontWeight: "700", color: COLORS.text, marginBottom: 3 },
   cardSubtitle:    { fontSize: 11, color: COLORS.textLight, lineHeight: 15, marginBottom: 8 },
-
-  avatarRow: { flexDirection: "row", alignItems: "center" },
-  avatar: {
-    width: 32, height: 32, borderRadius: 16,
-    borderWidth: 2, borderColor: COLORS.card,
-    alignItems: "center", justifyContent: "flex-end", overflow: "hidden",
-  },
-  avatarHead:           { width: 14, height: 14, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.7)", marginBottom: 1 },
-  avatarBody:           { width: 20, height: 12, borderTopLeftRadius: 10, borderTopRightRadius: 10, backgroundColor: "rgba(255,255,255,0.5)" },
-  moreParticipants:     { width: 32, height: 32, borderRadius: 16, marginLeft: -10, zIndex: 1,
-                          backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center",
-                          borderWidth: 2, borderColor: COLORS.card },
+  avatarRow:       { flexDirection: "row", alignItems: "center" },
+  avatar:          { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: COLORS.card,
+                     alignItems: "center", justifyContent: "flex-end", overflow: "hidden" },
+  avatarHead:      { width: 14, height: 14, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.7)", marginBottom: 1 },
+  avatarBody:      { width: 20, height: 12, borderTopLeftRadius: 10, borderTopRightRadius: 10, backgroundColor: "rgba(255,255,255,0.5)" },
+  moreParticipants:{ width: 32, height: 32, borderRadius: 16, marginLeft: -10, zIndex: 1,
+                     backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center",
+                     borderWidth: 2, borderColor: COLORS.card },
   moreParticipantsText: { fontSize: 10, fontWeight: "700", color: "#fff" },
-
-  cardRight:    { alignItems: "flex-end", gap: 4, paddingTop: 2 },
-  xpBadge:     { backgroundColor: COLORS.primary, borderRadius: SIZES.radiusFull, paddingHorizontal: 10, paddingVertical: 4 },
-  xpText:      { color: COLORS.white, fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
-  cardDuration: { fontSize: 12, fontWeight: "700", color: COLORS.primary },
-  cardObjectif: { fontSize: 10, color: COLORS.textLight, fontWeight: "600" },
-
-  cardProgressTrack: { height: 5, backgroundColor: COLORS.progressBg, marginHorizontal: 12,
-                       borderRadius: 3, overflow: "hidden" },
-  cardProgressFill:  { height: "100%", backgroundColor: COLORS.primary, borderRadius: 3 },
-  cardProgressLabel: { fontSize: 10, color: COLORS.textLight, textAlign: "right",
-                       paddingHorizontal: 12, paddingBottom: 4, marginTop: 2 },
-
-  cardActionsBottom: { flexDirection: "row", justifyContent: "flex-end",
-                       paddingHorizontal: 12, paddingBottom: 10, gap: 10 },
-  actionIconBtn:     { width: 30, height: 30, borderRadius: 8,
-                       backgroundColor: "rgba(120,90,180,0.07)",
-                       alignItems: "center", justifyContent: "center" },
-
-  statutPill: { borderRadius: SIZES.radiusFull, paddingHorizontal: 10, paddingVertical: 3 },
-  statutText: { color: "#fff", fontSize: 10, fontWeight: "700", letterSpacing: 0.2 },
-
-  emptyContainer: { paddingVertical: 60, alignItems: "center", gap: 10 },
-  emptyIcon:      { fontSize: 52 },
-  emptyTitle:     { fontSize: 18, fontWeight: "800", color: COLORS.text },
-  emptySubtitle:  { fontSize: 13, color: COLORS.textLight, textAlign: "center", lineHeight: 18 },
-
-  ctaBtn: {
-    width:            "100%",
-    backgroundColor:  COLORS.primary,
-    borderRadius:     SIZES.radiusFull,
-    paddingVertical:  16,
-    alignItems:       "center",
-    marginTop:        10,
-    ...SHADOWS.purple,
-  },
-  ctaBtnText: { color: COLORS.white, fontSize: 16, fontWeight: "800", letterSpacing: 0.4 },
+  cardRight:       { alignItems: "flex-end", gap: 4, paddingTop: 2 },
+  xpBadge:         { backgroundColor: COLORS.primary, borderRadius: SIZES.radiusFull, paddingHorizontal: 10, paddingVertical: 4 },
+  xpText:          { color: COLORS.white, fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
+  cardDuration:    { fontSize: 12, fontWeight: "700", color: COLORS.primary },
+  cardObjectif:    { fontSize: 10, color: COLORS.textLight, fontWeight: "600" },
+  cardProgressTrack:{ height: 5, backgroundColor: COLORS.progressBg, marginHorizontal: 12, borderRadius: 3, overflow: "hidden" },
+  cardProgressFill: { height: "100%", backgroundColor: COLORS.primary, borderRadius: 3 },
+  cardProgressLabel:{ fontSize: 10, color: COLORS.textLight, textAlign: "right",
+                      paddingHorizontal: 12, paddingBottom: 4, marginTop: 2 },
+  cardActionsBottom:{ flexDirection: "row", justifyContent: "flex-end",
+                      paddingHorizontal: 12, paddingBottom: 10, gap: 10 },
+  actionIconBtn:   { width: 30, height: 30, borderRadius: 8,
+                     backgroundColor: "rgba(120,90,180,0.07)",
+                     alignItems: "center", justifyContent: "center" },
+  statutPill:      { borderRadius: SIZES.radiusFull, paddingHorizontal: 10, paddingVertical: 3 },
+  statutText:      { color: "#fff", fontSize: 10, fontWeight: "700", letterSpacing: 0.2 },
+  emptyContainer:  { paddingVertical: 60, alignItems: "center", gap: 10 },
+  emptyIcon:       { fontSize: 52 },
+  emptyTitle:      { fontSize: 18, fontWeight: "800", color: COLORS.text },
+  emptySubtitle:   { fontSize: 13, color: COLORS.textLight, textAlign: "center", lineHeight: 18 },
+  ctaBtn:          { width: "100%", backgroundColor: COLORS.primary, borderRadius: SIZES.radiusFull,
+                     paddingVertical: 16, alignItems: "center", marginTop: 10, ...SHADOWS.purple },
+  ctaBtnText:      { color: COLORS.white, fontSize: 16, fontWeight: "800", letterSpacing: 0.4 },
 });

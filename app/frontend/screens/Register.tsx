@@ -3,8 +3,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ScrollView, Text, TouchableOpacity,
-  View, Alert, StyleSheet,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View,
 } from "react-native";
 import UsernameInput from "../components/UsernameInput";
 import WaveBackground from "../components/waveBackground";

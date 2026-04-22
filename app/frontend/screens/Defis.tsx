@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
@@ -14,6 +15,7 @@ import {
   View,
 } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
+import { deleteDefi, getDefisByStatut } from '../../../backend/DefisService';
 import Navbar from "../components/Navbar";
 import NotifIcone from "../components/NotifIcone";
 import SettingIcone from "../components/SettingIcone";
@@ -33,37 +35,6 @@ interface Defi {
   participants: number;
   icon: "book" | "sport" | "rocket";
 }
-
-// ─── Data Initiale ─────────────────────────────────────────────────────────────
-const INITIAL_DEFIS: Defi[] = [
-  {
-    id: 1,
-    title: "Marathon d'étude 2 heures",
-    subtitle: "Fin: 15 mars · Révise 2h avec tes amis",
-    xp: 400,
-    duration: "1h30/3h",
-    participants: 3,
-    icon: "book",
-  },
-  {
-    id: 2,
-    title: "Programme sportif week-end",
-    subtitle: "Fin: 20avr · Fais 30 min de sport chaque week-end",
-    xp: 400,
-    duration: "5h/24h",
-    participants: 3,
-    icon: "sport",
-  },
-  {
-    id: 3,
-    title: "Préparer le projet odyssée",
-    subtitle: "Fin: 16 mai · Travaille chaque jour pour compléter le projet",
-    xp: 400,
-    duration: "30jours/51jours",
-    participants: 3,
-    icon: "rocket",
-  },
-];
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "mes_defis",  label: "Mes défis"  },
@@ -91,12 +62,14 @@ const IconBook = () => (
     <Path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
   </Svg>
 );
+
 const IconSport = () => (
   <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
     <Circle cx={12} cy={12} r={9} stroke="#fff" strokeWidth={2} />
     <Path d="M12 3C8 7 8 17 12 21M12 3C16 7 16 17 12 21M3 12h18" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
   </Svg>
 );
+
 const IconRocket = () => (
   <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
     <Path d="M12 2C12 2 7 6 7 13H17C17 6 12 2 12 2Z" stroke="#fff" strokeWidth={2} strokeLinejoin="round" />
@@ -150,19 +123,19 @@ const SearchBar = () => (
 );
 
 // ─── Defi Card ────────────────────────────────────────────────────────────────
-const DefiCard = ({ 
-  defi, 
-  index, 
-  onDelete, 
-  onEdit 
-}: { 
-  defi: Defi; 
+const DefiCard = ({
+  defi,
+  index,
+  onDelete,
+  onEdit,
+}: {
+  defi: Defi;
   index: number;
   onDelete: (id: number) => void;
   onEdit: (defi: Defi) => void;
 }) => {
   const anim = useRef(new Animated.Value(0)).current;
-  const IconComp = ICONS[defi.icon];
+  const IconComp = ICONS[defi.icon] ?? IconRocket;
 
   useEffect(() => {
     Animated.spring(anim, {
@@ -202,7 +175,7 @@ const DefiCard = ({
           <Text style={styles.cardTitle} numberOfLines={1}>{defi.title}</Text>
           <Text style={styles.cardSubtitle} numberOfLines={2}>{defi.subtitle}</Text>
           <View style={styles.avatarRow}>
-            {Array.from({ length: defi.participants }).map((_, i) => (
+            {Array.from({ length: Math.min(defi.participants, 3) }).map((_, i) => (
               <AvatarCircle key={i} color={AVATAR_COLORS[i % AVATAR_COLORS.length]} offset={i} />
             ))}
           </View>
@@ -272,65 +245,106 @@ const TabBar = ({ active, onSelect }: { active: TabKey; onSelect: (k: TabKey) =>
 // ─── DefiScreen ───────────────────────────────────────────────────────────────
 export default function DefiScreen() {
   const router = useRouter();
+
+  // ─── State ────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabKey>("mes_defis");
-  const [defis, setDefis] = useState<Defi[]>(INITIAL_DEFIS);
+  const [defis, setDefis]         = useState<Defi[]>([]);
+  const [loading, setLoading]     = useState(true);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
 
+  // ─── Animation header ─────────────────────────────────────────────────────
   useEffect(() => {
     Animated.spring(headerAnim, {
       toValue: 1, useNativeDriver: true, tension: 55, friction: 9,
     }).start();
   }, []);
 
-  // ✅ Logique de suppression
+  // ─── Charger les défis quand l'onglet change ───────────────────────────────
+  useEffect(() => {
+    loadDefis();
+  }, [activeTab]);
+
+  const loadDefis = async () => {
+    setLoading(true);
+
+    const statutMap: Record<TabKey, string> = {
+      mes_defis:  'actif',
+      en_attente: 'en_attente',
+      termine:    'termine',
+    };
+
+    const userId = 1; // ← remplacer par l'ID de l'user connecté (auth)
+    const { data, error } = await getDefisByStatut(userId, statutMap[activeTab]);
+
+    if (!error && data) {
+      setDefis(data.map((d: any) => ({
+        id:           d.id_defi,
+        title:        d.nom ?? '',
+        subtitle:     d.description ?? '',
+        xp:           d.xp ?? 400,
+        duration:     d.duration_label ?? '',
+        participants: d.participants ?? 1,
+        icon:         d.icon ?? 'rocket',
+      })));
+    }
+
+    setLoading(false);
+  };
+
+  // ─── Supprimer un défi ────────────────────────────────────────────────────
   const handleDelete = (id: number) => {
     Alert.alert("Supprimer", "Voulez-vous vraiment supprimer ce défi ?", [
       { text: "Annuler", style: "cancel" },
-      { text: "Supprimer", style: "destructive", onPress: () => {
-          setDefis(defis.filter(d => d.id !== id));
-      }},
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          const { error } = await deleteDefi(id);
+          if (!error) {
+            setDefis(prev => prev.filter(d => d.id !== id));
+          } else {
+            Alert.alert("Erreur", "Impossible de supprimer ce défi.");
+          }
+        },
+      },
     ]);
   };
 
- // ✅ Modification defis 
+  // ─── Modifier un défi ─────────────────────────────────────────────────────
   const handleEdit = (defi: Defi) => {
     router.push({
       pathname: "/frontend/screens/createDefis",
-      params: { 
-        id: defi.id,
-        title: defi.title,
+      params: {
+        id:       defi.id,
+        title:    defi.title,
         subtitle: defi.subtitle,
-        xp: defi.xp,
-        icon: defi.icon,
-        mode: "edit" // Utile pour savoir si on crée ou si on modifie
-      }
+        xp:       defi.xp,
+        icon:     defi.icon,
+        mode:     "edit",
+      },
     });
   };
 
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-    <Animated.View
-  style={[
-    styles.topIcons,
-    {
-      opacity: headerAnim,
-      transform: [
-        {
-          translateY: headerAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [-16, 0],
-          }),
-        },
-      ],
-    },
-  ]}
->
-  <NotifIcone onPress={() => console.log("Notif")} />
-  <SettingIcone onPress={() => console.log("Settings")} />
-</Animated.View>
+      <Animated.View
+        style={[
+          styles.topIcons,
+          {
+            opacity: headerAnim,
+            transform: [
+              { translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) },
+            ],
+          },
+        ]}
+      >
+        <NotifIcone onPress={() => console.log("Notif")} />
+        <SettingIcone onPress={() => console.log("Settings")} />
+      </Animated.View>
 
       <Sparkles />
 
@@ -339,7 +353,7 @@ export default function DefiScreen() {
           styles.searchContainer,
           {
             opacity: headerAnim,
-            transform: [{ translateY: headerAnim.interpolate({ inputRange:[0,1], outputRange:[-10,0] }) }],
+            transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }) }],
           },
         ]}
       >
@@ -360,27 +374,49 @@ export default function DefiScreen() {
               Accomplis tes défis avec tes amis pour gagner des récompenses !
             </Text>
 
-            {defis.map((d, i) => (
-              <DefiCard 
-                key={d.id} 
-                defi={d} 
-                index={i} 
-                onDelete={handleDelete}
-                onEdit={handleEdit}
-              />
-            ))}
+            {loading ? (
+              <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
+            ) : defis.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.sectionSubtitle}>Aucun défi actif pour le moment.</Text>
+              </View>
+            ) : (
+              defis.map((d, i) => (
+                <DefiCard
+                  key={d.id}
+                  defi={d}
+                  index={i}
+                  onDelete={handleDelete}
+                  onEdit={handleEdit}
+                />
+              ))
+            )}
 
             <TouchableOpacity
               style={styles.ctaBtn}
               activeOpacity={0.85}
-              onPress={() => router.push("/frontend/screens/AmisDefis")}
+              onPress={() => router.push("/frontend/screens/createDefis")}
             >
               <Text style={styles.ctaBtnText}>Lancer un défi</Text>
             </TouchableOpacity>
           </>
         ) : (
           <View style={styles.emptyContainer}>
-            <Text style={styles.sectionSubtitle}>Aucun défi dans cette catégorie pour le moment.</Text>
+            {loading ? (
+              <ActivityIndicator size="large" color={COLORS.primary} />
+            ) : defis.length === 0 ? (
+              <Text style={styles.sectionSubtitle}>Aucun défi dans cette catégorie pour le moment.</Text>
+            ) : (
+              defis.map((d, i) => (
+                <DefiCard
+                  key={d.id}
+                  defi={d}
+                  index={i}
+                  onDelete={handleDelete}
+                  onEdit={handleEdit}
+                />
+              ))
+            )}
           </View>
         )}
 
@@ -392,7 +428,7 @@ export default function DefiScreen() {
   );
 }
 
-// ─── Styles (Strictement identiques aux tiens) ──────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -404,15 +440,6 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === "android" ? 44 : 58,
     paddingHorizontal: SIZES.padding,
     gap: 8,
-  },
-  topIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: COLORS.card,
-    alignItems: "center",
-    justifyContent: "center",
-    ...SHADOWS.light,
   },
   sparklesSvg: {
     position: "absolute",
@@ -646,5 +673,5 @@ const styles = StyleSheet.create({
   emptyContainer: {
     padding: 40,
     alignItems: "center",
-  }
+  },
 });

@@ -1,20 +1,20 @@
-import React, { useState, useMemo } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
-  StatusBar,
-  TextInput,
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { COLORS, SIZES, SHADOWS } from "../constants/theme";
-import Navbar from "../components/Navbar";
+import { useMemo, useState } from "react";
+import {
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import BackButton from "../components/BackButton";
+import Navbar from "../components/Navbar";
+import { COLORS, SHADOWS, SIZES } from "../constants/theme";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type FilterType = "tout" | "en attente" | "terminé";

@@ -750,7 +750,7 @@ export default function CreateDefisScreen() {
 
           </View>
 
-          <View style={{ height: 126 }} />
+          <View style={{ height: 180 }} />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -903,7 +903,7 @@ const styles = StyleSheet.create({
                 fontSize: 11, color: "#4c1d95", fontWeight: "600" },
 
   // ── CTA ──
-  ctaWrap:             { width: "100%", marginTop: 6, gap: 12 },
+  ctaWrap:             { width: "100%", marginTop: 6, gap: 12 ,zIndex:20},
   ctaBtn:              { width: "100%", backgroundColor: COLORS.primary, borderRadius: 32, paddingVertical: 17,
                          flexDirection: "row", alignItems: "center", justifyContent: "center",
                          shadowColor: COLORS.primary, shadowOpacity: 0.5, shadowRadius: 20,

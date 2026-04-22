@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated, Dimensions, KeyboardAvoidingView,
   Platform, ScrollView, StatusBar, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
@@ -33,7 +32,7 @@ interface EmailEntry {
 
 const AVATAR_COLORS = ["#F48FB1","#90CAF9","#CE93D8","#A5D6A7","#FFCC80","#80DEEA"];
 
-// ─── Mini Avatar ────────────────────────────────────────────────────────────
+// ─── Mini Avatar ─────────────────────────────────────────────────────────────
 const MiniAvatar = ({ user, index }: { user: User; index: number }) => {
   const color = AVATAR_COLORS[index % AVATAR_COLORS.length];
   const initials = `${user.prenom?.[0] ?? ""}${user.nom?.[0] ?? ""}`.toUpperCase();
@@ -44,7 +43,7 @@ const MiniAvatar = ({ user, index }: { user: User; index: number }) => {
   );
 };
 
-// ─── Check Circle ────────────────────────────────────────────────────────────
+// ─── Check Circle ─────────────────────────────────────────────────────────────
 const CheckCircle = ({ selected }: { selected: boolean }) => (
   <View style={[styles.checkCircle, selected && styles.checkCircleSelected]}>
     {selected && (
@@ -56,7 +55,7 @@ const CheckCircle = ({ selected }: { selected: boolean }) => (
   </View>
 );
 
-// ─── User Row ────────────────────────────────────────────────────────────────
+// ─── User Row ─────────────────────────────────────────────────────────────────
 const UserRow = ({ user, index, selected, onToggle, delay }: {
   user: User; index: number; selected: boolean;
   onToggle: () => void; delay: number;
@@ -102,7 +101,7 @@ const UserRow = ({ user, index, selected, onToggle, delay }: {
   );
 };
 
-// ─── Background ──────────────────────────────────────────────────────────────
+// ─── Background ───────────────────────────────────────────────────────────────
 const BgSparkles = () => (
   <Svg width={width} height={height} style={StyleSheet.absoluteFillObject} pointerEvents="none">
     <Path d="M28 110 H40 M34 104 V116" stroke={COLORS.secondary} strokeWidth={2} strokeLinecap="round" opacity={0.5} />
@@ -112,7 +111,188 @@ const BgSparkles = () => (
   </Svg>
 );
 
-// ─── Main Screen ─────────────────────────────────────────────────────────────
+// ─── Custom Alert Modal ───────────────────────────────────────────────────────
+const CustomAlert = ({
+  visible,
+  onNavigate,
+  defiNom,
+  totalCount,
+}: {
+  visible: boolean;
+  onNavigate: () => void;
+  defiNom: string;
+  totalCount: number;
+}) => {
+  const scaleAnim   = useRef(new Animated.Value(0.7)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const checkAnim   = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      scaleAnim.setValue(0.7);
+      opacityAnim.setValue(0);
+      checkAnim.setValue(0);
+      Animated.parallel([
+        Animated.spring(scaleAnim,   { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      ]).start(() => {
+        Animated.spring(checkAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 7 }).start();
+      });
+    } else {
+      scaleAnim.setValue(0.7);
+      opacityAnim.setValue(0);
+      checkAnim.setValue(0);
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <View style={alertStyles.overlay}>
+      {/* Backdrop blur effect via opacity layer */}
+      <Animated.View style={[alertStyles.card, {
+        opacity: opacityAnim,
+        transform: [{ scale: scaleAnim }],
+      }]}>
+
+        {/* ── Icône animée ── */}
+        <Animated.View style={[alertStyles.iconOuter, {
+          transform: [{ scale: checkAnim }],
+        }]}>
+          <View style={alertStyles.iconInner}>
+            <Svg width={38} height={38} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M5 12l4.5 4.5L19 7"
+                stroke="#fff"
+                strokeWidth={2.6}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
+          </View>
+        </Animated.View>
+
+        {/* ── Texte ── */}
+        <Text style={alertStyles.title}>C'est parti ! 🎉</Text>
+        <Text style={alertStyles.subtitle}>
+          <Text style={alertStyles.count}>
+            {totalCount} invitation{totalCount > 1 ? "s" : ""}
+          </Text>
+          {" "}envoyée{totalCount > 1 ? "s" : ""} pour rejoindre{"\n"}
+          <Text style={alertStyles.defiHighlight}>« {defiNom} »</Text>
+        </Text>
+
+        {/* ── Séparateur ── */}
+        <View style={alertStyles.separator} />
+
+        {/* ── Bouton principal ── */}
+        <TouchableOpacity style={alertStyles.btn} onPress={onNavigate} activeOpacity={0.88}>
+          <Text style={alertStyles.btnText}>Voir la progression</Text>
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8 }}>
+            <Path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" strokeWidth={2.2}
+              strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+        </TouchableOpacity>
+
+      </Animated.View>
+    </View>
+  );
+};
+
+const alertStyles = StyleSheet.create({
+  overlay:       {
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(12,4,32,0.62)",
+    zIndex: 1000,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+  card:          {
+    backgroundColor: "#fff",
+    borderRadius: 28,
+    paddingHorizontal: 28,
+    paddingTop: 36,
+    paddingBottom: 28,
+    alignItems: "center",
+    width: "100%",
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.22,
+    shadowRadius: 32,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 24,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}18`,
+  },
+  iconOuter:     {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: `${COLORS.primary}18`,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  iconInner:     {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.5,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+  },
+  title:         {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#17063B",
+    fontFamily: "Georgia",
+    marginBottom: 10,
+    textAlign: "center",
+    letterSpacing: -0.3,
+  },
+  subtitle:      {
+    fontSize: 14,
+    color: COLORS.textLight,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 22,
+  },
+  count:         { fontWeight: "800", color: COLORS.primary },
+  defiHighlight: { color: COLORS.primary, fontWeight: "700" },
+  separator:     {
+    width: "100%",
+    height: 1,
+    backgroundColor: `${COLORS.primary}14`,
+    marginBottom: 20,
+  },
+  btn:           {
+    width: "100%",
+    backgroundColor: COLORS.primary,
+    borderRadius: 32,
+    paddingVertical: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.38,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 8,
+  },
+  btnText:       {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+});
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function DefierAmisScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -129,6 +309,8 @@ export default function DefierAmisScreen() {
   const [emailInput,   setEmailInput]   = useState("");
   const [emailEntries, setEmailEntries] = useState<EmailEntry[]>([]);
   const [emailCounter, setEmailCounter] = useState(1);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [sentCount,    setSentCount]    = useState(0);
 
   const titleAnim = useRef(new Animated.Value(0)).current;
 
@@ -159,30 +341,26 @@ export default function DefierAmisScreen() {
   const addEmail = () => {
     const trimmed = emailInput.trim().toLowerCase();
     if (!trimmed) return;
-    if (!isValidEmail(trimmed)) { Alert.alert("Email invalide", "Vérifie le format."); return; }
-    if (emailEntries.some((e) => e.email === trimmed)) { Alert.alert("Doublon", "Cet email est déjà dans la liste."); return; }
+    if (!isValidEmail(trimmed)) return;
+    if (emailEntries.some((e) => e.email === trimmed)) return;
     const selectedUserEmails = users.filter(u => selected.includes(u.id_user)).map(u => u.email);
-    if (selectedUserEmails.includes(trimmed)) { Alert.alert("Doublon", "Cet utilisateur est déjà sélectionné."); return; }
+    if (selectedUserEmails.includes(trimmed)) return;
     setEmailEntries((prev) => [...prev, { id: emailCounter, email: trimmed }]);
     setEmailCounter((c) => c + 1);
     setEmailInput("");
   };
 
-  const removeEmail = (id: number) => setEmailEntries((prev) => prev.filter((e) => e.id !== id));
+  const removeEmail = (id: number) =>
+    setEmailEntries((prev) => prev.filter((e) => e.id !== id));
 
-  // ─── Envoyer toutes les invitations ───────────────────────────────────────
+  // ─── Envoyer toutes les invitations ──────────────────────────────────────
   const handleSendAll = async () => {
     const selectedUsers = users.filter((u) => selected.includes(u.id_user));
     const totalCount = selectedUsers.length + emailEntries.length;
-
-    if (totalCount === 0) {
-      Alert.alert("Aucune invitation", "Sélectionne des amis ou ajoute des emails.");
-      return;
-    }
+    if (totalCount === 0) return;
 
     setSending(true);
 
-    // Récupère le nom de l'inviteur
     const { data: meData } = await supabase
       .from("users")
       .select("prenom, nom")
@@ -190,9 +368,7 @@ export default function DefierAmisScreen() {
       .single();
     const inviteurNom = meData ? `${meData.prenom} ${meData.nom}` : "Un ami";
 
-    // Envoie à tous en parallèle
     await Promise.all([
-      // Utilisateurs de l'app
       ...selectedUsers.map((u) =>
         inviterAmi({
           email:           u.email,
@@ -203,7 +379,6 @@ export default function DefierAmisScreen() {
           inviteurId:      userId ?? 1,
         })
       ),
-      // Emails externes
       ...emailEntries.map((e) =>
         inviterAmi({
           email:           e.email,
@@ -217,15 +392,8 @@ export default function DefierAmisScreen() {
     ]);
 
     setSending(false);
-
-    Alert.alert(
-      "✅ Invitations envoyées !",
-      `${totalCount} invitation${totalCount > 1 ? "s" : ""} envoyée${totalCount > 1 ? "s" : ""} avec succès !`,
-      [{
-        text: "Voir mes défis",
-        onPress: () => router.push("/frontend/screens/Defis"),
-      }]
-    );
+    setSentCount(totalCount);
+    setAlertVisible(true);
   };
 
   const totalSelected = selected.length + emailEntries.length;
@@ -258,9 +426,7 @@ export default function DefierAmisScreen() {
           </Animated.View>
 
           {/* ── Section 1 : Utilisateurs de l'app ── */}
-          <Text style={styles.sectionLabel}>
-            👥 Utilisateurs de l'app
-          </Text>
+          <Text style={styles.sectionLabel}>👥 Utilisateurs de l'app</Text>
           <View style={styles.listCard}>
             {loading ? (
               <ActivityIndicator color={COLORS.primary} style={{ padding: 24 }} />
@@ -282,9 +448,7 @@ export default function DefierAmisScreen() {
           </View>
 
           {/* ── Section 2 : Emails externes ── */}
-          <Text style={[styles.sectionLabel, { marginTop: 20 }]}>
-            📧 Inviter par email
-          </Text>
+          <Text style={[styles.sectionLabel, { marginTop: 20 }]}>📧 Inviter par email</Text>
           <View style={styles.emailCard}>
             <View style={styles.emailInputRow}>
               <View style={styles.emailInputWrap}>
@@ -337,7 +501,7 @@ export default function DefierAmisScreen() {
             )}
           </View>
 
-          <View style={{ height: 140 }} />
+          <View style={{ height: 160 }} />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -362,66 +526,113 @@ export default function DefierAmisScreen() {
       </View>
 
       <Navbar active="defis" onChange={() => {}} />
+
+      {/* ── Custom Alert ── */}
+      <CustomAlert
+        visible={alertVisible}
+        defiNom={defiNom}
+        totalCount={sentCount}
+        onNavigate={() => {
+          setAlertVisible(false);
+          router.push({
+            pathname: "/frontend/screens/ProgressionDefis",
+            params: { defiId, defiNom },
+          });
+        }}
+      />
     </View>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   screen:        { flex: 1, backgroundColor: COLORS.background },
-  topBar:        { flexDirection: "row", alignItems: "center",
-                   paddingTop: Platform.OS === "android" ? 44 : 58,
-                   paddingHorizontal: SIZES.padding, zIndex: 10 },
+  topBar:        {
+    flexDirection: "row", alignItems: "center",
+    paddingTop: Platform.OS === "android" ? 44 : 58,
+    paddingHorizontal: SIZES.padding, zIndex: 10,
+  },
   scroll:        { flex: 1 },
   scrollContent: { paddingHorizontal: SIZES.padding, paddingTop: 24 },
-  pageTitle:     { fontSize: 26, fontWeight: "800", color: COLORS.text,
-                   marginBottom: 4, fontFamily: "Georgia" },
+  pageTitle:     {
+    fontSize: 26, fontWeight: "800", color: COLORS.text,
+    marginBottom: 4, fontFamily: "Georgia",
+  },
   pageSubtitle:  { fontSize: 14, color: COLORS.textLight, lineHeight: 20, marginBottom: 24 },
   defiHighlight: { color: COLORS.primary, fontWeight: "700" },
   sectionLabel:  { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 10 },
-  listCard:      { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLg,
-                   paddingVertical: 6, paddingHorizontal: 14, ...SHADOWS.medium },
-  userRow:       { flexDirection: "row", alignItems: "center",
-                   paddingVertical: 10, borderRadius: SIZES.radius, gap: 12 },
+  listCard:      {
+    backgroundColor: COLORS.card, borderRadius: SIZES.radiusLg,
+    paddingVertical: 6, paddingHorizontal: 14, ...SHADOWS.medium,
+  },
+  userRow:         {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 10, borderRadius: SIZES.radius, gap: 12,
+  },
   userRowSelected: { backgroundColor: `${COLORS.primary}08` },
-  avatarCircle:  { width: 46, height: 46, borderRadius: 23,
-                   alignItems: "center", justifyContent: "center" },
-  avatarInitials:{ fontSize: 16, fontWeight: "800", color: "#fff" },
-  userName:      { fontSize: 15, fontWeight: "700", color: COLORS.text },
-  userEmail:     { fontSize: 12, color: COLORS.textLight, marginTop: 1 },
-  checkCircle:   { width: 28, height: 28, borderRadius: 14, borderWidth: 2,
-                   borderColor: COLORS.border, backgroundColor: COLORS.white,
-                   alignItems: "center", justifyContent: "center" },
-  checkCircleSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary,
-                         ...SHADOWS.purple },
+  avatarCircle:    {
+    width: 46, height: 46, borderRadius: 23,
+    alignItems: "center", justifyContent: "center",
+  },
+  avatarInitials:  { fontSize: 16, fontWeight: "800", color: "#fff" },
+  userName:        { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  userEmail:       { fontSize: 12, color: COLORS.textLight, marginTop: 1 },
+  checkCircle:     {
+    width: 28, height: 28, borderRadius: 14, borderWidth: 2,
+    borderColor: COLORS.border, backgroundColor: COLORS.white,
+    alignItems: "center", justifyContent: "center",
+  },
+  checkCircleSelected: {
+    backgroundColor: COLORS.primary, borderColor: COLORS.primary,
+    ...SHADOWS.purple,
+  },
   separator:     { height: 1, backgroundColor: COLORS.border, marginHorizontal: 4, opacity: 0.6 },
   emptyText:     { textAlign: "center", padding: 24, color: COLORS.textLight },
-  emailCard:     { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLg,
-                   padding: 14, ...SHADOWS.medium },
+  emailCard:     {
+    backgroundColor: COLORS.card, borderRadius: SIZES.radiusLg,
+    padding: 14, ...SHADOWS.medium,
+  },
   emailInputRow: { flexDirection: "row", gap: 10, alignItems: "center" },
-  emailInputWrap:{ flex: 1, flexDirection: "row", alignItems: "center",
-                   backgroundColor: "rgba(255,255,255,0.92)", borderRadius: 12,
-                   borderWidth: 1.5, borderColor: "rgba(180,160,220,0.35)",
-                   paddingHorizontal: 12, paddingVertical: 10, minHeight: 44 },
+  emailInputWrap:{
+    flex: 1, flexDirection: "row", alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.92)", borderRadius: 12,
+    borderWidth: 1.5, borderColor: "rgba(180,160,220,0.35)",
+    paddingHorizontal: 12, paddingVertical: 10, minHeight: 44,
+  },
   emailInput:    { flex: 1, fontSize: 14, color: "#2A1060", fontWeight: "500", padding: 0 },
-  addBtn:        { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary,
-                   alignItems: "center", justifyContent: "center",
-                   shadowColor: COLORS.primary, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5 },
+  addBtn:        {
+    width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: COLORS.primary, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5,
+  },
   chipsContainer:{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  chip:          { flexDirection: "row", alignItems: "center",
-                   backgroundColor: `${COLORS.primary}12`, borderRadius: 20,
-                   paddingHorizontal: 10, paddingVertical: 7,
-                   borderWidth: 1.5, borderColor: `${COLORS.primary}30` },
-  chipText:      { fontSize: 12, fontWeight: "600", color: "#3D1F7A",
-                   flexShrink: 1, maxWidth: 160, marginRight: 5 },
-  chipRemove:    { width: 18, height: 18, borderRadius: 9,
-                   backgroundColor: "rgba(0,0,0,0.06)",
-                   alignItems: "center", justifyContent: "center", marginLeft: 4 },
-  ctaBar:        { paddingHorizontal: SIZES.padding, paddingBottom: 125,
-                   paddingTop: 12, backgroundColor: COLORS.background },
-  ctaBtn:        { width: "100%", backgroundColor: COLORS.primary,
-                   borderRadius: SIZES.radiusFull, paddingVertical: 16,
-                   alignItems: "center", ...SHADOWS.purple },
+  chip:          {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: `${COLORS.primary}12`, borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 7,
+    borderWidth: 1.5, borderColor: `${COLORS.primary}30`,
+  },
+  chipText:      {
+    fontSize: 12, fontWeight: "600", color: "#3D1F7A",
+    flexShrink: 1, maxWidth: 160, marginRight: 5,
+  },
+  chipRemove:    {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: "rgba(0,0,0,0.06)",
+    alignItems: "center", justifyContent: "center", marginLeft: 4,
+  },
+  ctaBar:        {
+    paddingHorizontal: SIZES.padding,
+    zIndex: 20,
+    paddingBottom: 125,
+    paddingTop: 12,
+    backgroundColor: COLORS.background,
+  },
+  ctaBtn:        {
+    width: "100%", backgroundColor: COLORS.primary,
+    borderRadius: SIZES.radiusFull, paddingVertical: 16,
+    alignItems: "center", ...SHADOWS.purple,
+  },
   ctaBtnDisabled:{ backgroundColor: COLORS.primaryLight, elevation: 0, shadowOpacity: 0 },
   ctaBtnText:    { color: COLORS.white, fontSize: 16, fontWeight: "800", letterSpacing: 0.3 },
 });

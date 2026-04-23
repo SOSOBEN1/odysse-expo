@@ -7,34 +7,15 @@ import QuestionYesNo from "../components/QuestionYesNo";
 import WaveBackground from "../components/waveBackground";
 import BackButton from "../components/BackButton";
 import { useRouter } from "expo-router";
-import { useUser } from "../constants/UserContext"; // ✅
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type QuestionOption = {
-  id: string;
-  label: string;
-  value: number;
-  order_index: number;
-};
-
-type Question = {
-  id: string;
-  text: string;
-  type: "multiple" | "boolean";
-  question_option: QuestionOption[];
-};
-
-type Answer = {
-  option_id: string | null;
-  value: number | null;
-};
+import { useUser } from "../constants/UserContext";
+import { computeStatsFromAnswers } from "../utils/statsCalculator";
+import type { Question, Answer } from "../utils/statsCalculator";
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function QuestionInscriptionScreen() {
   const router = useRouter();
-  const { userId } = useUser(); // ✅
+  const { userId } = useUser();
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -46,33 +27,46 @@ export default function QuestionInscriptionScreen() {
   }, []);
 
   const fetchQuestions = async () => {
-    const { data, error } = await supabase
-      .from("question")
-      .select(`
-        id,
-        text,
-        type,
-        question_option (
+    try {
+      const { data, error } = await supabase
+        .from("question")
+        .select(
+          `
           id,
-          label,
-          value,
-          order_index
+          text,
+          type,
+          category,
+          min_value,
+          max_value,
+          question_option (
+            id,
+            label,
+            value,
+            impact,
+            order_index
+          )
+        `
         )
-      `)
-      .eq("context", "onboarding")
-      .order("created_at", { ascending: true });
+        .eq("context", "onboarding")
+        .order("created_at", { ascending: true });
 
-    if (error) {
-      console.error("Erreur fetch questions:", error.message);
-    } else {
-      setQuestions(data ?? []);
+      if (error) {
+        console.error("Erreur fetch questions:", error.message);
+        Alert.alert("Erreur", "Impossible de charger les questions");
+      } else {
+        setQuestions(data ?? []);
+      }
+    } catch (err) {
+      console.error("Erreur:", err);
+      Alert.alert("Erreur", "Une erreur est survenue");
     }
   };
 
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const currentQuestion = questions[currentIndex];
-  const progress = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
+  const progress =
+    questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
   const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
   const hasAnswer =
     currentAnswer !== undefined &&
@@ -84,7 +78,9 @@ export default function QuestionInscriptionScreen() {
 
   const handleOptionAnswer = (numericValue: number) => {
     if (!currentQuestion) return;
-    const opt = currentQuestion.question_option.find((o) => o.value === numericValue);
+    const opt = currentQuestion.question_option?.find(
+      (o) => o.value === numericValue
+    );
     setAnswers((prev) => ({
       ...prev,
       [currentQuestion.id]: {
@@ -97,7 +93,9 @@ export default function QuestionInscriptionScreen() {
   const handleBooleanAnswer = (bool: boolean) => {
     if (!currentQuestion) return;
     const targetValue = bool ? 1 : 0;
-    const opt = currentQuestion.question_option.find((o) => o.value === targetValue);
+    const opt = currentQuestion.question_option?.find(
+      (o) => o.value === targetValue
+    );
     setAnswers((prev) => ({
       ...prev,
       [currentQuestion.id]: {
@@ -117,7 +115,7 @@ export default function QuestionInscriptionScreen() {
     }
   };
 
-  // ── Save ───────────────────────────────────────────────────────────────────
+  // ── Save Answers + Stats ───────────────────────────────────────────────────
 
   const saveAnswers = async () => {
     if (!userId) {
@@ -128,13 +126,14 @@ export default function QuestionInscriptionScreen() {
     setSaving(true);
 
     try {
+      // ── 1. Sauvegarde des réponses ──────────────────────────────
       const rows = questions
         .map((q) => {
           const ans = answers[q.id];
           if (!ans || ans.value === null) return null;
 
           return {
-            user_id: userId,           // ✅ INT depuis UserContext
+            user_id: userId,
             question_id: q.id,
             option_id: ans.option_id,
             value: ans.value,
@@ -147,25 +146,70 @@ export default function QuestionInscriptionScreen() {
         return;
       }
 
-      console.log("📤 Envoi onboarding:", JSON.stringify(rows, null, 2));
-
-      const { data, error } = await supabase
+      const { error: insertError } = await supabase
         .from("response")
-        .insert(rows)
-        .select();
+        .insert(rows);
 
-      if (error) {
-        console.error("❌ Erreur save:", error.message);
-        Alert.alert("Erreur", `Impossible d'enregistrer : ${error.message}`);
-        return;
+      if (insertError) {
+        console.error("❌ Erreur insertion réponses:", insertError);
+        throw new Error(insertError.message);
       }
 
-      console.log(`✅ ${data.length} réponse(s) onboarding enregistrée(s)`);
-      router.push("/frontend/screens/Dashbord");
+      console.log(`✅ ${rows.length} réponse(s) onboarding enregistrée(s)`);
 
+      // ── 2. Calcul des stats à partir des réponses ───────────────
+      const stats = computeStatsFromAnswers(questions, answers);
+
+      console.log("📊 Stats calculées pour onboarding:", stats);
+
+      // ── 3. Sauvegarde des stats dans player_stats ───────────────
+      const { error: statsError } = await supabase
+        .from("player_stats")
+        .upsert(
+          {
+            id_user: userId,
+            energie: stats.energie,
+            stress: stats.stress,
+            connaissance: stats.connaissance,
+            organisation: stats.organisation,
+            date_maj: new Date().toISOString(),
+          },
+          { onConflict: "id_user" }
+        );
+
+      if (statsError) {
+        console.error("❌ Erreur sauvegarde stats:", statsError);
+        throw new Error(statsError.message);
+      }
+
+      console.log("✅ Stats initiales sauvegardées");
+
+      // ── 4. Ajout dans l'historique des stats ────────────────────
+      const { error: historyError } = await supabase
+        .from("stat_history")
+        .insert({
+          id_user: userId,
+          energie: stats.energie,
+          stress: stats.stress,
+          connaissance: stats.connaissance,
+          organisation: stats.organisation,
+          cause: "Initialisation inscription",
+          date: new Date().toISOString(),
+        });
+
+      if (historyError) {
+        console.warn("⚠️ Erreur historique (non bloquante):", historyError);
+      } else {
+        console.log("✅ Historique des stats enregistré");
+      }
+
+      // ── 5. Redirection vers le dashboard ────────────────────────
+      Alert.alert("Succès", "Profil créé avec succès !", [
+        { text: "OK", onPress: () => router.push("/frontend/screens/Dashbord") },
+      ]);
     } catch (err: any) {
-      console.error("💥 Crash saveAnswers:", err.message);
-      Alert.alert("Erreur", "Une erreur est survenue");
+      console.error("💥 Erreur saveAnswers:", err);
+      Alert.alert("Erreur", err.message ?? "Une erreur est survenue");
     } finally {
       setSaving(false);
     }
@@ -208,7 +252,7 @@ export default function QuestionInscriptionScreen() {
         {currentQuestion.type === "multiple" && (
           <QuestionChoix
             question={currentQuestion.text}
-            options={currentQuestion.question_option}
+            options={currentQuestion.question_option || []}
             onSelect={handleOptionAnswer}
             selectedValue={currentAnswer?.value}
           />
@@ -231,7 +275,10 @@ export default function QuestionInscriptionScreen() {
         <TouchableOpacity
           onPress={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
           disabled={currentIndex === 0}
-          style={[styles.backButton, { opacity: currentIndex === 0 ? 0.4 : 1 }]}
+          style={[
+            styles.backButton,
+            { opacity: currentIndex === 0 ? 0.4 : 1 },
+          ]}
         >
           <Text style={styles.backText}>Retour</Text>
         </TouchableOpacity>
@@ -239,7 +286,10 @@ export default function QuestionInscriptionScreen() {
         <TouchableOpacity
           onPress={handleNext}
           disabled={!hasAnswer || saving}
-          style={[styles.nextButton, { opacity: hasAnswer && !saving ? 1 : 0.5 }]}
+          style={[
+            styles.nextButton,
+            { opacity: hasAnswer && !saving ? 1 : 0.5 },
+          ]}
         >
           <Text style={styles.nextText}>
             {saving

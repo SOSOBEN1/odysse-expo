@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Dimensions, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
+import { useRouter } from "expo-router";
 
 const { width } = Dimensions.get("window");
 
@@ -25,6 +26,7 @@ const NewPassword = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [strength, setStrength] = useState(0);
+  const router = useRouter(); 
 
   const checkStrength = (pwd: string) => {  // ← FIX
     let score = 0;
@@ -45,7 +47,8 @@ const NewPassword = () => {
       alert("Passwords do not match!");
       return;
     }
-    alert("Password updated successfully!");
+   alert("Password updated successfully!");
+    router.push("/frontend/screens/Login");
   };
 
   const strengthColors = ["#ff4d4f", "#ff7a45", "#ffa940", "#73d13d"];

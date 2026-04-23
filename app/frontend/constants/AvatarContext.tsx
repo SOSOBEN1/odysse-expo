@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type AvatarContextType = {
   selectedModel: any | null;
@@ -11,7 +12,29 @@ const AvatarContext = createContext<AvatarContextType>({
 });
 
 export function AvatarProvider({ children }: { children: React.ReactNode }) {
-  const [selectedModel, setSelectedModel] = useState<any>(null);
+  const [selectedModel, setSelectedModelState] = useState<any>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const saved = await AsyncStorage.getItem("selectedAvatarModel");
+        if (saved) setSelectedModelState(JSON.parse(saved));
+      } catch (e) {
+        console.warn("Erreur chargement avatar:", e);
+      }
+    };
+    load();
+  }, []);
+
+  const setSelectedModel = async (model: any) => {
+    try {
+      await AsyncStorage.setItem("selectedAvatarModel", JSON.stringify(model));
+    } catch (e) {
+      console.warn("Erreur sauvegarde avatar:", e);
+    }
+    setSelectedModelState(model);
+  };
+
   return (
     <AvatarContext.Provider value={{ selectedModel, setSelectedModel }}>
       {children}

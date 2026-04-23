@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "^3.0.2",
     "@react-native-community/datetimepicker": "^9.1.0",
     "@react-navigation/bottom-tabs": "^7.15.8",
     "@react-navigation/elements": "^2.6.3",
@@ -53,12 +54,14 @@
     "three": "^0.166.1"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "@types/react": "~19.1.0",
     "@types/react-native": "^0.72.8",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "eslint-import-resolver-alias": "^1.1.2",
     "react-native-svg-transformer": "^1.5.3",
+    "supabase": "^2.92.1",
     "typescript": "~5.9.2"
   },
   "private": true

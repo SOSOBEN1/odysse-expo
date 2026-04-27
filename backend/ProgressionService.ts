@@ -34,7 +34,6 @@ export interface DefiDetailDB {
   xp?:               number
   date_debut?:       string
   date_fin?:         string
-  objectif_minutes?: number
 }
 
 export interface ScoreDefi {
@@ -482,15 +481,13 @@ export const getClassementDefi = async (defiId: number): Promise<{ data: ScoreDe
   }
 }
 
-export const verifierVictoireDefi = async (defiId: number, objectif_minutes: number) => {
-  const { data } = await supabase
-    .from('defi_participants')
-    .select('minutes_etudies')
+export const terminerDefi = async (defiId: number) => {
+  const { error } = await supabase
+    .from('defis')
+    .update({ statut: 'termine' })
     .eq('id_defi', defiId)
-  const totalMinutes = (data ?? []).reduce((s: number, r: any) => s + (r.minutes_etudies ?? 0), 0)
-  return { gagne: totalMinutes >= objectif_minutes, totalMinutes, objectif_minutes }
+  return { error }
 }
-
 export const addTempsEtudie = async (defiId: number, userId: number, minutesAjoutees: number) => {
   const { data: current } = await supabase
     .from('defi_participants')

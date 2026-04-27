@@ -14,7 +14,6 @@ export interface DefiDB {
   id_user?:          number
   participants?:     number
   duration_label?:   string
-  objectif_minutes?: number
 }
 
 // ─── GET tous les défis d'un utilisateur ─────────────────────────────────────

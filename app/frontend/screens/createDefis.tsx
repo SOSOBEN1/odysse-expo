@@ -561,7 +561,6 @@ export default function CreateDefisScreen() {
       id_user:          userId ?? 1,
       xp:               400,
       icon:             'rocket' as const,
-      objectif_minutes: 120,
     };
 
     let error: unknown       = null;

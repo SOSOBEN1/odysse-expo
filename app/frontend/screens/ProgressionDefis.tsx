@@ -22,7 +22,6 @@ import Svg, { Path } from "react-native-svg";
 
 import {
   StatCibleKey,
-  addTempsEtudie,
   cocherMission,
   getDefiDetail,
   getMissions,
@@ -30,7 +29,7 @@ import {
   getParticipants,
   getStatsCiblesDuDefi,
   getStatsUtilisateur,
-  verifierVictoireDefi,
+  terminerDefi
 } from "../../../backend/ProgressionService";
 
 import { inviterAmi } from "../../../backend/InvitationService";
@@ -566,7 +565,7 @@ export default function ProgressionDefiScreen() {
   const [loading,       setLoading]       = useState(true);
   const [savingMission, setSavingMission] = useState<number | null>(null);
   const [showAddTime,   setShowAddTime]   = useState(false);
-  const [addMinutes,    setAddMinutes]    = useState("");
+const [addDays, setAddDays] = useState("");
   const [showVictoire,  setShowVictoire]  = useState(false);
   const [showInviter,   setShowInviter]   = useState(false);
   const [bonusToast,    setBonusToast]    = useState({ visible: false, xp: 0, statsCibles: [] as StatCibleKey[] });
@@ -599,15 +598,15 @@ const [selectedMissionTime, setSelectedMissionTime] = useState<MissionItem | nul
 
   const chargerDefi = async () => {
   const { data } = await getDefiDetail(id_defi);
-  if (data) {
-    setDefiInfo(data);
-    // ✅ Si le défi est terminé → aller au classement final
-    if (data.statut === "termine") {
-      router.replace({
-        pathname: "/frontend/screens/ClassementScreen",
-        params: { defiId: String(id_defi), defiNom: data.nom },
-      });
+  if (!data) return;
+  setDefiInfo(data);
+
+  const estExpire = data.date_fin && new Date(data.date_fin) < new Date();
+  if (data.statut === "termine" || estExpire) {
+    if (data.statut !== "termine") {
+      await terminerDefi(id_defi);
     }
+    setActiveTab("classement");
   }
 };
 
@@ -712,71 +711,90 @@ const [selectedMissionTime, setSelectedMissionTime] = useState<MissionItem | nul
 
   // ── Cocher une mission ────────────────────────────────────────────────────
 
-  const handleCocherMission = async (mission: MissionItem) => {
-    if (!userId || savingMission !== null || mission.cocheeParMoi) return;
-    setSavingMission(mission.id);
+ const handleCocherMission = async (mission: MissionItem) => {
+  if (!userId || savingMission !== null || mission.cocheeParMoi) return;
+  setSavingMission(mission.id);
 
-    const statsRes = await getStatsUtilisateur(userId);
-    const stats    = statsRes.data ?? { stress: 50, energie: 80, organisation: 50, connaissances: 0, discipline: 50, serenite: 50, concentration: 70 };
+  const statsRes = await getStatsUtilisateur(userId);
+  const stats    = statsRes.data ?? { stress: 50, energie: 80, organisation: 50, connaissances: 0, discipline: 50, serenite: 50, concentration: 70 };
 
-    const result = await cocherMission({
-      missionId:        mission.id,
-      userId,
-      defiId:           id_defi,
-      mission: {
-        id_mission:   mission.id,
-        id_defi:      id_defi,
-        titre:        mission.title,
-        duree_min:    mission.duree,
-        xp_gain:      mission.xp_base,
-        difficulte:   mission.difficulte,
-        priorite:     mission.priorite,
-        type_mission: mission.type_mission,
-      },
-      statsActuelles:   stats,
-      missionsFaites:   mesCompletions.size,
-      missionsTotal:    missions.length,
-      missionsOubliees: missions.length - mesCompletions.size - 1,
-    });
+  const result = await cocherMission({
+    missionId:        mission.id,
+    userId,
+    defiId:           id_defi,
+    mission: {
+      id_mission:   mission.id,
+      id_defi:      id_defi,
+      titre:        mission.title,
+      duree_min:    mission.duree,
+      xp_gain:      mission.xp_base,
+      difficulte:   mission.difficulte,
+      priorite:     mission.priorite,
+      type_mission: mission.type_mission,
+    },
+    statsActuelles:   stats,
+    missionsFaites:   mesCompletions.size,
+    missionsTotal:    missions.length,
+    missionsOubliees: missions.length - mesCompletions.size - 1,
+  });
 
-    setSavingMission(null);
+  setSavingMission(null);
+  if (result.error) { Alert.alert("Erreur", "Impossible de cocher la mission."); return; }
 
-    if (result.error) { Alert.alert("Erreur", "Impossible de cocher la mission."); return; }
+  if (result.xp_gagne) {
+    setBonusToast({ visible: true, xp: result.xp_gagne, statsCibles: result.statsCibles ?? [] });
+    setTimeout(() => setBonusToast({ visible: false, xp: 0, statsCibles: [] }), 3000);
+  }
 
-    // Afficher le toast avec XP + stats cibles boostées
-    if (result.xp_gagne) {
-      setBonusToast({ visible: true, xp: result.xp_gagne, statsCibles: result.statsCibles ?? [] });
-      setTimeout(() => setBonusToast({ visible: false, xp: 0, statsCibles: [] }), 3000);
-    }
+  await chargerTout();
 
-    await chargerTout();
-
-    if (defiInfo?.objectif_minutes) {
-      const { gagne } = await verifierVictoireDefi(id_defi, defiInfo.objectif_minutes);
-      if (gagne) setShowVictoire(true);
-    }
-  };
+  // ✅ Défi terminé si toutes missions cochées
+  const nouvellesCompletions = mesCompletions.size + 1;
+  if (nouvellesCompletions >= missions.length && missions.length > 0) {
+    await terminerDefi(id_defi);
+    setShowVictoire(true);
+  }
+};
 
   // ── Ajouter du temps ──────────────────────────────────────────────────────
 
   const handleAddTime = async () => {
-    const mins = parseInt(addMinutes, 10);
-    if (isNaN(mins) || mins <= 0) { Alert.alert("Erreur", "Entre un nombre de minutes valide."); return; }
-    if (!userId) return;
+  const days = parseInt(addDays, 10);
+  if (isNaN(days) || days <= 0) {
+    Alert.alert("Erreur", "Entre un nombre de jours valide.");
+    return;
+  }
+  if (!userId) return;
 
-    const { data: existing } = await supabase.from("defi_participants").select("id_user").eq("id_defi", id_defi).eq("id_user", userId).maybeSingle();
-    if (!existing) await supabase.from("defi_participants").insert({ id_defi, id_user: userId, minutes_etudies: 0, score: 0, xp_total: 0 });
+  // Calculer la nouvelle date_fin
+  const dateFin = defiInfo?.date_fin
+    ? new Date(defiInfo.date_fin)
+    : new Date();
 
-    const { error } = await addTempsEtudie(id_defi, userId, mins);
-    if (error) Alert.alert("Erreur", "Impossible d'enregistrer le temps.");
-    else { setAddMinutes(""); setShowAddTime(false); await chargerTout(); }
-  };
+  dateFin.setDate(dateFin.getDate() + days);
+  const nouvelleDateFin = dateFin.toISOString().split("T")[0];
+
+  const { error } = await supabase
+    .from("defis")
+    .update({ date_fin: nouvelleDateFin })
+    .eq("id_defi", id_defi);
+
+  if (error) {
+    Alert.alert("Erreur", "Impossible de prolonger le défi.");
+  } else {
+    setAddDays("");
+    setShowAddTime(false);
+    await chargerTout();
+    Alert.alert(
+      "Défi prolongé !",
+      `La date de fin a été repoussée au ${dateFin.toLocaleDateString("fr-FR")}.`
+    );
+  }
+};
 
   // ── Calculs ───────────────────────────────────────────────────────────────
 
-  const objectif_minutes = defiInfo?.objectif_minutes ?? 120;
-  const totalMinutes     = participants.reduce((s, p) => s + (p.minutes_etudies ?? 0), 0);
-  const progressRatio    = Math.min(totalMinutes / objectif_minutes, 1);
+
   const mesCompletsCount = mesCompletions.size;
   const maMissionPct     = missions.length > 0 ? Math.round((mesCompletsCount / missions.length) * 100) : 0;
   const gagnant          = classement.length > 0 ? classement[0] : null;
@@ -820,71 +838,80 @@ const [selectedMissionTime, setSelectedMissionTime] = useState<MissionItem | nul
 
             {/* Carte progression groupe */}
             <View style={[styles.progressCard, SHADOWS.light]}>
-              {/* <View style={styles.progressHeader}>
-                <View>
-                  <Text style={styles.progressLabel}>Progression du groupe</Text>
-                  <Text style={styles.progressValue}>
-                    {formatMinutes(totalMinutes)}
-                    <Text style={styles.progressGoal}> / {formatMinutes(objectif_minutes)}</Text>
-                  </Text>
-                </View>
-                <View style={[styles.pctBadge, progressRatio >= 1 && styles.pctBadgeDone]}>
-                  <Text style={styles.pctText}>{Math.round(progressRatio * 100)}%</Text>
-                </View>
-              </View> */}
-              {/* <Text style={styles.progressLabel}>Participants</Text> */}
-              {/* <View style={styles.barTrack}>
-                <LinearGradient
-                  colors={progressRatio >= 1 ? ["#22c55e", "#4ade80"] : ["#664e97", "#906ce6", "#c182de"]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={[styles.barFill, { width: `${Math.round(progressRatio * 100)}%` }]}
-                />
-              </View> */}
 
-              <View style={styles.myProgressRow}>
-                <Text style={styles.myProgressLabel}>Ma progression</Text>
-                <Text style={styles.myProgressValue}>{mesCompletsCount}/{missions.length} missions ({maMissionPct}%)</Text>
-              </View>
-              <View style={styles.barTrackThin}>
-                <View style={[styles.barFillThin, { width: `${maMissionPct}%` }]} />
-              </View>
+  {/* Dates du défi */}
+  {(defiInfo?.date_debut || defiInfo?.date_fin) && (
+    <View style={styles.datesRow}>
+      {defiInfo?.date_debut && (
+        <View style={styles.dateBadge}>
+          <Ionicons name="play-circle-outline" size={12} color={COLORS.primary} />
+          <Text style={styles.dateBadgeText}>
+            {new Date(defiInfo.date_debut).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
+          </Text>
+        </View>
+      )}
+      <View style={styles.dateSeparator} />
+      {defiInfo?.date_fin && (
+        <View style={styles.dateBadge}>
+          <Ionicons name="flag-outline" size={12} color={
+            new Date(defiInfo.date_fin) < new Date() ? "#ef4444" : "#22c55e"
+          } />
+          <Text style={[styles.dateBadgeText, {
+            color: new Date(defiInfo.date_fin) < new Date() ? "#ef4444" : "#22c55e"
+          }]}>
+            {new Date(defiInfo.date_fin).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
+          </Text>
+        </View>
+      )}
+    </View>
+  )}
 
-              {/* Participants */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
-                <View style={styles.participantsRow}>
-                  {participants.length === 0 ? (
-                    <Text style={styles.noData}>Aucun participant</Text>
-                  ) : participants.map((p, i) => {
-                    const isMe     = p.id_user === userId;
-                    const color    = AVATAR_COLORS[i % AVATAR_COLORS.length];
-                    const initials = getInitials(p.nom, p.prenom);
-                    return (
-                      <View key={p.id_user} style={styles.participantItem}>
-                        <View style={[styles.avatar, { backgroundColor: color }, isMe && styles.avatarMe]}>
-                          <Text style={styles.avatarText}>{initials}</Text>
-                        </View>
-                        <Text style={[styles.participantName, isMe && { color: COLORS.primary }]} numberOfLines={1}>
-                          {isMe ? "Moi" : (p.prenom ?? p.nom).split(" ")[0]}
-                        </Text>
-                        <Text style={styles.participantTime}>{formatMinutes(p.minutes_etudies)}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </ScrollView>
+  <View style={styles.myProgressRow}>
+    <Text style={styles.myProgressLabel}>Ma progression</Text>
+    <Text style={styles.myProgressValue}>
+      {mesCompletsCount}/{missions.length} missions ({maMissionPct}%)
+    </Text>
+  </View>
+  <View style={styles.barTrackThin}>
+    <View style={[styles.barFillThin, { width: `${maMissionPct}%` }]} />
+  </View>
 
-              <View style={styles.cardBtns}>
-                <TouchableOpacity style={styles.addTimeBtn} onPress={() => setShowAddTime(true)} activeOpacity={0.85}>
-                  <LinearGradient colors={[COLORS.primary, COLORS.secondary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.btnGrad}>
-                    <Ionicons name="add-circle-outline" size={15} color="#fff" style={{ marginRight: 5 }} />
-                    <Text style={styles.btnText}>Temps</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.inviteBtn} onPress={() => setShowInviter(true)} activeOpacity={0.85}>
-                  <Text style={styles.inviteBtnText}>Inviter</Text>
-                </TouchableOpacity>
-              </View>
+  {/* Participants */}
+  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+    <View style={styles.participantsRow}>
+      {participants.length === 0 ? (
+        <Text style={styles.noData}>Aucun participant</Text>
+      ) : participants.map((p, i) => {
+        const isMe     = p.id_user === userId;
+        const color    = AVATAR_COLORS[i % AVATAR_COLORS.length];
+        const initials = getInitials(p.nom, p.prenom);
+        return (
+          <View key={p.id_user} style={styles.participantItem}>
+            <View style={[styles.avatar, { backgroundColor: color }, isMe && styles.avatarMe]}>
+              <Text style={styles.avatarText}>{initials}</Text>
             </View>
+            <Text style={[styles.participantName, isMe && { color: COLORS.primary }]} numberOfLines={1}>
+              {isMe ? "Moi" : (p.prenom ?? p.nom).split(" ")[0]}
+            </Text>
+            <Text style={styles.participantTime}>{formatMinutes(p.minutes_etudies)}</Text>
+          </View>
+        );
+      })}
+    </View>
+  </ScrollView>
+
+  <View style={styles.cardBtns}>
+    <TouchableOpacity style={styles.addTimeBtn} onPress={() => setShowAddTime(true)} activeOpacity={0.85}>
+      <LinearGradient colors={[COLORS.primary, COLORS.secondary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.btnGrad}>
+        <Ionicons name="add-circle-outline" size={15} color="#fff" style={{ marginRight: 5 }} />
+        <Text style={styles.btnText}>Prolonger</Text>
+      </LinearGradient>
+    </TouchableOpacity>
+    <TouchableOpacity style={styles.inviteBtn} onPress={() => setShowInviter(true)} activeOpacity={0.85}>
+      <Text style={styles.inviteBtnText}>Inviter</Text>
+    </TouchableOpacity>
+  </View>
+</View>
 
             {/* Tabs */}
             <View style={styles.tabRow}>
@@ -947,27 +974,67 @@ const [selectedMissionTime, setSelectedMissionTime] = useState<MissionItem | nul
         )}
 
         {/* Modal ajouter du temps */}
-        <Modal visible={showAddTime} transparent animationType="slide">
-          <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowAddTime(false)} />
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Ajouter du temps d'étude</Text>
-            <Text style={styles.modalLabel}>Minutes étudiées</Text>
-            <TextInput
-              style={styles.timeInput} placeholder="ex: 45"
-              placeholderTextColor={COLORS.textLight}
-              keyboardType="numeric" value={addMinutes} onChangeText={setAddMinutes}
-            />
-            <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleAddTime}>
-              <LinearGradient colors={[COLORS.primary, COLORS.secondary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.btnGrad}>
-                <Text style={styles.btnText}>Confirmer</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => { setShowAddTime(false); setAddMinutes(""); }}>
-              <Text style={styles.modalCancelText}>Annuler</Text>
-            </TouchableOpacity>
-          </View>
-        </Modal>
+<Modal visible={showAddTime} transparent animationType="slide">
+  <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowAddTime(false)} />
+  <View style={styles.modalSheet}>
+    <Text style={styles.modalTitle}>Prolonger le défi</Text>
 
+    {/* Date fin actuelle */}
+    {defiInfo?.date_fin && (
+      <View style={styles.currentDateBox}>
+        <Ionicons name="flag-outline" size={14} color={COLORS.primary} />
+        <Text style={styles.currentDateText}>
+          Date de fin actuelle :{" "}
+          <Text style={{ fontWeight: "800", color: COLORS.primary }}>
+            {new Date(defiInfo.date_fin).toLocaleDateString("fr-FR")}
+          </Text>
+        </Text>
+      </View>
+    )}
+
+    <Text style={styles.modalLabel}>Nombre de jours à ajouter</Text>
+    <TextInput
+      style={styles.timeInput}
+      placeholder="ex: 7"
+      placeholderTextColor={COLORS.textLight}
+      keyboardType="numeric"
+      value={addDays}
+      onChangeText={setAddDays}
+    />
+
+    {/* Aperçu de la nouvelle date */}
+    {addDays && parseInt(addDays) > 0 && defiInfo?.date_fin && (
+      <View style={styles.previewDateBox}>
+        <Text style={styles.previewDateText}>
+          Nouvelle date de fin :{" "}
+          <Text style={{ fontWeight: "800", color: "#22c55e" }}>
+            {(() => {
+              const d = new Date(defiInfo.date_fin);
+              d.setDate(d.getDate() + parseInt(addDays));
+              return d.toLocaleDateString("fr-FR");
+            })()}
+          </Text>
+        </Text>
+      </View>
+    )}
+
+    <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleAddTime}>
+      <LinearGradient
+        colors={[COLORS.primary, COLORS.secondary]}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+        style={styles.btnGrad}
+      >
+        <Text style={styles.btnText}>Confirmer</Text>
+      </LinearGradient>
+    </TouchableOpacity>
+    <TouchableOpacity
+      style={styles.modalCancelBtn}
+      onPress={() => { setShowAddTime(false); setAddDays(""); }}
+    >
+      <Text style={styles.modalCancelText}>Annuler</Text>
+    </TouchableOpacity>
+  </View>
+</Modal>
         {/* Bonus Toast */}
         <BonusToast visible={bonusToast.visible} xp={bonusToast.xp} statsCibles={bonusToast.statsCibles} />
 
@@ -998,15 +1065,7 @@ const styles = StyleSheet.create({
   loadingText:   { fontSize: 14, color: "rgba(100,70,160,0.6)", fontWeight: "600" },
   scroll:        { paddingHorizontal: SIZES.padding, paddingTop: 10 },
   progressCard:  { backgroundColor: "rgba(255,255,255,0.88)", borderRadius: SIZES.radiusLg, padding: 16, marginBottom: 14 },
-  progressHeader:{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 },
   progressLabel: { fontSize: 11, color: "rgba(100,70,160,0.6)", fontWeight: "600", marginBottom: 2 },
-  progressValue: { fontSize: 24, fontWeight: "800", color: "#17063B" },
-  progressGoal:  { fontSize: 13, color: "rgba(100,70,160,0.5)", fontWeight: "600" },
-  pctBadge:      { backgroundColor: COLORS.primary, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
-  pctBadgeDone:  { backgroundColor: "#22c55e" },
-  pctText:       { color: "#fff", fontWeight: "800", fontSize: 15 },
-  barTrack:      { height: 10, backgroundColor: "rgba(180,160,220,0.25)", borderRadius: 5, overflow: "hidden", marginBottom: 10 },
-  barFill:       { height: "100%", borderRadius: 5 },
   myProgressRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 5 },
   myProgressLabel:{ fontSize: 11, color: "rgba(100,70,160,0.6)", fontWeight: "600" },
   myProgressValue:{ fontSize: 11, color: COLORS.primary, fontWeight: "700" },
@@ -1073,4 +1132,24 @@ const styles = StyleSheet.create({
   modalConfirmBtn:{ borderRadius: 32, overflow: "hidden", marginBottom: 10 },
   modalCancelBtn: { alignItems: "center", paddingVertical: 10 },
   modalCancelText:{ fontSize: 14, color: "rgba(100,70,160,0.5)", fontWeight: "600" },
+  datesRow:      { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+dateBadge:     { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(255,255,255,0.8)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+dateBadgeText: { fontSize: 12, fontWeight: "700", color: COLORS.primary },
+dateSeparator: { flex: 1, height: 1, backgroundColor: "rgba(180,160,220,0.3)" },
+currentDateBox: {
+  flexDirection: "row", alignItems: "center", gap: 6,
+  backgroundColor: `${COLORS.primary}10`, borderRadius: 10,
+  paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14,
+},
+currentDateText: {
+  fontSize: 13, color: "rgba(100,70,160,0.7)", fontWeight: "600", flex: 1,
+},
+previewDateBox: {
+  backgroundColor: "rgba(34,197,94,0.08)", borderRadius: 10,
+  paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12,
+  borderWidth: 1, borderColor: "rgba(34,197,94,0.2)",
+},
+previewDateText: {
+  fontSize: 13, color: "rgba(100,70,160,0.7)", fontWeight: "600",
+},
 });

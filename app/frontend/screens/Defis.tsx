@@ -43,7 +43,6 @@ interface Defi {
   statut:           string;
   date_debut:       string | null;
   date_fin:         string | null;
-  objectif_minutes: number;
   progression:      number;
   isInvite: boolean
 }
@@ -224,7 +223,6 @@ const DefiCard = ({
               <Text style={styles.xpText}>+{defi.xp} XP</Text>
             </View>
             <Text style={styles.cardDuration}>{defi.duration}</Text>
-            <Text style={styles.cardObjectif}>{defi.objectif_minutes} min</Text>
           </View>
         </View>
         <View style={styles.cardProgressTrack}>
@@ -590,7 +588,6 @@ const EditModal = ({
   const [icon,        setIcon]        = useState<IconKey>("rocket");
   const [dateDebut,   setDateDebut]   = useState<Date | null>(null);
   const [dateFin,     setDateFin]     = useState<Date | null>(null);
-  const [objMin,      setObjMin]      = useState("");
   const [statut,      setStatut]      = useState("actif");
 
   const [missions, setMissions] = useState<MissionLocal[]>([]);
@@ -606,7 +603,6 @@ const EditModal = ({
     setIcon(defi.icon);
     setDateDebut(defi.date_debut ? new Date(defi.date_debut) : null);
     setDateFin(defi.date_fin   ? new Date(defi.date_fin)   : null);
-    setObjMin(String(defi.objectif_minutes));
     setStatut(defi.statut);
     setOpenIdx(null);
     loadMissions(defi.id);
@@ -688,7 +684,6 @@ const EditModal = ({
         icon,
         date_debut:       debutStr,
         date_fin:         finStr,
-        objectif_minutes: parseInt(objMin) || 120,
         statut:           statut as any,
       });
       if (errD) throw new Error(errD.message);
@@ -719,7 +714,6 @@ const EditModal = ({
         icon,
         date_debut:       debutStr ?? null,
         date_fin:         finStr   ?? null,
-        objectif_minutes: parseInt(objMin) || 120,
         statut,
         duration: formatDuration(debutStr ?? null, finStr ?? null),
       };
@@ -1009,7 +1003,6 @@ const getNbParticipants = async (id_defi: number): Promise<number> => {
       statut:           d.statut ?? "actif",
       date_debut:       d.date_debut ?? null,
       date_fin:         d.date_fin   ?? null,
-      objectif_minutes: d.objectif_minutes ?? 120,
       progression,
       isInvite:         d.id_user !== userId,  // ✅ pas le créateur = invité
     }

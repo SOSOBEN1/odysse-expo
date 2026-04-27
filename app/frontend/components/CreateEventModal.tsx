@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert } from "react-native";
 import { COLORS, SHADOWS } from "../styles/theme";
 import { supabase } from "../constants/supabase";
+import { useUser } from "../constants/UserContext";
 
 type Props = {
   visible: boolean;
@@ -21,6 +22,7 @@ export default function CreateEventModal({ visible, onClose, onCreate, initialDa
   const [selectedType, setSelectedType] = useState("soutenance");
   const [eventName, setEventName] = useState("");
   const [loading, setLoading] = useState(false);
+  const { userId } = useUser();
 
   useEffect(() => {
     if (visible) {
@@ -53,7 +55,7 @@ export default function CreateEventModal({ visible, onClose, onCreate, initialDa
         // Création
         const { error } = await supabase
           .from("boss_events")
-          .insert({ nom: eventName.trim(), type_boss: selectedType });
+          .insert({ nom: eventName.trim(), type_boss: selectedType, id_creator: userId, });
         if (error) throw error;
       }
 

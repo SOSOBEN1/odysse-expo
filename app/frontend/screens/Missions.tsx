@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState } from "react";
 import {
   ScrollView, StatusBar, StyleSheet, Text,
-  TouchableOpacity, View, Alert,
+  TouchableOpacity, View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import Navbar from "../components/Navbar";
@@ -10,35 +10,31 @@ import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 import CreateMissionModal from "../components/CreateMissionModal";
 import CreateEventModal from "../components/CreateEventModal";
 import MissionStatusModal from "../components/MissionStatusModals";
-import { supabase } from "../constants/supabase";
-import { useFocusEffect } from "@react-navigation/native";
 import { useUser } from "../constants/UserContext";
+import { useAvatar } from "../constants/AvatarContext";
+import AvatarCrd from "../components/AvatarCrd";
+import { useMissions } from "../../../backend/viewmodels/useMissions";
+import type { Mission } from "../../../backend/models/mission.types";
+import {
+  formatElapsed,
+  formatDateLimite,
+  getDeadlineColor,
+  computeProgressPercent,
+} from "../../../backend/models/mission.utils";
+import type { MissionTimer } from "../../../backend/models/mission.types";
+
+// ─────────────────────────────────────────────────────────────
+//  Constants
+// ─────────────────────────────────────────────────────────────
 
 type Difficulty = "Difficile" | "Moyen" | "Facile";
-type TimerState = "idle" | "running" | "paused" | "done" | "fail";
-
-interface Mission {
-  id: number;
-  event: string | null;
-  title: string;
-  duration: string;
-  description: string;
-  difficulty: Difficulty;
-  progress: number;
-  urgent: boolean;
-  today: boolean;
-  dateLimite: Date | null;
-}
-
-interface MissionTimer {
-  state: TimerState;
-  elapsed: number;
-  validationId: number | null;
-  startedAt: Date | null;
-}
 
 const TABS = ["Tout", "Urgent", "Aujourd'hui", "Par Événements"] as const;
 type Tab = (typeof TABS)[number];
+
+// ─────────────────────────────────────────────────────────────
+//  Icons
+// ─────────────────────────────────────────────────────────────
 
 const IconEdit = () => (
   <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
@@ -53,56 +49,32 @@ const IconDelete = () => (
   </Svg>
 );
 
+// ─────────────────────────────────────────────────────────────
+//  Config difficulté
+// ─────────────────────────────────────────────────────────────
+
 const difficultyConfig: Record<Difficulty, any> = {
   Difficile: { label: "🔥 Difficile", badgeBg: COLORS.diffHard,   eventBg: COLORS.diffHardEvent, progressColor: COLORS.diffHard,   iconBg: COLORS.diffHardEvent, flame: "🔥", cardBg: "rgba(255,255,255,0.93)", btnBg: COLORS.diffHardEvent },
   Moyen:     { label: "🔥 Moyen",    badgeBg: COLORS.diffMedium,  eventBg: COLORS.diffMedium,    progressColor: COLORS.diffMedium, iconBg: COLORS.diffMedium,    flame: "🔥", cardBg: "rgba(255,245,225,0.95)", btnBg: COLORS.diffMedium },
   Facile:    { label: "💧 Facile",   badgeBg: COLORS.diffEasy,    eventBg: COLORS.diffEasyEvent, progressColor: COLORS.diffEasy,   iconBg: COLORS.diffEasy,      flame: "💧", cardBg: "rgba(235,245,255,0.93)", btnBg: COLORS.diffEasyEvent },
 };
 
-const mapDifficulty = (d: number): Difficulty => {
-  if (d === 3) return "Difficile";
-  if (d === 2) return "Moyen";
-  return "Facile";
-};
-
-const parseDurationToMinutes = (duration: string): number | null => {
-  if (!duration || duration === "-") return null;
-  const match = duration.match(/(\d+)h(\d*)/);
-  if (!match) return null;
-  return (parseInt(match[1]) || 0) * 60 + (parseInt(match[2]) || 0);
-};
-
-const formatElapsed = (seconds: number): string => {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) return `${h}h${String(m).padStart(2, "0")}m${String(s).padStart(2, "0")}s`;
-  return `${String(m).padStart(2, "0")}m${String(s).padStart(2, "0")}s`;
-};
-
-const formatDateLimite = (date: Date): string =>
-  date.toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-
-// ✅ Helper : met à jour le statut dans Supabase
-const updateStatut = async (missionId: number, statut: TimerState) => {
-  await supabase
-    .from("mission")
-    .update({ statut })
-    .eq("id_mission", missionId);
-};
+// ─────────────────────────────────────────────────────────────
+//  MissionCard
+// ─────────────────────────────────────────────────────────────
 
 function MissionCard({
   mission, timer, onDelete, onEdit, onStart, onPause, onFinish,
 }: {
-  mission: Mission;
-  timer: MissionTimer;
+  mission:  Mission;
+  timer:    MissionTimer;
   onDelete: (id: number) => void;
-  onEdit: (m: Mission) => void;
-  onStart: (id: number) => void;
-  onPause: (id: number) => void;
+  onEdit:   (m: Mission) => void;
+  onStart:  (id: number) => void;
+  onPause:  (id: number) => void;
   onFinish: (id: number) => void;
 }) {
-  const cfg = difficultyConfig[mission.difficulty];
+  const cfg       = difficultyConfig[mission.difficulty];
   const isDone    = timer.state === "done";
   const isFail    = timer.state === "fail";
   const isRunning = timer.state === "running";
@@ -110,8 +82,7 @@ function MissionCard({
   const isActive  = isRunning || isPaused;
   const isOver    = isDone || isFail;
 
-  const estimatedSec = (parseDurationToMinutes(mission.duration) ?? 30) * 60;
-  const pct = isOver ? 100 : Math.min(Math.round((timer.elapsed / estimatedSec) * 100), 99);
+  const pct = computeProgressPercent(timer.elapsed, mission.duration, timer.state);
 
   const getBtnLabel = () => {
     if (isDone)    return "✅ TERMINÉ";
@@ -125,15 +96,6 @@ function MissionCard({
     if (isOver) return;
     if (isRunning) onPause(mission.id);
     else onStart(mission.id);
-  };
-
-  const getDeadlineColor = () => {
-    if (!mission.dateLimite) return "#6b7280";
-    const diff = mission.dateLimite.getTime() - Date.now();
-    if (diff < 0)                   return "#e53e3e";
-    if (diff < 3600 * 1000)         return "#f97316";
-    if (diff < 24 * 3600 * 1000)    return "#eab308";
-    return "#16a34a";
   };
 
   return (
@@ -165,7 +127,7 @@ function MissionCard({
             <Text style={styles.duration}>⏱ {mission.duration}</Text>
             <Text style={styles.description} numberOfLines={2}>{mission.description}</Text>
             {mission.dateLimite && (
-              <Text style={[styles.deadlineText, { color: getDeadlineColor() }]}>
+              <Text style={[styles.deadlineText, { color: getDeadlineColor(mission.dateLimite) }]}>
                 🗓 Limite : {formatDateLimite(mission.dateLimite)}
               </Text>
             )}
@@ -175,8 +137,8 @@ function MissionCard({
         {(isActive || isOver) && (
           <View style={[
             styles.chronoBox,
-            isDone    ? styles.chronoDone :
-            isFail    ? styles.chronoFail :
+            isDone    ? styles.chronoDone    :
+            isFail    ? styles.chronoFail    :
             isRunning ? styles.chronoRunning :
                         styles.chronoPaused
           ]}>
@@ -241,225 +203,33 @@ function MissionCard({
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+//  MissionsScreen
+// ─────────────────────────────────────────────────────────────
+
 export default function MissionsScreen() {
-  const { userId } = useUser();
-  const [activeTab, setActiveTab]               = useState<Tab>("Tout");
-  const [isMissionModalVisible, setMissionModalVisible] = useState(false);
-  const [isEventModalVisible,   setEventModalVisible]   = useState(false);
-  const [selectedData, setSelectedData]         = useState<any>(null);
-  const [missions, setMissions]                 = useState<Mission[]>([]);
-  const [loading, setLoading]                   = useState(true);
-  const [timers, setTimers]                     = useState<Record<number, MissionTimer>>({});
-  const intervalRefs                            = useRef<Record<number, ReturnType<typeof setInterval>>>({});
+  const [activeTab,             setActiveTab]             = useState<Tab>("Tout");
+  const [isMissionModalVisible, setMissionModalVisible]   = useState(false);
+  const [isEventModalVisible,   setEventModalVisible]     = useState(false);
+  const [selectedData,          setSelectedData]          = useState<any>(null);
 
-  const missionsRef = useRef<Mission[]>([]);
-  useEffect(() => { missionsRef.current = missions; }, [missions]);
+  const { selectedModel }             = useAvatar();
+  const { userId, username: ctxUsername } = useUser();
 
-  const [statusModal, setStatusModal] = useState<{
-    visible: boolean;
-    type: "success" | "fail";
-    missionTitle: string;
-    dateLimit?: string;
-  }>({ visible: false, type: "success", missionTitle: "" });
-
-  // ✅ Vérification deadlines toutes les minutes
-  useEffect(() => {
-    const deadlineInterval = setInterval(() => {
-      setTimers(prev => {
-        const now = Date.now();
-        const updated = { ...prev };
-        let changed = false;
-
-        missionsRef.current.forEach(mission => {
-          if (!mission.dateLimite) return;
-          const t = prev[mission.id];
-          if (mission.dateLimite.getTime() < now && (!t || (t.state !== "done" && t.state !== "fail"))) {
-            if (intervalRefs.current[mission.id]) clearInterval(intervalRefs.current[mission.id]);
-            updated[mission.id] = {
-              ...(t ?? { elapsed: 0, validationId: null, startedAt: null }),
-              state: "fail",
-            };
-            changed = true;
-
-            // ✅ Sync Supabase statut = "fail"
-            updateStatut(mission.id, "fail");
-
-            setStatusModal({
-              visible: true,
-              type: "fail",
-              missionTitle: mission.title,
-              dateLimit: formatDateLimite(mission.dateLimite),
-            });
-          }
-        });
-
-        return changed ? updated : prev;
-      });
-    }, 60_000);
-
-    return () => clearInterval(deadlineInterval);
-  }, []);
-
-  useEffect(() => {
-    return () => { Object.values(intervalRefs.current).forEach(clearInterval); };
-  }, []);
-
-  useFocusEffect(useCallback(() => { fetchMissions(); }, []));
-
-  const getTimer = (id: number): MissionTimer =>
-    timers[id] ?? { state: "idle", elapsed: 0, validationId: null, startedAt: null };
-
-  const setTimer = (id: number, update: Partial<MissionTimer>) =>
-    setTimers(prev => ({ ...prev, [id]: { ...(prev[id] ?? { state: "idle", elapsed: 0, validationId: null, startedAt: null }), ...update } }));
-
-  // ── FINISH → success ──
-  const handleFinish = async (missionId: number) => {
-    const t = getTimer(missionId);
-    clearInterval(intervalRefs.current[missionId]);
-
-    const now = new Date();
-    const xp  = Math.max(10, Math.round(t.elapsed / 60) * 2);
-
-    if (t.validationId) {
-      const { error } = await supabase
-        .from("mission_validation")
-        .update({ date_fin: now.toISOString(), xp_obtenu: xp })
-        .eq("id_validation", t.validationId);
-      if (error) { Alert.alert("Erreur", error.message); return; }
-    }
-
-    // ✅ Sync Supabase statut = "done"
-    await updateStatut(missionId, "done");
-    setTimer(missionId, { state: "done" });
-
-    const mission = missionsRef.current.find(m => m.id === missionId);
-    setStatusModal({ visible: true, type: "success", missionTitle: mission?.title ?? "" });
-  };
-
-  // ── START / RESUME ──
-  const handleStart = async (missionId: number) => {
-    const t = getTimer(missionId);
-
-    if (t.state === "idle") {
-      const now = new Date();
-      const { data, error } = await supabase
-        .from("mission_validation")
-        .insert({ id_user: userId, id_mission: missionId, date_debut: now.toISOString() })
-        .select("id_validation")
-        .single();
-
-      if (error) { Alert.alert("Erreur", error.message); return; }
-
-      setTimer(missionId, { state: "running", elapsed: 0, validationId: data.id_validation, startedAt: now });
-    } else {
-      setTimer(missionId, { state: "running" });
-    }
-
-    // ✅ Sync Supabase statut = "running"
-    await updateStatut(missionId, "running");
-
-    if (intervalRefs.current[missionId]) clearInterval(intervalRefs.current[missionId]);
-
-    intervalRefs.current[missionId] = setInterval(() => {
-      setTimers(prev => {
-        const cur = prev[missionId];
-        if (!cur || cur.state !== "running") return prev;
-
-        const newElapsed = cur.elapsed + 1;
-        const mission = missionsRef.current.find(m => m.id === missionId);
-        const estimatedSec = (parseDurationToMinutes(mission?.duration ?? "0h30") ?? 30) * 60;
-
-        if (newElapsed >= estimatedSec) {
-          clearInterval(intervalRefs.current[missionId]);
-          setTimeout(() => handleFinish(missionId), 0);
-        }
-
-        return { ...prev, [missionId]: { ...cur, elapsed: newElapsed } };
-      });
-    }, 1000);
-  };
-
-  // ── PAUSE ──
-  const handlePause = async (missionId: number) => {
-    clearInterval(intervalRefs.current[missionId]);
-    // ✅ Sync Supabase statut = "paused"
-    await updateStatut(missionId, "paused");
-    setTimer(missionId, { state: "paused" });
-  };
-
-  const fetchMissions = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("mission")
-        .select(`id_mission, titre, description, duree_min, difficulte, priorite, id_boss, date_limite, statut, boss_events ( nom )`)
-        .order("id_mission", { ascending: false });
-
-      if (error) throw error;
-
-      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-      const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
-
-      const { data: validations } = await supabase
-        .from("mission_validation")
-        .select("id_mission")
-        .gte("date_debut", todayStart.toISOString())
-        .lte("date_debut", todayEnd.toISOString());
-
-      const todayIds = new Set((validations ?? []).map((v: any) => v.id_mission));
-
-      const mapped: Mission[] = (data ?? []).map((m: any) => ({
-        id:          m.id_mission,
-        event:       m.id_boss != null ? (m.boss_events?.nom ?? "Événement") : null,
-        title:       m.titre ?? "Sans titre",
-        duration:    m.duree_min ? `${Math.floor(m.duree_min / 60)}h${String(m.duree_min % 60).padStart(2, "0")}` : "-",
-        description: m.description ?? "",
-        difficulty:  mapDifficulty(m.difficulte ?? 1),
-        progress:    0,
-        urgent:      (m.priorite ?? 1) >= 4,
-        today:       todayIds.has(m.id_mission),
-        dateLimite:  m.date_limite ? new Date(m.date_limite) : null,
-      }));
-
-      setMissions(mapped);
-
-      // ✅ Restaurer les timers depuis le statut Supabase + vérifier deadlines
-      const now = Date.now();
-      setTimers(prev => {
-        const updated = { ...prev };
-
-        (data ?? []).forEach((m: any) => {
-          const existingTimer = prev[m.id_mission];
-          // Ne pas écraser un timer déjà actif en mémoire
-          if (existingTimer && (existingTimer.state === "running" || existingTimer.state === "paused")) return;
-
-          const dateLimite = m.date_limite ? new Date(m.date_limite) : null;
-
-          // Deadline dépassée → fail automatique
-          if (dateLimite && dateLimite.getTime() < now && m.statut !== "done" && m.statut !== "fail") {
-            updateStatut(m.id_mission, "fail");
-            updated[m.id_mission] = { state: "fail", elapsed: 0, validationId: null, startedAt: null };
-            return;
-          }
-
-          // Restaurer depuis Supabase
-          if (m.statut === "done" || m.statut === "fail") {
-            updated[m.id_mission] = {
-              ...(existingTimer ?? { elapsed: 0, validationId: null, startedAt: null }),
-              state: m.statut,
-            };
-          }
-        });
-
-        return updated;
-      });
-
-    } catch (err: any) {
-      console.error("❌ Erreur fetch missions:", err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ✅ Toute la logique métier vient du hook
+const {
+  missions,
+  loading,
+  statusModal,
+  getTimer,
+  handleStart,
+  handlePause,
+  handleFinish,
+  handleDelete,
+  buildEditPayload,
+  loadMissions,
+  closeStatusModal,
+} = useMissions(userId !== null ? String(userId) : null);
 
   const filteredMissions = missions.filter(m => {
     if (activeTab === "Urgent")         return m.urgent;
@@ -468,34 +238,8 @@ export default function MissionsScreen() {
     return true;
   });
 
-  const handleDelete = (id: number) => {
-    Alert.alert("Supprimer", "Supprimer cette mission ?", [
-      { text: "Annuler", style: "cancel" },
-      {
-        text: "Supprimer", style: "destructive",
-        onPress: async () => {
-          clearInterval(intervalRefs.current[id]);
-          const { error } = await supabase.from("mission").delete().eq("id_mission", id);
-          if (error) Alert.alert("Erreur", error.message);
-          else {
-            setMissions(prev => prev.filter(m => m.id !== id));
-            setTimers(prev => { const n = { ...prev }; delete n[id]; return n; });
-          }
-        },
-      },
-    ]);
-  };
-
   const handleEdit = (mission: Mission) => {
-    setSelectedData({
-      id_mission:  mission.id,
-      titre:       mission.title,
-      description: mission.description,
-      duree_min:   parseDurationToMinutes(mission.duration),
-      difficulte:  mission.difficulty === "Difficile" ? 3 : mission.difficulty === "Moyen" ? 2 : 1,
-      priorite:    mission.urgent ? 4 : 2,
-      date_limite: mission.dateLimite?.toISOString() ?? null,
-    });
+    setSelectedData(buildEditPayload(mission));
     setMissionModalVisible(true);
   };
 
@@ -507,10 +251,16 @@ export default function MissionsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <View style={styles.avatarCircle}>
-            <Text style={styles.avatarEmoji}>👩</Text>
+            {selectedModel ? (
+              <AvatarCrd model={selectedModel} bgColor="#f0ecff" />
+            ) : (
+              <Text style={styles.avatarEmoji}>🧑</Text>
+            )}
           </View>
           <View>
-            <Text style={styles.greeting}>Bonjour, <Text style={styles.greetingName}>Sonia!</Text></Text>
+            <Text style={styles.greeting}>
+              Bonjour, <Text style={styles.greetingName}>{ctxUsername || "..."}!</Text>
+            </Text>
             <Text style={styles.subGreeting}>{filteredMissions.length} missions</Text>
           </View>
         </View>
@@ -557,20 +307,20 @@ export default function MissionsScreen() {
         type={statusModal.type}
         missionTitle={statusModal.missionTitle}
         dateLimit={statusModal.dateLimit}
-        onClose={() => setStatusModal(prev => ({ ...prev, visible: false }))}
+        onClose={closeStatusModal}
       />
 
       <CreateMissionModal
         visible={isMissionModalVisible}
         onClose={() => { setMissionModalVisible(false); setSelectedData(null); }}
-        onSave={() => { fetchMissions(); setSelectedData(null); setMissionModalVisible(false); }}
+        onSave={() => { loadMissions(); setSelectedData(null); setMissionModalVisible(false); }}
         initialData={selectedData}
       />
 
       <CreateEventModal
         visible={isEventModalVisible}
         onClose={() => setEventModalVisible(false)}
-        onCreate={() => { fetchMissions(); setSelectedData(null); }}
+        onCreate={() => { loadMissions(); setSelectedData(null); }}
         initialData={selectedData}
       />
 
@@ -578,6 +328,10 @@ export default function MissionsScreen() {
     </View>
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+//  Styles (identiques à l'original)
+// ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container:         { flex: 1, backgroundColor: COLORS.missionBg },

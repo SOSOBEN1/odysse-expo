@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../constants/supabase";
 import { useRouter } from "expo-router";
-import { useUser } from "../constants/UserContext"; // ✅ AJOUT
+import { useUser } from "../constants/UserContext";
 
 import QuestionChoix from "../components/QuestionChoix";
 import QuestionYesNo from "../components/QuestionYesNo";
@@ -12,7 +12,7 @@ import QuestionScale from "../components/Questionscale";
 import WaveBackground from "../components/waveBackground";
 import BackButton from "../components/BackButton";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type QuestionOption = {
   id: string;
@@ -37,13 +37,13 @@ type Answer = {
   value: number | null;
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const CATEGORIES = ["stress", "energie", "organisation", "connaissance"] as const;
 
 const CATEGORY_LABELS: Record<string, string> = {
-  stress: "🔴 Stress",
-  energie: "🟡 Énergie",
+  stress:       "🔴 Stress",
+  energie:      "🟡 Énergie",
   organisation: "🟢 Organisation",
   connaissance: "🔵 Connaissance",
 };
@@ -52,8 +52,6 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// ✅ On tire 1 question par type par catégorie (4 questions par catégorie = 16 total)
-// ou si tu veux juste 1 par catégorie garde pickOnePerCategory
 function pickOnePerCategory(questions: Question[]): Question[] {
   const result: Question[] = [];
   for (const cat of CATEGORIES) {
@@ -63,17 +61,72 @@ function pickOnePerCategory(questions: Question[]): Question[] {
   return result;
 }
 
+function clamp(val: number): number {
+  return Math.min(100, Math.max(0, val));
+}
+
+// ─── Calcul des stats depuis les réponses ────────────────────────────────────
+function computeDerivedStats(base: {
+  energie: number;
+  stress: number;
+  connaissance: number;
+  organisation: number;
+}) {
+  return {
+    concentration: Math.min(100, Math.max(0, base.energie * 0.4 + base.connaissance * 0.6)),
+    serenite: Math.min(100, Math.max(0, 100 - base.stress)),
+    discipline: Math.min(100, Math.max(0, base.organisation * 0.7 + base.connaissance * 0.3)),
+  };
+}
+
+function computeStats(
+  questions: Question[],
+  answers: Record<string, Answer>
+): {
+  energie:      number;
+  stress:       number;
+  connaissance: number;
+  organisation: number;
+} {
+  let energie = 50, stress = 50, connaissance = 50, organisation = 50;
+
+  questions.forEach((q) => {
+    const ans = answers[q.id];
+    if (!ans || ans.value === null) return;
+
+    let impact = 0;
+
+    if (q.type === "star") {
+      const note = ans.value ?? 1;
+      const max  = q.max_value ?? 5;
+      const min  = q.min_value ?? 1;
+      // note 1 → impact -4 | note 3 → impact 0 | note 5 → impact +4
+      impact = ((note - min) / (max - min)) * 8 - 4;
+    } else {
+      const option = q.question_option.find((o) => o.value === ans.value);
+      impact = option?.impact ?? 0;
+    }
+
+    if (q.category === "stress")       stress        = clamp(stress        - impact);
+    if (q.category === "energie")      energie       = clamp(energie       + impact);
+    if (q.category === "connaissance") connaissance  = clamp(connaissance  + impact);
+    if (q.category === "organisation") organisation  = clamp(organisation  + impact);
+  });
+
+  return { energie, stress, connaissance, organisation };
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function QuestionPeriodicScreen() {
-  const router = useRouter();
-  const { userId } = useUser(); // ✅ récupérer l'id user depuis le contexte
+  const router     = useRouter();
+  const { userId } = useUser();
 
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questions,    setQuestions]    = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, Answer>>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [answers,      setAnswers]      = useState<Record<string, Answer>>({});
+  const [loading,      setLoading]      = useState(true);
+  const [saving,       setSaving]       = useState(false);
 
   useEffect(() => {
     fetchAndPickQuestions();
@@ -84,51 +137,33 @@ export default function QuestionPeriodicScreen() {
       const { data, error } = await supabase
         .from("question")
         .select(`
-          id,
-          text,
-          type,
-          category,
-          min_value,
-          max_value,
-          question_option (
-            id,
-            label,
-            value,
-            impact,
-            order_index
-          )
+          id, text, type, category, min_value, max_value,
+          question_option ( id, label, value, impact, order_index )
         `)
         .eq("context", "periodic");
 
       if (error) throw error;
 
       const safeData: Question[] = (data ?? []).map((q: any) => ({
-        id: q.id,
-        text: q.text ?? "Question inconnue",
-        type: q.type ?? "multiple",
-        category: q.category ?? "stress",
-        min_value: q.min_value ?? 1,
-        max_value: q.max_value ?? 5,
+        id:              q.id,
+        text:            q.text ?? "Question inconnue",
+        type:            q.type ?? "multiple",
+        category:        q.category ?? "stress",
+        min_value:       q.min_value ?? 1,
+        max_value:       q.max_value ?? 5,
         question_option: (q.question_option ?? [])
           .map((opt: any) => ({
-            id: opt.id,
-            label: opt.label ?? "Option",
-            value: opt.value ?? 0,
-            impact: opt.impact ?? 0,
+            id:          opt.id,
+            label:       opt.label ?? "Option",
+            value:       opt.value ?? 0,
+            impact:      opt.impact ?? 0,
             order_index: opt.order_index ?? 0,
           }))
           .sort((a: QuestionOption, b: QuestionOption) => a.order_index - b.order_index),
       }));
 
-      // ✅ Si tu veux 4 questions (1 par catégorie) :
-      // const picked = pickOnePerCategory(safeData);
-      
-      // ✅ Si tu veux 16 questions (1 par type par catégorie) :
-     const picked = pickOnePerCategory(safeData);
-
-      setQuestions(picked);
+      setQuestions(pickOnePerCategory(safeData));
     } catch (err: any) {
-      console.error("Erreur fetch questions:", err.message);
       Alert.alert("Erreur", "Impossible de charger les questions");
     } finally {
       setLoading(false);
@@ -138,8 +173,8 @@ export default function QuestionPeriodicScreen() {
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const currentQuestion = questions[currentIndex];
-  const progress = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
-  const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
+  const progress        = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
+  const currentAnswer   = currentQuestion ? answers[currentQuestion.id] : undefined;
   const hasAnswer =
     currentAnswer !== undefined &&
     currentAnswer !== null &&
@@ -153,10 +188,7 @@ export default function QuestionPeriodicScreen() {
     const opt = currentQuestion.question_option.find((o) => o.value === numericValue);
     setAnswers((prev) => ({
       ...prev,
-      [currentQuestion.id]: {
-        option_id: opt?.id ?? null,
-        value: numericValue,
-      },
+      [currentQuestion.id]: { option_id: opt?.id ?? null, value: numericValue },
     }));
   };
 
@@ -166,10 +198,7 @@ export default function QuestionPeriodicScreen() {
     const opt = currentQuestion.question_option.find((o) => o.value === targetValue);
     setAnswers((prev) => ({
       ...prev,
-      [currentQuestion.id]: {
-        option_id: opt?.id ?? null,
-        value: targetValue,
-      },
+      [currentQuestion.id]: { option_id: opt?.id ?? null, value: targetValue },
     }));
   };
 
@@ -177,10 +206,7 @@ export default function QuestionPeriodicScreen() {
     if (!currentQuestion) return;
     setAnswers((prev) => ({
       ...prev,
-      [currentQuestion.id]: {
-        option_id: null,
-        value: numericValue,
-      },
+      [currentQuestion.id]: { option_id: null, value: numericValue },
     }));
   };
 
@@ -199,60 +225,79 @@ export default function QuestionPeriodicScreen() {
   };
 
   // ── Save ───────────────────────────────────────────────────────────────────
+const saveAnswers = async () => {
+  if (!userId) {
+    Alert.alert("Erreur", "Utilisateur non connecté");
+    return;
+  }
 
-  const saveAnswers = async () => {
-    // ✅ Vérification que userId existe
-    if (!userId) {
-      Alert.alert("Erreur", "Utilisateur non connecté");
+  setSaving(true);
+
+  try {
+    // ── 1. réponses brutes ──────────────────────────────
+    const rows = questions
+      .map((q) => {
+        const ans = answers[q.id];
+        if (!ans || ans.value === null) return null;
+
+        return {
+          user_id: userId,
+          question_id: q.id,
+          option_id: ans.option_id,
+          value: ans.value,
+        };
+      })
+      .filter(Boolean);
+
+    if (rows.length === 0) {
+      Alert.alert("Attention", "Aucune réponse à enregistrer");
       return;
     }
 
-    setSaving(true);
+    const { error: insertError } = await supabase
+      .from("response")
+      .insert(rows);
 
-    try {
-      const rows = questions
-        .map((q) => {
-          const ans = answers[q.id];
-          if (!ans || ans.value === null) return null;
+    if (insertError) throw insertError;
 
-          return {
-            user_id: userId,          // ✅ INT depuis UserContext, pas supabase.auth
-            question_id: q.id,
-            option_id: ans.option_id, // NULL pour type "star"
-            value: ans.value,
-          };
-        })
-        .filter(Boolean);
+    // ── 2. stats de base uniquement ─────────────────────
+    const stats = computeStats(questions, answers);
 
-      if (rows.length === 0) {
-        Alert.alert("Attention", "Aucune réponse à enregistrer");
-        return;
-      }
+    // ── 3. UPDATE DB SANS STATS DÉRIVÉES ────────────────
+    const { error: statsError } = await supabase
+      .from("player_stats")
+      .upsert(
+        {
+          id_user: userId,
+          energie: stats.energie,
+          stress: stats.stress,
+          connaissance: stats.connaissance,
+          organisation: stats.organisation,
+          date_maj: new Date().toISOString(),
+        },
+        { onConflict: "id_user" }
+      );
 
-      console.log("📤 Envoi des réponses:", JSON.stringify(rows, null, 2));
+    if (statsError) throw statsError;
 
-      const { data, error } = await supabase
-        .from("response")
-        .insert(rows)
-        .select(); // ✅ .select() pour voir ce qui a été inséré
+    // ── 4. historique ───────────────────────────────────
+    await supabase.from("stat_history").insert({
+      id_user: userId,
+      energie: stats.energie,
+      stress: stats.stress,
+      connaissance: stats.connaissance,
+      organisation: stats.organisation,
+      cause: "Questionnaire périodique",
+    });
 
-      if (error) {
-        console.error("❌ Erreur save:", error);
-        Alert.alert("Erreur", `Impossible d'enregistrer : ${error.message}`);
-        return;
-      }
+    router.push("/frontend/screens/Dashbord");
 
-      console.log("✅ Réponses enregistrées:", data);
-      router.push("/frontend/screens/Dashbord");
-
-    } catch (err: any) {
-      console.error("💥 Crash saveAnswers:", err.message);
-      Alert.alert("Erreur", "Une erreur est survenue");
-    } finally {
-      setSaving(false);
-    }
-  };
-
+  } catch (err: any) {
+    Alert.alert("Erreur", err.message ?? "Une erreur est survenue");
+  } finally {
+    setSaving(false);
+  }
+};
   // ── Render question ────────────────────────────────────────────────────────
 
   const renderQuestion = () => {
@@ -334,7 +379,6 @@ export default function QuestionPeriodicScreen() {
     <LinearGradient colors={["#ffffff", "#EDE7FF"]} style={{ flex: 1 }}>
       <WaveBackground />
 
-      {/* HEADER */}
       <View style={styles.header}>
         <BackButton />
         <View style={styles.headerCenter}>
@@ -351,10 +395,8 @@ export default function QuestionPeriodicScreen() {
         <View style={{ width: 26 }} />
       </View>
 
-      {/* QUESTION */}
       <View style={styles.cardWrapper}>{renderQuestion()}</View>
 
-      {/* BUTTONS */}
       <View style={styles.bottomButtons}>
         <TouchableOpacity
           onPress={handleBack}
@@ -370,7 +412,11 @@ export default function QuestionPeriodicScreen() {
           style={[styles.nextButton, { opacity: hasAnswer && !saving ? 1 : 0.5 }]}
         >
           <Text style={styles.nextText}>
-            {saving ? "Enregistrement..." : currentIndex === questions.length - 1 ? "Terminer" : "Suivant"}
+            {saving
+              ? "Enregistrement..."
+              : currentIndex === questions.length - 1
+              ? "Terminer"
+              : "Suivant"}
           </Text>
         </TouchableOpacity>
       </View>

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   ScrollView, StatusBar, StyleSheet, Text,
   TouchableOpacity, View, Alert,
@@ -10,12 +10,13 @@ import WaveBackground from "../components/waveBackground";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 import CreateEventModal from "../components/CreateEventModal";
 import { supabase } from "../constants/supabase";
-import { useFocusEffect } from "@react-navigation/native";
+import { useUser } from "../constants/UserContext";
 
 type EventType = "projet" | "examen" | "soutenance";
 
+// ✅ FIX — id_boss au lieu de id (correspond au vrai champ PRIMARY KEY de boss_events)
 interface BossEvent {
-  id: number;
+  id_boss: number;
   nom: string;
   type_boss: EventType;
 }
@@ -39,17 +40,22 @@ export default function EventsScreen() {
   const [selectedData, setSelectedData] = useState<any>(null);
   const [events, setEvents] = useState<BossEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const { userId } = useUser();
 
-  useFocusEffect(
-    useCallback(() => { fetchEvents(); }, [])
-  );
+  // ✅ FIX — useEffect simple, se déclenche dès que userId est disponible
+  useEffect(() => {
+    if (userId) fetchEvents();
+  }, [userId]);
 
   const fetchEvents = async () => {
     try {
       setLoading(true);
+      if (!userId) return;
+
       const { data, error } = await supabase
         .from("boss_events")
-        .select("*")
+        .select("id_boss, nom, type_boss") // ✅ sélection explicite des bons champs
+        .eq("id_creator", userId)
         .order("id_boss", { ascending: false });
 
       if (error) throw error;
@@ -61,13 +67,12 @@ export default function EventsScreen() {
     }
   };
 
-  // Filtrage par type (insensible à la casse)
   const filtered = events.filter(e => {
     if (activeTab === "Tout") return true;
     return e.type_boss?.toLowerCase() === activeTab.toLowerCase();
   });
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id_boss: number) => {
     Alert.alert("Supprimer", "Supprimer cet événement ?", [
       { text: "Annuler", style: "cancel" },
       {
@@ -76,9 +81,9 @@ export default function EventsScreen() {
           const { error } = await supabase
             .from("boss_events")
             .delete()
-            .eq("id_boss", id);
+            .eq("id_boss", id_boss); // ✅ FIX — id_boss
           if (error) Alert.alert("Erreur", error.message);
-          else setEvents(prev => prev.filter(e => e.id !== id));
+          else setEvents(prev => prev.filter(e => e.id_boss !== id_boss)); // ✅ FIX
         },
       },
     ]);
@@ -86,7 +91,7 @@ export default function EventsScreen() {
 
   const handleEdit = (ev: BossEvent) => {
     setSelectedData({
-      id_boss:   ev.id,
+      id_boss:   ev.id_boss, // ✅ FIX
       nom:       ev.nom,
       type_boss: ev.type_boss,
     });
@@ -154,7 +159,8 @@ export default function EventsScreen() {
         ) : filtered.map(ev => {
           const cfg = getConfig(ev.type_boss);
           return (
-            <View key={ev.id} style={styles.cardWrapper}>
+            // ✅ FIX — key et toutes les refs utilisent ev.id_boss
+            <View key={ev.id_boss} style={styles.cardWrapper}>
               <View style={[styles.eventBadge, { backgroundColor: cfg.color }]}>
                 <Text style={styles.eventBadgeText}>{ev.type_boss}</Text>
               </View>
@@ -163,8 +169,8 @@ export default function EventsScreen() {
                 style={[styles.card, { backgroundColor: cfg.bg }]}
                 activeOpacity={0.88}
                 onPress={() => router.push({
-                  pathname: "/MissionMapScreen",
-                  params: { eventId: ev.id, eventTitle: ev.nom },
+                  pathname: "/frontend/screens/missionEvent",
+                  params: { eventId: String(ev.id_boss), eventTitle: ev.nom }, // ✅ FIX
                 })}
               >
                 <View style={styles.topRow}>
@@ -185,22 +191,16 @@ export default function EventsScreen() {
                     style={[styles.seeMissionsBtn, { backgroundColor: cfg.color }]}
                     onPress={() => router.push({
                       pathname: "/frontend/screens/missionEvent",
-                      params: { eventId: ev.id, eventTitle: ev.nom },
+                      params: { eventId: String(ev.id_boss), eventTitle: ev.nom }, // ✅ FIX
                     })}
                   >
                     <Text style={styles.seeMissionsText}>Voir les missions →</Text>
                   </TouchableOpacity>
                   <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={styles.iconBtn}
-                      onPress={() => handleEdit(ev)}
-                    >
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => handleEdit(ev)}>
                       <Ionicons name="pencil-outline" size={16} color="#6c3fcb" />
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.iconBtn}
-                      onPress={() => handleDelete(ev.id)}
-                    >
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => handleDelete(ev.id_boss)}>
                       <Ionicons name="trash-outline" size={16} color="#e84393" />
                     </TouchableOpacity>
                   </View>

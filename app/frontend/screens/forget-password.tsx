@@ -60,7 +60,7 @@ export default function ForgotPasswordScreen() {
         style={styles.buttonWrapper}
         onPress={() => {
           if (phone.trim()) {
-            router.push("/verify");
+           router.push("/frontend/screens/verify");
           } else {
             alert("Please enter your phone number");
           }

@@ -72,7 +72,7 @@ export default function VerifyScreen() {
           style={styles.buttonWrapper}
           onPress={() => {
             if (status === "success") {
-              router.push("/newPassword");
+              router.push("/frontend/screens/NewPassword");
             }
           }}
         >

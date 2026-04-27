@@ -1037,7 +1037,10 @@ export default function DefiScreen() {
         opacity:   headerAnim,
         transform: [{ translateY: headerAnim.interpolate({ inputRange: [0,1], outputRange: [-16,0] }) }],
       }]}>
-        <NotifIcone onPress={() => console.log("Notif")} />
+        <NotifIcone onPress={() => {
+  console.log("CLICK NOTIF");
+  router.push("/frontend/screens/NotificationsScreen");
+}} />
         <SettingIcone onPress={() => console.log("Settings")} />
       </Animated.View>
 
@@ -1109,13 +1112,14 @@ export default function DefiScreen() {
         )}
 
         {activeTab === "mes_defis" && !loading && (
-          <TouchableOpacity
-            style={styles.ctaBtn}
-            activeOpacity={0.85}
-            onPress={() => router.push("/frontend/screens/createDefis")}
-          >
-            <Text style={styles.ctaBtnText}>Lancer un nouveau defi</Text>
-          </TouchableOpacity>
+
+<TouchableOpacity
+  style={styles.ctaBtn}
+  activeOpacity={0.85}
+  onPress={() => router.push("/frontend/screens/DefisStat")}
+>
+  <Text style={styles.ctaBtnText}>Lancer un nouveau defi</Text>
+</TouchableOpacity>
         )}
 
         <View style={{ height: 100 }} />

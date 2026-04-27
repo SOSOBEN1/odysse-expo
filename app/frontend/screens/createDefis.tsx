@@ -558,7 +558,6 @@ export default function CreateDefisScreen() {
       description,
       date_debut:       dateDebut ? dateDebut.toISOString().split("T")[0] : undefined,
       date_fin:         dateFin   ? dateFin.toISOString().split("T")[0]   : undefined,
-      statut:           'actif' as const,
       id_user:          userId ?? 1,
       xp:               400,
       icon:             'rocket' as const,
@@ -593,7 +592,6 @@ export default function CreateDefisScreen() {
             difficulte:  diff,
             priorite:    prio,
             date_limite: m.date_limite ? m.date_limite.toISOString() : null,
-            statut:      'en_attente' as const,
             ...gains,
           };
         });

@@ -1,9 +1,8 @@
-import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import Svg, { Path } from "react-native-svg";
-import { COLORS, SIZES, SHADOWS } from "../styles/theme";
 import { useRouter } from "expo-router";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Svg, { Path } from "react-native-svg";
+import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 type Props = {
   active: string;
   onChange: (key: string) => void;

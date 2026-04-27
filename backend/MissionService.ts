@@ -14,8 +14,8 @@ export interface MissionDB {
   organisation_gain?:   number | null
   xp_gain?:             number | null
   date_limite?:         string | null   // ISO string
-  statut?:              'en_attente' | 'en_cours' | 'termine'
   progression?:         number
+  id_user_accompli?:  number | null
 }
 
 export const addMissions = async (missions: MissionDB[]) => {

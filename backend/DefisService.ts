@@ -29,12 +29,35 @@ export const getDefis = async (userId: number) => {
 
 // ─── GET par statut (pour les 3 tabs) ────────────────────────────────────────
 export const getDefisByStatut = async (userId: number, statut: string) => {
-  const { data, error } = await supabase
+  // Défis créés par l'user
+  const { data: mesDefis } = await supabase
     .from('defis')
     .select('*')
     .eq('id_user', userId)
     .eq('statut', statut)
-  return { data, error }
+
+  // Défis où l'user est participant (invité)
+  const { data: participations } = await supabase
+    .from('defi_participants')
+    .select('id_defi')
+    .eq('id_user', userId)
+
+  const participantIds = (participations ?? []).map((p: any) => p.id_defi)
+
+  let defisParticipant: any[] = []
+  if (participantIds.length > 0) {
+    const { data } = await supabase
+      .from('defis')
+      .select('*')
+      .in('id_defi', participantIds)
+      .eq('statut', statut)
+      .neq('id_user', userId) // éviter les doublons
+    defisParticipant = data ?? []
+  }
+
+  // Fusionner sans doublons
+  const tous = [...(mesDefis ?? []), ...defisParticipant]
+  return { data: tous, error: null }
 }
 
 // ─── ADD ──────────────────────────────────────────────────────────────────────

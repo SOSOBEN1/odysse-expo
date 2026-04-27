@@ -1,5 +1,7 @@
 import { supabase } from '../app/frontend/constants/supabase'
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 export interface ParticipantDB {
   id_user:          number
   nom:              string
@@ -27,13 +29,13 @@ export interface MissionDB {
 }
 
 export interface DefiDetailDB {
-  id_defi:           number
-  nom:               string
-  description?:      string
-  statut:            string
-  xp?:               number
-  date_debut?:       string
-  date_fin?:         string
+  id_defi:      number
+  nom:          string
+  description?: string
+  statut:       string
+  xp?:          number
+  date_debut?:  string
+  date_fin?:    string
 }
 
 export interface ScoreDefi {
@@ -59,6 +61,8 @@ export interface StatsUtilisateur {
 
 export type StatCibleKey = 'energie' | 'stress' | 'connaissance' | 'organisation'
 
+// ─── Constantes ───────────────────────────────────────────────────────────────
+
 const XP_MAX_DEFI  = 500
 const NIVEAU_MAX   = 10
 const BONUS_STAT_X = 1.5
@@ -66,6 +70,121 @@ const BONUS_STAT_X = 1.5
 const xpRequiseNiveau = (n: number) => 100 * n * n
 const XP_TOTALE_MAX   = Array.from({ length: NIVEAU_MAX }, (_, i) => xpRequiseNiveau(i + 1))
   .reduce((a, b) => a + b, 0)
+
+// ─── Récompenses ──────────────────────────────────────────────────────────────
+
+export interface RecompenseDefi {
+  id_user:     number
+  nom:         string
+  rang:        number
+  xp_bonus:    number
+  gold_bonus:  number
+  boost_stats: number
+}
+
+const RECOMPENSES_PAR_RANG: Record<number, { xp: number; gold: number; boost: number }> = {
+  1: { xp: 200, gold: 100, boost: 2.0  },
+  2: { xp: 100, gold: 50,  boost: 1.5  },
+  3: { xp: 50,  gold: 25,  boost: 1.25 },
+}
+const RECOMPENSE_PARTICIPATION = { xp: 20, gold: 10, boost: 1.0 }
+
+export const distribuerRecompenses = async (
+  defiId:      number,
+  classement:  { id_user: number; nom: string; rang: number }[],
+  statsCibles: StatCibleKey[]
+): Promise<RecompenseDefi[]> => {
+  const resultats: RecompenseDefi[] = []
+
+  for (const joueur of classement) {
+    const recompense = RECOMPENSES_PAR_RANG[joueur.rang] ?? RECOMPENSE_PARTICIPATION
+
+    // 1. Ajouter XP + gold au user — on vérifie l'erreur
+    const { error: rpcError } = await supabase.rpc('increment_user_rewards', {
+      p_user_id: joueur.id_user,
+      p_xp:      recompense.xp,
+      p_gold:    recompense.gold,
+    })
+    if (rpcError) {
+      console.warn(`[distribuerRecompenses] RPC increment_user_rewards échoué pour user ${joueur.id_user}:`, rpcError.message)
+    }
+
+    // 2. Récupérer les stats actuelles
+    const [{ data: userData }, { data: psData }] = await Promise.all([
+      supabase.from('users').select('energie').eq('id_user', joueur.id_user).single(),
+      supabase.from('player_stats').select('stress, connaissance, organisation').eq('id_user', joueur.id_user).maybeSingle(),
+    ])
+
+    const stats: StatsUtilisateur = {
+      stress:        psData?.stress        ?? 50,
+      energie:       userData?.energie     ?? 80,
+      organisation:  psData?.organisation  ?? 50,
+      connaissances: psData?.connaissance  ?? 0,
+      discipline:    50,
+      serenite:      50,
+      concentration: 70,
+    }
+
+    // 3. Appliquer le boost sur les stats cibles
+    const clamp = (v: number) => Math.min(100, Math.max(0, v))
+    const boost = recompense.boost
+
+    const nouvelleEnergie      = statsCibles.includes('energie')      ? clamp(stats.energie       + Math.round(20 * boost)) : stats.energie
+    const nouveauStress        = statsCibles.includes('stress')        ? clamp(stats.stress        - Math.round(15 * boost)) : stats.stress
+    const nouvelleConnaissance = statsCibles.includes('connaissance')  ? clamp(stats.connaissances + Math.round(20 * boost)) : stats.connaissances
+    const nouvelleOrganisation = statsCibles.includes('organisation')  ? clamp(stats.organisation  + Math.round(20 * boost)) : stats.organisation
+
+    // 4. Sauvegarder les nouvelles stats
+    await supabase.from('users')
+      .update({ energie: nouvelleEnergie })
+      .eq('id_user', joueur.id_user)
+
+    const { data: psExist } = await supabase
+      .from('player_stats').select('id_stats').eq('id_user', joueur.id_user).maybeSingle()
+
+    if (psExist) {
+      await supabase.from('player_stats').update({
+        stress:       nouveauStress,
+        connaissance: nouvelleConnaissance,
+        organisation: nouvelleOrganisation,
+        energie:      nouvelleEnergie,
+        date_maj:     new Date().toISOString(),
+      }).eq('id_user', joueur.id_user)
+    } else {
+      await supabase.from('player_stats').insert({
+        id_user:      joueur.id_user,
+        stress:       nouveauStress,
+        connaissance: nouvelleConnaissance,
+        organisation: nouvelleOrganisation,
+        energie:      nouvelleEnergie,
+      })
+    }
+
+    // 5. Historiser
+    const boostLabel = boost > 1 ? ` [Boost ×${boost} stats cibles]` : ''
+    await supabase.from('stat_history').insert({
+      id_user:      joueur.id_user,
+      stress:       nouveauStress,
+      energie:      nouvelleEnergie,
+      connaissance: nouvelleConnaissance,
+      organisation: nouvelleOrganisation,
+      cause:        `Fin de défi — Rang ${joueur.rang}${boostLabel}`,
+    })
+
+    resultats.push({
+      id_user:     joueur.id_user,
+      nom:         joueur.nom,
+      rang:        joueur.rang,
+      xp_bonus:    recompense.xp,
+      gold_bonus:  recompense.gold,
+      boost_stats: recompense.boost,
+    })
+  }
+
+  return resultats
+}
+
+// ─── Calculs ──────────────────────────────────────────────────────────────────
 
 export const calculerXPMission = (xp_base: number, difficulte: number, priorite: number) =>
   Math.round(xp_base * difficulte * priorite)
@@ -106,17 +225,8 @@ export const calculerScoreDefi = (params: {
   return { xp_total, difficulte_moy, bonus_rapidite, score_final }
 }
 
-export const getStatsCiblesDuDefi = async (defiId: number): Promise<StatCibleKey[]> => {
-  const { data } = await supabase
-    .from('defis_statistique_cible')
-    .select('statistique_cible ( type )')
-    .eq('id_defi', defiId)
-  if (!data || data.length === 0) return []
-  return (data as any[]).map(r => r.statistique_cible?.type).filter(Boolean) as StatCibleKey[]
-}
-
 export const calculerNouvellesStats = (
-  stats: StatsUtilisateur,
+  stats:       StatsUtilisateur,
   mission: {
     type_mission:      string
     difficulte:        number
@@ -163,6 +273,17 @@ export const calculerNouvellesStats = (
   return { stress, energie, organisation, connaissances, discipline, serenite, concentration }
 }
 
+// ─── Stats cibles ─────────────────────────────────────────────────────────────
+
+export const getStatsCiblesDuDefi = async (defiId: number): Promise<StatCibleKey[]> => {
+  const { data } = await supabase
+    .from('defis_statistique_cible')
+    .select('statistique_cible ( type )')
+    .eq('id_defi', defiId)
+  if (!data || data.length === 0) return []
+  return (data as any[]).map(r => r.statistique_cible?.type).filter(Boolean) as StatCibleKey[]
+}
+
 export const sauvegarderStatsCibles = async (
   defiId:       number,
   statCibleIds: number[],
@@ -175,15 +296,25 @@ export const sauvegarderStatsCibles = async (
   return { error }
 }
 
+// ─── Défi ─────────────────────────────────────────────────────────────────────
+
 export const getDefiDetail = async (defiId: number) => {
   const { data, error } = await supabase
     .from('defis').select('*').eq('id_defi', defiId).single()
   return { data, error }
 }
 
-// ─── GET PARTICIPANTS (sans join pour éviter les erreurs RLS) ─────────────────
-export const getParticipants = async (id_defi: number) => {
+export const terminerDefi = async (defiId: number) => {
+  const { error } = await supabase
+    .from('defis')
+    .update({ statut: 'termine' })
+    .eq('id_defi', defiId)
+  return { error }
+}
 
+// ─── Participants ─────────────────────────────────────────────────────────────
+
+export const getParticipants = async (id_defi: number) => {
   // Étape 1 : récupérer les participants sans join
   const { data: parts, error } = await supabase
     .from('defi_participants')
@@ -219,6 +350,8 @@ export const getParticipants = async (id_defi: number) => {
   console.log('✅ participants mapped =', JSON.stringify(mapped))
   return { data: mapped, error: null }
 }
+
+// ─── Missions ─────────────────────────────────────────────────────────────────
 
 export const getMissions = async (defiId: number) => {
   const { data, error } = await supabase
@@ -267,7 +400,8 @@ export const getMissionsCompleteesPar = async (userId: number, defiId: number) =
   return { data: data ?? [], error: null }
 }
 
-// ─── COCHER MISSION (version corrigée) ───────────────────────────────────────
+// ─── Cocher une mission ───────────────────────────────────────────────────────
+
 export const cocherMission = async (params: {
   missionId:        number
   userId:           number
@@ -298,7 +432,7 @@ export const cocherMission = async (params: {
   const xp_gagne = calculerXPMission(mission.xp_gain ?? 10, mission.difficulte ?? 1, mission.priorite ?? 1)
   const now      = new Date().toISOString()
 
-  // 4. ✅ Corriger id_defi si null dans la table mission
+  // 4. Corriger id_defi si null dans la table mission
   await supabase
     .from('mission')
     .update({ id_defi: defiId })
@@ -325,9 +459,7 @@ export const cocherMission = async (params: {
     .update({ id_user_accompli: userId })
     .eq('id_mission', missionId)
 
-  // 7. ✅ Recalcul complet depuis mission_validation pour defi_participants
-  //    On utilise defiId directement (pas mission.id_defi qui peut être null)
-// 7. ✅ Recalcul complet depuis mission_validation pour defi_participants
+  // 7. Recalcul complet depuis mission_validation pour defi_participants
   const { data: missionsDefi } = await supabase
     .from('mission')
     .select('id_mission, duree_min')
@@ -336,8 +468,6 @@ export const cocherMission = async (params: {
   console.log('📋 missionsDefi =', JSON.stringify(missionsDefi))
 
   const missionIdsDefi = (missionsDefi ?? []).map((m: any) => m.id_mission)
-
-  console.log('📋 missionIdsDefi =', JSON.stringify(missionIdsDefi))
 
   const { data: validationsDone } = await supabase
     .from('mission_validation')
@@ -369,6 +499,7 @@ export const cocherMission = async (params: {
     }, { onConflict: 'id_defi,id_user' })
 
   console.log('💾 upsert err =', upsertErr)
+
   // 8. Calculer nouvelles stats
   const nouvellesStats = calculerNouvellesStats(
     statsActuelles,
@@ -424,10 +555,19 @@ export const cocherMission = async (params: {
       cause:        `Mission cochée : ${mission.titre}${bonusLabel}`,
     })
 
-  return { xp_gagne, nouvellesStats, statsCibles, error: null }
+  // Retourner aussi le nombre de missions complétées après cette action
+  const nouveauNbCompletions = (validationsDone ?? []).length
+
+  return { xp_gagne, nouvellesStats, statsCibles, nouveauNbCompletions, error: null }
 }
 
-export const calculerEtSauvegarderScoreDefi = async (params: { userId: number; defiId: number; defiInfo: DefiDetailDB }) => {
+// ─── Score & classement ───────────────────────────────────────────────────────
+
+export const calculerEtSauvegarderScoreDefi = async (params: {
+  userId:   number
+  defiId:   number
+  defiInfo: DefiDetailDB
+}) => {
   const { userId, defiId, defiInfo } = params
 
   const { data: validations } = await supabase
@@ -481,13 +621,8 @@ export const getClassementDefi = async (defiId: number): Promise<{ data: ScoreDe
   }
 }
 
-export const terminerDefi = async (defiId: number) => {
-  const { error } = await supabase
-    .from('defis')
-    .update({ statut: 'termine' })
-    .eq('id_defi', defiId)
-  return { error }
-}
+// ─── Temps étudié ─────────────────────────────────────────────────────────────
+
 export const addTempsEtudie = async (defiId: number, userId: number, minutesAjoutees: number) => {
   const { data: current } = await supabase
     .from('defi_participants')
@@ -511,6 +646,8 @@ export const addTempsEtudie = async (defiId: number, userId: number, minutesAjou
     .select().single()
 }
 
+// ─── Stats utilisateur ────────────────────────────────────────────────────────
+
 export const getStatsUtilisateur = async (userId: number): Promise<{ data: StatsUtilisateur | null; error: any }> => {
   const [{ data: userData }, { data: psData }] = await Promise.all([
     supabase.from('users').select('energie').eq('id_user', userId).single(),
@@ -530,6 +667,8 @@ export const getStatsUtilisateur = async (userId: number): Promise<{ data: Stats
     error: null,
   }
 }
+
+// ─── Utilitaires ──────────────────────────────────────────────────────────────
 
 export const formatRelativeTime = (isoDate: string): string => {
   const diff  = Date.now() - new Date(isoDate).getTime()

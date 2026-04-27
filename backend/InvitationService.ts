@@ -1,74 +1,97 @@
-// backend/InvitationService.ts
 import { supabase } from '../app/frontend/constants/supabase'
 
 export interface InvitationPayload {
-  email:            string
-  defiId:           number
-  defiNom:          string
+  email: string
+  defiId: number
   defiDescription?: string
-  inviteurNom:      string
-  inviteurId:       number
+  inviteurNom: string
+  inviteurId: number
 }
 
-// ─── 1. Email via Edge Function ───────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// 1. EMAIL (Edge Function)
+// ─────────────────────────────────────────────
 export const sendInvitationEmail = async (payload: InvitationPayload) => {
-  console.log("📧 sendInvitationEmail → envoi vers:", payload.email)
+  console.log("📧 sendInvitationEmail →", payload.email)
 
   try {
     const { data, error } = await supabase.functions.invoke('send-invitation', {
       body: {
-        to:              payload.email,
-        defiNom:         payload.defiNom,
+        to: payload.email,
         defiDescription: payload.defiDescription ?? '',
-        inviteurNom:     payload.inviteurNom,
-        defiId:          payload.defiId,
-        appLink:         `myapp://defis/rejoindre/${payload.defiId}`,
+        inviteurNom: payload.inviteurNom,
+        defiId: payload.defiId,
+        appLink: `myapp://defis/rejoindre/${payload.defiId}`,
       },
     })
 
     if (error) {
-      console.error("📧 ❌ Edge Function error:", JSON.stringify(error))
+      console.error("📧 Edge Function error:", error)
       return { data: null, error }
     }
 
-    console.log("📧 ✅ Edge Function response:", JSON.stringify(data))
+    console.log("📧 Email OK")
     return { data, error: null }
 
   } catch (err) {
-    console.error("📧 ❌ Exception:", String(err))
+    console.error("📧 Exception:", err)
     return { data: null, error: err }
   }
 }
 
-// ─── 2. Notification in-app ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// 2. NOTIFICATION IN-APP (FIXED)
+// ─────────────────────────────────────────────
 export const createInvitationNotification = async (payload: InvitationPayload) => {
-  const { data: userFound } = await supabase
+
+  console.log("🔔 createInvitationNotification →", payload.email)
+
+  // 🔍 1. Find user
+  const { data: userFound, error: userError } = await supabase
     .from('users')
     .select('id_user')
     .eq('email', payload.email)
-    .maybeSingle()
+    .single()
 
-  const notifPayload = {
-    id_user_cible: userFound?.id_user ?? null,
-    email_cible:   userFound ? null : payload.email,
-    id_defi:       payload.defiId > 0 ? payload.defiId : null,
-    type:          'invitation_defi',
-    titre:         `🏆 ${payload.inviteurNom} t'invite à un défi !`,
-    message:       `Rejoins le défi « ${payload.defiNom} » et gagne des XP !`,
-    defi_nom:      payload.defiNom, // ✅ AJOUT IMPORTANT
-    lu:            false,
+  console.log("🔍 userFound =", userFound)
+
+  if (userError || !userFound) {
+    console.log("❌ User introuvable → notif annulée")
+    return { error: "User not found" }
   }
 
+  // 📦 2. Create notif
+  const notifPayload = {
+  id_user_cible: userFound.id_user,  // ✅ doit être rempli
+  id_defi: payload.defiId,
+  type: 'invitation_defi',
+  titre: `🏆 ${payload.inviteurNom} t'invite à un défi !`,
+  message: `Rejoins le défi et gagne des XP !`,
+  lu: false,
+}
+
+  console.log("📦 notifPayload =", notifPayload)
+
+  // 💾 3. Insert
   const { error } = await supabase
     .from('notifications')
     .insert(notifPayload)
 
+  if (error) {
+    console.error("❌ insert notif error:", error)
+  } else {
+    console.log("✅ notification créée")
+  }
+
   return { error }
 }
 
-// ─── 3. Combo email + notification ───────────────────────────────────────────
+// ─────────────────────────────────────────────
+// 3. COMBO EMAIL + NOTIF
+// ─────────────────────────────────────────────
 export const inviterAmi = async (payload: InvitationPayload) => {
-  console.log("🚀 inviterAmi START →", payload.email, "| défi:", payload.defiNom)
+
+  console.log("🚀 inviterAmi START →", payload.email)
 
   const [emailResult, notifResult] = await Promise.all([
     sendInvitationEmail(payload),
@@ -78,50 +101,57 @@ export const inviterAmi = async (payload: InvitationPayload) => {
   const emailOk = !emailResult.error
   const notifOk = !notifResult.error
 
-  console.log(`🚀 inviterAmi END → email:${emailOk ? "✅" : "❌"} notif:${notifOk ? "✅" : "❌"}`)
-  if (!emailOk) console.error("🚀 emailErr:", JSON.stringify(emailResult.error))
-  if (!notifOk) console.error("🚀 notifErr:", JSON.stringify(notifResult.error))
+  console.log(
+    `🚀 END → email:${emailOk ? "✅" : "❌"} notif:${notifOk ? "✅" : "❌"}`
+  )
 
-  return { emailOk, notifOk, emailErr: emailResult.error, notifErr: notifResult.error }
+  if (!emailOk) console.error("email error:", emailResult.error)
+  if (!notifOk) console.error("notif error:", notifResult.error)
+
+  return { emailOk, notifOk }
 }
 
-// ─── 4. Lire les notifications d'un user ─────────────────────────────────────
+// ─────────────────────────────────────────────
+// 4. GET NOTIFICATIONS (FIXED)
+// ─────────────────────────────────────────────
 export const getNotifications = async (userId: number) => {
   const { data, error } = await supabase
     .from('notifications')
     .select('*')
     .eq('id_user_cible', userId)
-    .order('created_at', { ascending: false })
+    .order('id_notification', { ascending: false })  // ✅ vrai nom
+
   return { data, error }
 }
 
-// ─── 5. Marquer une notification comme lue ───────────────────────────────────
+// ─────────────────────────────────────────────
+// 5. MARK AS READ
+// ─────────────────────────────────────────────
 export const marquerNotificationLue = async (notifId: number) => {
-  const { data, error } = await supabase
+  return await supabase
     .from('notifications')
     .update({ lu: true })
-    .eq('id', notifId)
-    .select()
-    .single()
-  return { data, error }
+    .eq('id_notification', notifId)  // ✅
 }
 
-// ─── 6. Compter les notifications non lues ───────────────────────────────────
+// ─────────────────────────────────────────────
+// 6. COUNT UNREAD
+// ─────────────────────────────────────────────
 export const countNotifsNonLues = async (userId: number) => {
   const { count, error } = await supabase
     .from('notifications')
     .select('*', { count: 'exact', head: true })
     .eq('id_user_cible', userId)
     .eq('lu', false)
+
   return { count: count ?? 0, error }
 }
 // ─── 7. Accepter une invitation ───────────────────────────────────────────────
+// InvitationService.ts - accepterInvitation
+// La ligne upsert doit utiliser id_notification, pas id
 export const accepterInvitation = async (notifId: number, defiId: number, userId: number) => {
-  if (!notifId || !defiId || !userId) {
-    return { error: "Paramètres invalides" }
-  }
+  if (!notifId || !defiId || !userId) return { error: "Paramètres invalides" }
 
-  // ✅ Ajout participant SEULEMENT ici
   const { error: partError } = await supabase
     .from('defi_participants')
     .upsert({
@@ -133,11 +163,13 @@ export const accepterInvitation = async (notifId: number, defiId: number, userId
       joined_at:       new Date().toISOString(),
     }, { onConflict: 'id_defi,id_user' })
 
-  // ✅ Marquer notif comme lue
   await supabase
     .from('notifications')
     .update({ lu: true })
-    .eq('id', notifId)
+    .eq('id_notification', notifId)  // ✅ bon nom de colonne
+
+  // Log pour debug
+  console.log("✅ participant ajouté defiId=", defiId, "userId=", userId, "err=", partError)
 
   return { error: partError }
 }
@@ -146,9 +178,8 @@ export const accepterInvitation = async (notifId: number, defiId: number, userId
 export const refuserInvitation = async (notifId: number) => {
   const { error } = await supabase
     .from('notifications')
-    .update({ lu: true }) // tu peux ajouter status: 'refused'
-    .eq('id', notifId)
-
+    .update({ lu: true })
+    .eq('id_notification', notifId)  // ✅
   return { error }
 }
 // // // ─── Ajouts à DefisService.ts ─────────────────────────────────────────────────

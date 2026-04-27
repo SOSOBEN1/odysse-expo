@@ -2,9 +2,9 @@ import { useRouter } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import {
-    accepterInvitation,
-    getNotifications,
-    refuserInvitation
+  accepterInvitation,
+  getNotifications,
+  refuserInvitation
 } from '../../../backend/InvitationService'
 import { useUser } from '../constants/UserContext'
 import { COLORS, SHADOWS, SIZES } from '../constants/theme'
@@ -16,37 +16,46 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true)
   const [actionId, setActionId] = useState<number | null>(null)
 
-  useEffect(() => { charger() }, [])
-
-  const charger = async () => {
-    setLoading(true)
-    const { data } = await getNotifications(userId ?? 0)
-    setNotifs(data ?? [])
-    setLoading(false)
-  }
+useEffect(() => {
+  if (userId) charger()
+}, [userId])
+ const charger = async () => {
+  setLoading(true)
+  const { data } = await getNotifications(userId ?? 0)
+  console.log("📋 notifs =", JSON.stringify(data))  // vérifie id_defi ici
+  setNotifs(data ?? [])
+  setLoading(false)
+}
 
   const handleAccepter = async (notif: any) => {
-    setActionId(notif.id)
-    await accepterInvitation(notif.id, notif.id_defi, userId ?? 0)
-    await charger()
-    setActionId(null)
-    // Naviguer vers la page de progression du défi
-    router.push({
-      pathname: '/frontend/screens/ProgressionDefis',
-      params: { defiId: notif.id_defi, defiNom: notif.defi_nom }
-    })
-  }
+  setActionId(notif.id_notification)
+  
+  console.log("🎯 notif complète =", JSON.stringify(notif)) // voir tous les champs
+  
+  await accepterInvitation(
+    notif.id_notification,  // ✅
+    notif.id_defi,          // ✅ vérifie que c'est pas undefined
+    userId ?? 0
+  )
+  await charger()
+  setActionId(null)
+  
+  router.push({
+    pathname: '/frontend/screens/ProgressionDefis',
+    params: { defiId: notif.id_defi, defiNom: notif.titre }
+  })
+}
 
   const handleRefuser = async (notif: any) => {
-    setActionId(notif.id)
-    await refuserInvitation(notif.id)
+    setActionId(notif.id_notification)
+await refuserInvitation(notif.id_notification)
     await charger()
     setActionId(null)
   }
 
   const renderNotif = ({ item }: { item: any }) => {
     const isInvitation = item.type === 'invitation_defi'
-    const isLoading    = actionId === item.id
+    const isLoading    = actionId === item.id_notification
 
     return (
       <View style={[styles.card, item.lu && styles.cardLue]}>
@@ -84,7 +93,7 @@ export default function NotificationsScreen() {
   return (
     <FlatList
       data={notifs}
-      keyExtractor={item => String(item.id)}
+      keyExtractor={item => String(item.id_notification)}
       renderItem={renderNotif}
       contentContainerStyle={{ padding: SIZES.padding, gap: 12 }}
       ListEmptyComponent={

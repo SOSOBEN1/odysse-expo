@@ -18,6 +18,7 @@ import {
 import Svg, { Circle, Ellipse, Path } from "react-native-svg";
 import CreateMissionModal from "../components/CreateMissionModal";
 import HibouGuide from "../components/ui/Hibou";
+import { SHADOWS } from "../constants/theme";
 
 const { width } = Dimensions.get("window");
 

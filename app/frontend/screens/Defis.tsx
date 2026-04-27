@@ -45,6 +45,7 @@ interface Defi {
   date_fin:         string | null;
   objectif_minutes: number;
   progression:      number;
+  isInvite: boolean
 }
 
 interface MissionLocal {
@@ -189,6 +190,11 @@ const DefiCard = ({
       <TouchableOpacity onPress={() => onPress(defi)} activeOpacity={0.92}>
         <View style={styles.cardTagRow}>
           <StatutPill statut={defi.statut} />
+           {defi.isInvite && (
+  <View style={styles.inviteBadge}>
+    <Text style={styles.inviteBadgeText}>Invité</Text>
+  </View>
+)}
           {defi.date_fin && (
             <Text style={styles.cardDateLabel}>
               Fin : {new Date(defi.date_fin).toLocaleDateString("fr-FR")}
@@ -966,27 +972,28 @@ export default function DefiScreen() {
     const { data, error } = await getDefisByStatut(userId ?? 1, statutMap[activeTab]);
     if (!error && data) {
       const enriched: Defi[] = await Promise.all(
-        data.map(async (d: any) => {
-          const [progression, participants] = await Promise.all([
-            calculerProgression(d.id_defi),
-            getNbParticipants(d.id_defi),
-          ]);
-          return {
-            id:               d.id_defi,
-            title:            d.nom ?? "",
-            subtitle:         d.description ?? "",
-            xp:               d.xp ?? 400,
-            duration:         formatDuration(d.date_debut, d.date_fin),
-            participants,
-            icon:             (d.icon as IconKey) ?? "rocket",
-            statut:           d.statut ?? "actif",
-            date_debut:       d.date_debut ?? null,
-            date_fin:         d.date_fin   ?? null,
-            objectif_minutes: d.objectif_minutes ?? 120,
-            progression,
-          };
-        })
-      );
+  data.map(async (d: any) => {
+    const [progression, participants] = await Promise.all([
+      calculerProgression(d.id_defi),
+      getNbParticipants(d.id_defi),
+    ])
+    return {
+      id:               d.id_defi,
+      title:            d.nom ?? "",
+      subtitle:         d.description ?? "",
+      xp:               d.xp ?? 400,
+      duration:         formatDuration(d.date_debut, d.date_fin),
+      participants,
+      icon:             (d.icon as IconKey) ?? "rocket",
+      statut:           d.statut ?? "actif",
+      date_debut:       d.date_debut ?? null,
+      date_fin:         d.date_fin   ?? null,
+      objectif_minutes: d.objectif_minutes ?? 120,
+      progression,
+      isInvite:         d.id_user !== userId,  // ✅ pas le créateur = invité
+    }
+  })
+);
       setDefis(enriched);
     } else {
       setDefis([]);
@@ -1345,4 +1352,19 @@ const styles = StyleSheet.create({
   ctaBtn:           { width: "100%", backgroundColor: COLORS.primary, borderRadius: SIZES.radiusFull,
                       paddingVertical: 16, alignItems: "center", marginTop: 10, ...SHADOWS.purple },
   ctaBtnText:       { color: COLORS.white, fontSize: 16, fontWeight: "800", letterSpacing: 0.4 },
+// Dans styles = StyleSheet.create({...})
+inviteBadge: {
+  borderRadius: SIZES.radiusFull,
+  paddingHorizontal: 12,
+  paddingVertical: 4,
+  backgroundColor: `${COLORS.primary}15`,
+  borderWidth: 1.5,
+  borderColor: `${COLORS.primary}40`,
+},
+inviteBadgeText: {
+  color: COLORS.primary,
+  fontSize: 10,
+  fontWeight: '800',
+  letterSpacing: 0.3,
+},
 });

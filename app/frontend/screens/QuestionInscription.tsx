@@ -6,10 +6,10 @@ import BackButton from "../components/BackButton";
 import QuestionChoix from "../components/QuestionChoix";
 import QuestionYesNo from "../components/QuestionYesNo";
 import WaveBackground from "../components/waveBackground";
+import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import type { Answer, Question } from "../utils/statsCalculator";
 import { computeStatsFromAnswers } from "../utils/statsCalculator";
-
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function QuestionInscriptionScreen() {

@@ -183,25 +183,43 @@ export const getDefiDetail = async (defiId: number) => {
   return { data, error }
 }
 
-export const getParticipants = async (defiId: number) => {
-  const { data, error } = await supabase
+export const getParticipants = async (id_defi: number) => {
+  
+  // Étape 1 : récupérer les participants sans join
+  const { data: parts, error } = await supabase
     .from('defi_participants')
-    .select('id_user, minutes_etudies, score, xp_total, users ( nom, prenom, email, avatar_emoji, avatar_color )')
-    .eq('id_defi', defiId)
+    .select('id_user, minutes_etudies, xp_total, score')
+    .eq('id_defi', id_defi)
 
-  if (error) return { data: null, error }
+  console.log("👥 parts brut =", JSON.stringify(parts), "err =", error)
 
-  const mapped: ParticipantDB[] = (data ?? []).map((row: any) => ({
-    id_user:         row.id_user,
-    nom:             row.users?.nom          ?? 'Inconnu',
-    prenom:          row.users?.prenom       ?? '',
-    email:           row.users?.email,
-    minutes_etudies: row.minutes_etudies     ?? 0,
-    avatar_color:    row.users?.avatar_color ?? '#CE93D8',
-    avatar_emoji:    row.users?.avatar_emoji ?? '',
-    score:           row.score               ?? 0,
-  }))
+  if (!parts || parts.length === 0) return { data: [], error }
 
+  // Étape 2 : récupérer les users séparément
+  const userIds = parts.map((p: any) => p.id_user)
+
+  const { data: users } = await supabase
+    .from('users')
+    .select('id_user, nom, prenom')
+    .in('id_user', userIds)
+
+  console.log("👤 users =", JSON.stringify(users))
+
+  // Étape 3 : merger manuellement
+  const mapped = parts.map((p: any, i: number) => {
+    const user = (users ?? []).find((u: any) => u.id_user === p.id_user)
+    return {
+      id_user:         p.id_user,
+      nom:             user?.nom    ?? 'Inconnu',
+      prenom:          user?.prenom ?? '',
+      minutes_etudies: p.minutes_etudies ?? 0,
+      xp_total:        p.xp_total ?? 0,
+      score:           p.score    ?? 0,
+      avatar_color:    ['#E8A4C8','#B39DDB','#F48FB1','#90CAF9','#A5D6A7'][i % 5],
+    }
+  })
+
+  console.log("✅ mapped =", JSON.stringify(mapped))
   return { data: mapped, error: null }
 }
 

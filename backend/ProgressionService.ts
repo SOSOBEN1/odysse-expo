@@ -24,7 +24,6 @@ export interface MissionDB {
   difficulte?:        number
   priorite?:          number
   type_mission?:      string
-  // ❌ PAS de statut — il est dans mission_validation
 }
 
 export interface DefiDetailDB {
@@ -183,15 +182,16 @@ export const getDefiDetail = async (defiId: number) => {
   return { data, error }
 }
 
+// ─── GET PARTICIPANTS (sans join pour éviter les erreurs RLS) ─────────────────
 export const getParticipants = async (id_defi: number) => {
-  
+
   // Étape 1 : récupérer les participants sans join
   const { data: parts, error } = await supabase
     .from('defi_participants')
     .select('id_user, minutes_etudies, xp_total, score')
     .eq('id_defi', id_defi)
 
-  console.log("👥 parts brut =", JSON.stringify(parts), "err =", error)
+  console.log('👥 parts brut =', JSON.stringify(parts), 'err =', error)
 
   if (!parts || parts.length === 0) return { data: [], error }
 
@@ -203,8 +203,6 @@ export const getParticipants = async (id_defi: number) => {
     .select('id_user, nom, prenom')
     .in('id_user', userIds)
 
-  console.log("👤 users =", JSON.stringify(users))
-
   // Étape 3 : merger manuellement
   const mapped = parts.map((p: any, i: number) => {
     const user = (users ?? []).find((u: any) => u.id_user === p.id_user)
@@ -215,18 +213,17 @@ export const getParticipants = async (id_defi: number) => {
       minutes_etudies: p.minutes_etudies ?? 0,
       xp_total:        p.xp_total ?? 0,
       score:           p.score    ?? 0,
-      avatar_color:    ['#E8A4C8','#B39DDB','#F48FB1','#90CAF9','#A5D6A7'][i % 5],
+      avatar_color:    ['#E8A4C8', '#B39DDB', '#F48FB1', '#90CAF9', '#A5D6A7'][i % 5],
     }
   })
 
-  console.log("✅ mapped =", JSON.stringify(mapped))
+  console.log('✅ participants mapped =', JSON.stringify(mapped))
   return { data: mapped, error: null }
 }
 
 export const getMissions = async (defiId: number) => {
   const { data, error } = await supabase
     .from('mission')
-    // ✅ statut retiré du select
     .select('id_mission, id_defi, titre, description, duree_min, difficulte, priorite, progression, id_user_accompli, xp_gain, users ( nom )')
     .eq('id_defi', defiId)
     .order('id_mission', { ascending: true })
@@ -252,7 +249,6 @@ export const getMissions = async (defiId: number) => {
 }
 
 export const getMissionsCompleteesPar = async (userId: number, defiId: number) => {
-  // D'abord récupère les ids des missions du défi
   const { data: missionIds } = await supabase
     .from('mission')
     .select('id_mission')
@@ -262,7 +258,6 @@ export const getMissionsCompleteesPar = async (userId: number, defiId: number) =
 
   const ids = missionIds.map((m: any) => m.id_mission)
 
-  // ✅ filtre direct par id_mission, sélectionne statut
   const { data, error } = await supabase
     .from('mission_validation')
     .select('id_mission, xp_obtenu, date_fin, statut')
@@ -273,6 +268,7 @@ export const getMissionsCompleteesPar = async (userId: number, defiId: number) =
   return { data: data ?? [], error: null }
 }
 
+// ─── COCHER MISSION (version corrigée) ───────────────────────────────────────
 export const cocherMission = async (params: {
   missionId:        number
   userId:           number
@@ -291,6 +287,7 @@ export const cocherMission = async (params: {
     .select('id_validation')
     .eq('id_user', userId)
     .eq('id_mission', missionId)
+    .eq('statut', 'done')
     .maybeSingle()
 
   if (existing) return { error: { message: 'Mission déjà cochée' }, alreadyDone: true }
@@ -302,7 +299,14 @@ export const cocherMission = async (params: {
   const xp_gagne = calculerXPMission(mission.xp_gain ?? 10, mission.difficulte ?? 1, mission.priorite ?? 1)
   const now      = new Date().toISOString()
 
-  // 4. Insérer dans mission_validation avec statut 'done'
+  // 4. ✅ Corriger id_defi si null dans la table mission
+  await supabase
+    .from('mission')
+    .update({ id_defi: defiId })
+    .eq('id_mission', missionId)
+    .is('id_defi', null)
+
+  // 5. Insérer dans mission_validation avec statut 'done'
   const { error: insertErr } = await supabase
     .from('mission_validation')
     .insert({
@@ -311,47 +315,62 @@ export const cocherMission = async (params: {
       date_debut: now,
       date_fin:   now,
       xp_obtenu:  xp_gagne,
-      statut:     'done',  // ✅ statut dans mission_validation
+      statut:     'done',
     })
 
   if (insertErr) return { error: insertErr }
 
-  // 5. Marquer id_user_accompli dans mission (PAS de statut)
+  // 6. Marquer id_user_accompli dans mission
   await supabase
     .from('mission')
     .update({ id_user_accompli: userId })
     .eq('id_mission', missionId)
 
-  // 6. Mettre à jour defi_participants
-  const { data: current } = await supabase
-    .from('defi_participants')
-    .select('minutes_etudies, xp_total')
+  // 7. ✅ Recalcul complet depuis mission_validation pour defi_participants
+  //    On utilise defiId directement (pas mission.id_defi qui peut être null)
+// 7. ✅ Recalcul complet depuis mission_validation pour defi_participants
+  const { data: missionsDefi } = await supabase
+    .from('mission')
+    .select('id_mission, duree_min')
     .eq('id_defi', defiId)
+
+  console.log('📋 missionsDefi =', JSON.stringify(missionsDefi))
+
+  const missionIdsDefi = (missionsDefi ?? []).map((m: any) => m.id_mission)
+
+  console.log('📋 missionIdsDefi =', JSON.stringify(missionIdsDefi))
+
+  const { data: validationsDone } = await supabase
+    .from('mission_validation')
+    .select('id_mission, xp_obtenu')
     .eq('id_user', userId)
-    .maybeSingle()
+    .eq('statut', 'done')
+    .in('id_mission', missionIdsDefi.length > 0 ? missionIdsDefi : [0])
 
-  if (current) {
-    await supabase
-      .from('defi_participants')
-      .update({
-        minutes_etudies: (current.minutes_etudies ?? 0) + (mission.duree_min ?? 0),
-        xp_total:        (current.xp_total        ?? 0) + xp_gagne,
-      })
-      .eq('id_defi', defiId)
-      .eq('id_user', userId)
-  } else {
-    await supabase
-      .from('defi_participants')
-      .insert({
-        id_defi:         defiId,
-        id_user:         userId,
-        minutes_etudies: mission.duree_min ?? 0,
-        xp_total:        xp_gagne,
-        score:           0,
-      })
-  }
+  console.log('📋 validationsDone =', JSON.stringify(validationsDone))
 
-  // 7. Calculer nouvelles stats
+  const totalMinutes = (missionsDefi ?? [])
+    .filter((m: any) => (validationsDone ?? []).some((v: any) => v.id_mission === m.id_mission))
+    .reduce((s: number, m: any) => s + (m.duree_min ?? 0), 0)
+
+  const totalXP = (validationsDone ?? [])
+    .reduce((s: number, v: any) => s + (v.xp_obtenu ?? 0), 0)
+
+  console.log('📊 totalMinutes =', totalMinutes, 'totalXP =', totalXP)
+
+  const { error: upsertErr } = await supabase
+    .from('defi_participants')
+    .upsert({
+      id_defi:         defiId,
+      id_user:         userId,
+      minutes_etudies: totalMinutes,
+      xp_total:        totalXP,
+      score:           0,
+      joined_at:       now,
+    }, { onConflict: 'id_defi,id_user' })
+
+  console.log('💾 upsert err =', upsertErr)
+  // 8. Calculer nouvelles stats
   const nouvellesStats = calculerNouvellesStats(
     statsActuelles,
     {
@@ -364,7 +383,7 @@ export const cocherMission = async (params: {
     statsCibles
   )
 
-  // 8. Sauvegarder stats user
+  // 9. Sauvegarder stats user
   await supabase.from('users').update({ energie: nouvellesStats.energie }).eq('id_user', userId)
 
   const { data: psExist } = await supabase
@@ -393,7 +412,7 @@ export const cocherMission = async (params: {
       })
   }
 
-  // 9. Historiser
+  // 10. Historiser
   const bonusLabel = statsCibles.length > 0 ? ` [Bonus ×1.5 : ${statsCibles.join(', ')}]` : ''
   await supabase
     .from('stat_history')

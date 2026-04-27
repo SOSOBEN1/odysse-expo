@@ -577,7 +577,7 @@ export default function ProgressionDefiScreen() {
   const [classement,     setClassement]     = useState<ClassementItem[]>([]);
   const [mesCompletions, setMesCompletions] = useState<Set<number>>(new Set());
   const [statsCibles,    setStatsCibles]    = useState<StatCibleKey[]>([]);
-
+const [selectedMissionTime, setSelectedMissionTime] = useState<MissionItem | null>(null);
   const headerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -591,16 +591,25 @@ export default function ProgressionDefiScreen() {
       chargerDefi(),
       chargerMissionsEtCompletions(),
       chargerParticipants(),
-      chargerClassementAutomatique(),
       chargerStatsCibles(),
     ]);
+     await chargerClassementAutomatique()
     setLoading(false);
   };
 
   const chargerDefi = async () => {
-    const { data } = await getDefiDetail(id_defi);
-    if (data) setDefiInfo(data);
-  };
+  const { data } = await getDefiDetail(id_defi);
+  if (data) {
+    setDefiInfo(data);
+    // ✅ Si le défi est terminé → aller au classement final
+    if (data.statut === "termine") {
+      router.replace({
+        pathname: "/frontend/screens/ClassementScreen",
+        params: { defiId: String(id_defi), defiNom: data.nom },
+      });
+    }
+  }
+};
 
   // Charger les stats cibles du défi
   const chargerStatsCibles = async () => {
@@ -617,12 +626,14 @@ export default function ProgressionDefiScreen() {
   const doneSet = new Set<number>();
   const xpMap   = new Map<number, number>();
   (compData ?? []).forEach((c: any) => {
-    // ✅ statut est dans mission_validation
     if (c.statut === 'done') {
       doneSet.add(c.id_mission);
       xpMap.set(c.id_mission, c.xp_obtenu ?? 0);
     }
   });
+
+  // ✅ AJOUTE CETTE LIGNE — c'était le bug
+  setMesCompletions(doneSet);
 
   if (missData) {
     setMissions(missData.map((m: any) => ({
@@ -630,7 +641,6 @@ export default function ProgressionDefiScreen() {
       title:        m.titre       ?? 'Mission',
       description:  m.description ?? '',
       duree:        m.duree_min   ?? 0,
-      // ✅ statut déterminé par mission_validation
       statut:       doneSet.has(m.id_mission) ? 'completed' : 'pending',
       progression:  m.progression ?? 0,
       xp_base:      m.xp_gain     ?? 10,
@@ -643,70 +653,62 @@ export default function ProgressionDefiScreen() {
   }
 };
 
-  const chargerParticipants = async () => {
-  const { data } = await getParticipants(id_defi);
-  if (!data) return;
-
-  setParticipants(
-    data.sort((a, b) => (b.minutes_etudies ?? 0) - (a.minutes_etudies ?? 0))
-  );
-};
+ const chargerParticipants = async () => {
+  const { data } = await getParticipants(id_defi)
+  console.log(" participants =", JSON.stringify(data))
+  if (!data) return
+  setParticipants(data.sort((a, b) => (b.minutes_etudies ?? 0) - (a.minutes_etudies ?? 0)))
+}
 
   const chargerClassementAutomatique = async () => {
-    const { data: parts } = await supabase
-      .from("defi_participants")
-      .select("id_user, xp_total, score, users(nom, prenom)")
-      .eq("id_defi", id_defi);
+  // ✅ Charger le défi d'abord, pas en parallèle
+  const { data: defi } = await getDefiDetail(id_defi)
+  
+  const { data: parts } = await supabase
+    .from("defi_participants")
+    .select("id_user, xp_total, score, users(nom, prenom)")
+    .eq("id_defi", id_defi)
 
-    if (!parts || parts.length === 0) {
-      if (userId) {
-        const { data: meData } = await supabase.from("users").select("nom, prenom").eq("id_user", userId).single();
-        if (meData) setClassement([{ rang: 1, id_user: userId, nom: `${meData.prenom ?? ""} ${meData.nom ?? ""}`.trim(), score_final: 0, xp_total: 0 }]);
+  if (!parts || parts.length === 0) { /* ... */ return }
+
+  const scores = await Promise.all(
+    parts.map(async (p: any) => {
+      const { data: validations } = await supabase
+        .from("mission_validation")
+        .select("xp_obtenu, date_fin, mission!inner(difficulte, id_defi)")
+        .eq("id_user", p.id_user)
+        .eq("mission.id_defi", id_defi)
+        .order("date_fin", { ascending: false }) // dernière mission en [0]
+
+      const xp_total    = Math.min((validations ?? []).reduce((s: number, v: any) => s + (v.xp_obtenu ?? 0), 0), 500)
+      const difficultes = (validations ?? []).map((v: any) => v.mission?.difficulte ?? 1)
+      const diff_moy    = difficultes.length > 0 ? difficultes.reduce((a: number, b: number) => a + b, 0) / difficultes.length : 1
+
+      let bonus_rapidite = 0
+      // ✅ defi est garanti non-null ici
+      if (defi?.date_fin && validations && validations.length > 0) {
+        const fin_defi   = new Date(defi.date_fin).getTime()
+        const completion = new Date(validations[0].date_fin).getTime()
+        bonus_rapidite   = Math.max(0, (fin_defi - completion) / (1000 * 60 * 60)) * 0.5
       }
-      return;
-    }
 
-    const defi = defiInfo ?? (await getDefiDetail(id_defi)).data;
-    const scores = await Promise.all(
-      parts.map(async (p: any) => {
-        const { data: validations } = await supabase
-          .from("mission_validation")
-          .select("xp_obtenu, date_fin, mission!inner(difficulte, id_defi)")
-          .eq("id_user", p.id_user)
-          .eq("mission.id_defi", id_defi)
-          .order("date_fin", { ascending: false });
+      const score_final = Math.round(xp_total + diff_moy * 10 + bonus_rapidite)
+      const nom         = p.users ? `${(p.users as any).prenom ?? ""} ${(p.users as any).nom ?? ""}`.trim() : "Inconnu"
 
-        const xp_missions  = (validations ?? []).map((v: any) => v.xp_obtenu ?? 0);
-        const difficultes  = (validations ?? []).map((v: any) => v.mission?.difficulte ?? 1);
-        const xp_total     = Math.min(xp_missions.reduce((s: number, x: number) => s + x, 0), 500);
-        const diff_moy     = difficultes.length > 0 ? difficultes.reduce((s: number, d: number) => s + d, 0) / difficultes.length : 1;
+      await supabase.from("defi_participants")
+        .update({ score: score_final, xp_total })
+        .eq("id_defi", id_defi).eq("id_user", p.id_user)
 
-        let bonus_rapidite = 0;
-        if (defi?.date_debut && defi?.date_fin && validations && validations.length > 0) {
-          const fin_defi   = new Date(defi.date_fin).getTime();
-          const completion = new Date(validations[0].date_fin).getTime();
-          bonus_rapidite   = Math.max(0, (fin_defi - completion) / (1000 * 60 * 60)) * 0.5;
-        }
+      return { id_user: p.id_user, nom, xp_total, score_final }
+    })
+  )
 
-        const score_final = Math.round(xp_total + diff_moy * 10 + bonus_rapidite);
-        const nom         = p.users ? `${(p.users as any).prenom ?? ""} ${(p.users as any).nom ?? ""}`.trim() : "Inconnu";
+  const sorted = [...scores]
+    .sort((a, b) => b.score_final - a.score_final)
+    .map((s, i) => ({ ...s, rang: i + 1 }))
 
-        await supabase.from("defi_participants").update({ score: score_final, xp_total }).eq("id_defi", id_defi).eq("id_user", p.id_user);
-
-        return { id_user: p.id_user, nom, xp_total, score_final };
-      })
-    );
-
-    const sorted = [...scores].sort((a, b) => b.score_final - a.score_final).map((s, i) => ({ ...s, rang: i + 1 }));
-
-    const estPresent = sorted.some(s => s.id_user === userId);
-    if (!estPresent && userId) {
-      const { data: meData } = await supabase.from("users").select("nom, prenom").eq("id_user", userId).single();
-      sorted.push({ rang: sorted.length + 1, id_user: userId, nom: meData ? `${meData.prenom ?? ""} ${meData.nom ?? ""}`.trim() : "Moi", xp_total: 0, score_final: 0 });
-    }
-
-    setClassement(sorted);
-  };
+  setClassement(sorted)
+}
 
   // ── Cocher une mission ────────────────────────────────────────────────────
 
@@ -818,7 +820,7 @@ export default function ProgressionDefiScreen() {
 
             {/* Carte progression groupe */}
             <View style={[styles.progressCard, SHADOWS.light]}>
-              <View style={styles.progressHeader}>
+              {/* <View style={styles.progressHeader}>
                 <View>
                   <Text style={styles.progressLabel}>Progression du groupe</Text>
                   <Text style={styles.progressValue}>
@@ -829,15 +831,15 @@ export default function ProgressionDefiScreen() {
                 <View style={[styles.pctBadge, progressRatio >= 1 && styles.pctBadgeDone]}>
                   <Text style={styles.pctText}>{Math.round(progressRatio * 100)}%</Text>
                 </View>
-              </View>
-
-              <View style={styles.barTrack}>
+              </View> */}
+              {/* <Text style={styles.progressLabel}>Participants</Text> */}
+              {/* <View style={styles.barTrack}>
                 <LinearGradient
                   colors={progressRatio >= 1 ? ["#22c55e", "#4ade80"] : ["#664e97", "#906ce6", "#c182de"]}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={[styles.barFill, { width: `${Math.round(progressRatio * 100)}%` }]}
                 />
-              </View>
+              </View> */}
 
               <View style={styles.myProgressRow}>
                 <Text style={styles.myProgressLabel}>Ma progression</Text>
@@ -875,11 +877,11 @@ export default function ProgressionDefiScreen() {
                 <TouchableOpacity style={styles.addTimeBtn} onPress={() => setShowAddTime(true)} activeOpacity={0.85}>
                   <LinearGradient colors={[COLORS.primary, COLORS.secondary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.btnGrad}>
                     <Ionicons name="add-circle-outline" size={15} color="#fff" style={{ marginRight: 5 }} />
-                    <Text style={styles.btnText}>+ Temps</Text>
+                    <Text style={styles.btnText}>Temps</Text>
                   </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.inviteBtn} onPress={() => setShowInviter(true)} activeOpacity={0.85}>
-                  <Text style={styles.inviteBtnText}>👥 Inviter</Text>
+                  <Text style={styles.inviteBtnText}>Inviter</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -889,7 +891,7 @@ export default function ProgressionDefiScreen() {
               {(["missions", "classement"] as TabType[]).map(tab => (
                 <TouchableOpacity key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => setActiveTab(tab)}>
                   <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                    {tab === "missions" ? "📋 Missions" : "🏆 Classement"}
+                    {tab === "missions" ? "Missions" : "🏆 Classement"}
                   </Text>
                 </TouchableOpacity>
               ))}

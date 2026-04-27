@@ -67,6 +67,21 @@ export const addDefi = async (defi: DefiDB) => {
     .insert(defi)
     .select()
     .single()
+
+  // ✅ Ajouter le créateur comme participant automatiquement
+  if (data && defi.id_user) {
+    await supabase
+      .from('defi_participants')
+      .insert({
+        id_defi:         data.id_defi,
+        id_user:         defi.id_user,
+        minutes_etudies: 0,
+        xp_total:        0,
+        score:           0,
+        joined_at:       new Date().toISOString(),
+      })
+  }
+
   return { data, error }
 }
 

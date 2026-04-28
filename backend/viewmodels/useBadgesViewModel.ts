@@ -3,7 +3,7 @@ import {
   Badge,
   checkAndGrantBadges,
   getBadgesForUser,
-} from "../../app/frontend/repositories/badgeRepository";
+} from "../models/badgeRepository";
 
 // ── State interne ─────────────────────────────────────────────
 interface BadgesState {

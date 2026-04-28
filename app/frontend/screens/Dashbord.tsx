@@ -18,73 +18,42 @@ import { useUser } from "../constants/UserContext";
 import { supabase } from "../constants/supabase";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 
-// 🔥 AJOUT en haut (après imports)
+// ✅ Import du hook périodique
+import { usePeriodicQuestionnaire } from "../hooks/usePeriodicQuestionnaire";
+
 function computeDerivedStats(base: any) {
   const clamp = (v: number) => Math.min(100, Math.max(0, v));
-
   return {
-    concentration: clamp((base.energie * 0.5 + base.connaissance * 0.5)),
-    serenite: clamp(100 - base.stress),
-    discipline: clamp((base.organisation * 0.7 + base.connaissance * 0.3)),
+    concentration: clamp(base.energie * 0.5 + base.connaissance * 0.5),
+    serenite:      clamp(100 - base.stress),
+    discipline:    clamp(base.organisation * 0.7 + base.connaissance * 0.3),
   };
 }
 
-// 🔥 REMPLACE ton hook useProgressStats
 function useAllStats() {
   const { userId } = useUser();
-
   const [stats, setStats] = useState({
-    energie: 50,
-    stress: 50,
-    connaissance: 50,
-    organisation: 50,
+    energie: 50, stress: 50, connaissance: 50, organisation: 50,
   });
 
   useEffect(() => {
     if (!userId) return;
-
     const load = async () => {
       const { data, error } = await supabase
         .from("player_stats")
         .select("energie, stress, connaissance, organisation")
         .eq("id_user", userId)
         .maybeSingle();
-
       if (!error && data) {
         setStats({
-          energie: data.energie ?? 0,
-          stress: data.stress ?? 0,
+          energie:      data.energie      ?? 0,
+          stress:       data.stress       ?? 0,
           connaissance: data.connaissance ?? 0,
           organisation: data.organisation ?? 0,
         });
       }
     };
-
     load();
-  }, [userId]);
-
-  return stats;
-}
-
-// ─── Hook : lire concentration, sérénité, discipline depuis Supabase ──────────
-function useProgressStats() {
-  const { userId } = useUser();
-  const [stats, setStats] = useState({
-    concentration: 0,
-    serenite:      0,
-    discipline:    0,
-  });
-
-  useEffect(() => {
-    if (!userId) return;
-    supabase
-      .from("player_stats")
-      .select("concentration, serenite, discipline")
-      .eq("id_user", userId)   // ← "id_user" selon ton schéma
-      .single()
-      .then(({ data }) => {
-        if (data) setStats(data);
-      });
   }, [userId]);
 
   return stats;
@@ -123,16 +92,11 @@ function getLevelTitle(niveau: number): string {
   return "Maître légendaire";
 }
 
-// ─── Hook données dashboard ───────────────────────────────────────────────────
 function useDashboardUser(): DashboardUser {
   const { userId, username: ctxUsername } = useUser();
-
   const [user, setUser] = useState<DashboardUser>({
     userName: ctxUsername || "Joueur",
-    level:    1,
-    xp:       0,
-    maxXp:    500,
-    coins:    0,
+    level: 1, xp: 0, maxXp: 500, coins: 0,
   });
 
   useEffect(() => {
@@ -140,22 +104,19 @@ function useDashboardUser(): DashboardUser {
     const fetchUser = async () => {
       const { data, error } = await supabase
         .from("users")
-        .select("prenom, nom, username, xp, coins, niveau")
+.select("prenom, nom, username, xp, gold, id_level")
         .eq("id_user", userId)
         .single();
-
       if (error || !data) return;
-
-      const niveau = data.niveau ?? 1;
+     const niveau = data.id_level ?? 1;
       const xp     = data.xp    ?? 0;
       const maxXp  = niveau * 500;
-
       setUser({
         userName: data.username ?? data.prenom ?? data.nom ?? ctxUsername ?? "Joueur",
         level:    niveau,
         xp:       xp % maxXp,
         maxXp,
-        coins:    data.coins ?? 0,
+        coins:    data.gold ?? 0,
       });
     };
     fetchUser();
@@ -227,34 +188,34 @@ const DashboardHeader = () => {
 };
 
 const headerStyles = StyleSheet.create({
-  container:    { paddingTop: 30, paddingHorizontal: SIZES.padding, paddingBottom: 20 },
-  topRow:       { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
-  coinsBadge:   { flexDirection: "row", alignItems: "center", backgroundColor: "#ede9fe", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, gap: 6, ...SHADOWS.light },
-  coinIcon:     { fontSize: 16 },
-  coinsText:    { color: COLORS.primary, fontWeight: "700" },
-  headerIcons:  { flexDirection: "row", gap: 8 },
-  profileRow:   { flexDirection: "row", gap: 16 },
-  avatarWrapper:{ width: 80, height: 100, borderRadius: 20, overflow: "hidden", backgroundColor: "#ede9fe", position: "relative", ...SHADOWS.medium },
+  container:         { paddingTop: 30, paddingHorizontal: SIZES.padding, paddingBottom: 20 },
+  topRow:            { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
+  coinsBadge:        { flexDirection: "row", alignItems: "center", backgroundColor: "#ede9fe", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, gap: 6, ...SHADOWS.light },
+  coinIcon:          { fontSize: 16 },
+  coinsText:         { color: COLORS.primary, fontWeight: "700" },
+  headerIcons:       { flexDirection: "row", gap: 8 },
+  profileRow:        { flexDirection: "row", gap: 16 },
+  avatarWrapper:     { width: 80, height: 100, borderRadius: 20, overflow: "hidden", backgroundColor: "#ede9fe", position: "relative", ...SHADOWS.medium },
   avatarPlaceholder: { flex: 1, justifyContent: "center", alignItems: "center" },
-  avatarEmoji:  { fontSize: 40 },
-  levelBadge:   { position: "absolute", bottom: 4, alignSelf: "center", backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
-  levelText:    { color: "#fff", fontSize: 10, fontWeight: "700" },
-  infoBlock:    { flex: 1 },
-  greetingRow:  { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  greeting:     { fontSize: 14, color: "#6b7280", flex: 1 },
-  greetingName: { color: COLORS.primary, fontWeight: "800", fontSize: 15 },
-  timeIcon:     { fontSize: 20 },
-  levelTitle:   { fontSize: 11, color: "#9b87c9", fontWeight: "600", marginTop: 2 },
-  xpBarBg:      { height: 8, backgroundColor: "#ddd6fe", borderRadius: 10, marginTop: 8, overflow: "hidden" },
-  xpBarFill:    { height: "100%", borderRadius: 10 },
-  xpText:       { fontSize: 11, color: "#9ca3af", marginTop: 4 },
+  avatarEmoji:       { fontSize: 40 },
+  levelBadge:        { position: "absolute", bottom: 4, alignSelf: "center", backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
+  levelText:         { color: "#fff", fontSize: 10, fontWeight: "700" },
+  infoBlock:         { flex: 1 },
+  greetingRow:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  greeting:          { fontSize: 14, color: "#6b7280", flex: 1 },
+  greetingName:      { color: COLORS.primary, fontWeight: "800", fontSize: 15 },
+  timeIcon:          { fontSize: 20 },
+  levelTitle:        { fontSize: 11, color: "#9b87c9", fontWeight: "600", marginTop: 2 },
+  xpBarBg:           { height: 8, backgroundColor: "#ddd6fe", borderRadius: 10, marginTop: 8, overflow: "hidden" },
+  xpBarFill:         { height: "100%", borderRadius: 10 },
+  xpText:            { fontSize: 11, color: "#9ca3af", marginTop: 4 },
 });
 
 // ─── CircularProgress ─────────────────────────────────────────────────────────
 const CircularProgress = ({ percent, color, size = 70, strokeWidth = 7 }: { percent: number; color: string; size?: number; strokeWidth?: number }) => {
-  const radius      = (size - strokeWidth) / 2;
+  const radius       = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress    = circumference * (1 - percent / 100);
+  const progress     = circumference * (1 - percent / 100);
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <Circle cx={size/2} cy={size/2} r={radius} stroke="#EEE8F8" strokeWidth={strokeWidth} fill="none" />
@@ -269,19 +230,12 @@ const CircularProgress = ({ percent, color, size = 70, strokeWidth = 7 }: { perc
 };
 
 // ─── StatsCard ────────────────────────────────────────────────────────────────
-const STATS: Stat[] = [
-  { label: "Énergie",      percent: 65, color: "#F5A623", emoji: "⚡" },
-  { label: "Stress",       percent: 45, color: "#E84040", emoji: "😰" },
-  { label: "Connaissance", percent: 65, color: "#4A90E2", emoji: "📚" },
-  { label: "Organisation", percent: 65, color: "#4CAF50", emoji: "🗂️" },
-];
-
 const StatsCard = () => {
   const stats = useAllStats();
 
   const STATS: Stat[] = [
-    { label: "Énergie", percent: stats.energie ?? 0, color: "#F5A623", emoji: "⚡" },
-    { label: "Stress", percent: stats.stress ?? 0, color: "#E84040", emoji: "😰" },
+    { label: "Énergie",      percent: stats.energie      ?? 0, color: "#F5A623", emoji: "⚡" },
+    { label: "Stress",       percent: stats.stress       ?? 0, color: "#E84040", emoji: "😰" },
     { label: "Connaissance", percent: stats.connaissance ?? 0, color: "#4A90E2", emoji: "📚" },
     { label: "Organisation", percent: stats.organisation ?? 0, color: "#4CAF50", emoji: "🗂️" },
   ];
@@ -291,10 +245,7 @@ const StatsCard = () => {
       <View style={statsStyles.row}>
         {STATS.map((s) => (
           <View key={s.label} style={statsStyles.item}>
-            <CircularProgress
-              percent={Math.round(s.percent)}
-              color={s.color}
-            />
+            <CircularProgress percent={Math.round(s.percent)} color={s.color} />
             <View style={statsStyles.labelRow}>
               <Text style={{ fontSize: 11 }}>{s.emoji}</Text>
               <Text style={statsStyles.label}>{s.label}</Text>
@@ -351,7 +302,6 @@ const missionStyles = StyleSheet.create({
   btnText:      { fontSize: 11, fontWeight: "700", color: "#FFF" },
 });
 
-// ─── MissionsSection ──────────────────────────────────────────────────────────
 const MISSIONS: Mission[] = [
   { id: "m1", title: "Mission 1:", subtitle: "Faire des exercices",             status: "continue",  emoji: "📅" },
   { id: "m2", title: "Mission 2:", subtitle: "Compléter la séance de révision", status: "start",     emoji: "📦" },
@@ -437,48 +387,32 @@ const bossStyles = StyleSheet.create({
 });
 
 // ─── GlobalProgressSection ────────────────────────────────────────────────────
-const PROGRESS_STATS: ProgressStat[] = [
-  { label: "Concentration", emoji: "🔥", percent: 60, xpReward: 15, xpBonus: 10 },
-  { label: "Sérénité",      emoji: "🌿", percent: 40, xpReward: 15, xpBonus: 10 },
-  { label: "Discipline",    emoji: "💪", percent: 30, xpReward: 10, xpBonus: 10 },
-];
 const GlobalProgressSection = () => {
-  const stats = useAllStats();
+  const stats   = useAllStats();
   const derived = computeDerivedStats(stats);
 
   const PROGRESS_STATS: ProgressStat[] = [
     { label: "Concentration", emoji: "🔥", percent: derived.concentration, xpReward: 15, xpBonus: 10 },
-    { label: "Sérénité", emoji: "🌿", percent: derived.serenite, xpReward: 15, xpBonus: 10 },
-    { label: "Discipline", emoji: "💪", percent: derived.discipline, xpReward: 10, xpBonus: 10 },
+    { label: "Sérénité",      emoji: "🌿", percent: derived.serenite,      xpReward: 15, xpBonus: 10 },
+    { label: "Discipline",    emoji: "💪", percent: derived.discipline,    xpReward: 10, xpBonus: 10 },
   ];
 
   return (
     <View style={[gpStyles.card, SHADOWS.light]}>
       <Text style={gpStyles.title}>Progression globale</Text>
-
       <View style={gpStyles.masterTrack}>
         <View style={gpStyles.masterFill} />
       </View>
-
       {PROGRESS_STATS.map((s) => (
         <View key={s.label} style={gpStyles.row}>
           <Text style={gpStyles.rowLabel}>{s.label} {s.emoji}</Text>
-
           <View style={gpStyles.rowTrack}>
-            <View
-              style={[
-                gpStyles.rowFill,
-                { width: `${Math.round(s.percent)}%` }
-              ]}
-            />
+            <View style={[gpStyles.rowFill, { width: `${Math.round(s.percent)}%` }]} />
           </View>
-
           <Text style={gpStyles.rowPct}>{Math.round(s.percent)}%</Text>
-
           <View style={gpStyles.chip}>
             <Text style={gpStyles.chipText}>⭐{s.xpReward} XP</Text>
           </View>
-
           <View style={[gpStyles.chip, gpStyles.chipBonus]}>
             <Text style={gpStyles.chipBonusText}>+{s.xpBonus} XP</Text>
           </View>
@@ -489,23 +423,26 @@ const GlobalProgressSection = () => {
 };
 
 const gpStyles = StyleSheet.create({
-  card:        { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 100 },
-  title:       { fontSize: 17, fontWeight: "800", color: COLORS.text, marginBottom: 12 },
-  masterTrack: { height: 10, backgroundColor: "#DDD5F5", borderRadius: 10, overflow: "visible", marginBottom: 16, position: "relative" },
-  masterFill:  { width: "55%", height: "100%", backgroundColor: "#FFD700", borderRadius: 10 },
-  row:         { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 6 },
-  rowLabel:    { fontSize: 12, fontWeight: "600", color: COLORS.text, width: 110 },
-  rowTrack:    { flex: 1, height: 7, backgroundColor: "#EEE8F8", borderRadius: 10, overflow: "hidden" },
-  rowFill:     { height: "100%", backgroundColor: COLORS.secondary, borderRadius: 10 },
-  rowPct:      { fontSize: 11, fontWeight: "700", color: COLORS.text, width: 32, textAlign: "right" },
-  chip:        { backgroundColor: "#EEE8F8", borderRadius: 12, paddingHorizontal: 7, paddingVertical: 3 },
-  chipText:    { fontSize: 10, color: COLORS.primary, fontWeight: "700" },
-  chipBonus:   { backgroundColor: "#E8F5E9" },
+  card:          { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 100 },
+  title:         { fontSize: 17, fontWeight: "800", color: COLORS.text, marginBottom: 12 },
+  masterTrack:   { height: 10, backgroundColor: "#DDD5F5", borderRadius: 10, overflow: "visible", marginBottom: 16 },
+  masterFill:    { width: "55%", height: "100%", backgroundColor: "#FFD700", borderRadius: 10 },
+  row:           { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 6 },
+  rowLabel:      { fontSize: 12, fontWeight: "600", color: COLORS.text, width: 110 },
+  rowTrack:      { flex: 1, height: 7, backgroundColor: "#EEE8F8", borderRadius: 10, overflow: "hidden" },
+  rowFill:       { height: "100%", backgroundColor: COLORS.secondary, borderRadius: 10 },
+  rowPct:        { fontSize: 11, fontWeight: "700", color: COLORS.text, width: 32, textAlign: "right" },
+  chip:          { backgroundColor: "#EEE8F8", borderRadius: 12, paddingHorizontal: 7, paddingVertical: 3 },
+  chipText:      { fontSize: 10, color: COLORS.primary, fontWeight: "700" },
+  chipBonus:     { backgroundColor: "#E8F5E9" },
   chipBonusText: { fontSize: 10, color: "#4CAF50", fontWeight: "700" },
 });
 
 // ─── SCREEN ───────────────────────────────────────────────────────────────────
 export default function DashboardScreen() {
+  // ✅ Une seule ligne — vérifie les 24h et redirige si besoin
+  usePeriodicQuestionnaire();
+
   return (
     <View style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />

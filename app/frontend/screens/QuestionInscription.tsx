@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { supabase } from "../constants/supabase";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import BackButton from "../components/BackButton";
 import QuestionChoix from "../components/QuestionChoix";
 import QuestionYesNo from "../components/QuestionYesNo";
 import WaveBackground from "../components/waveBackground";
-import BackButton from "../components/BackButton";
-import { useRouter } from "expo-router";
+import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
+import type { Answer, Question } from "../utils/statsCalculator";
 import { computeStatsFromAnswers } from "../utils/statsCalculator";
-import type { Question, Answer } from "../utils/statsCalculator";
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 

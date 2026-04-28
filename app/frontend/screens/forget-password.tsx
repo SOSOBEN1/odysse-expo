@@ -1,70 +1,219 @@
+// import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+// import { LinearGradient } from "expo-linear-gradient";
+// import { useRouter } from "expo-router";
+// import { useState } from "react";
+// import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+// import PhoneInput from "../components/PhoneInput";
+// import WaveBackground from "../components/waveBackground";
+// import styles from "../styles/LoginStyle";
+
+// export default function ForgotPasswordScreen() {
+//   const router = useRouter();
+//   const [phone, setPhone] = useState("");
+
+//   const stars = [
+//     { top: 10, left: 10, size: 20, opacity: 0.6 },
+//     { top: 10, right: 10, size: 12, opacity: 0.4 },
+//     { bottom: 10, left: 10, size: 15, opacity: 0.5 },
+//     { bottom: 10, right: 10, size: 10, opacity: 0.35 },
+//     { top: 30, left: 50, size: 8, opacity: 0.25 },
+//     { bottom: 40, right: 60, size: 22, opacity: 0.7 },
+//     { top: 40, right: 50, size: 22, opacity: 0.7 },
+//     { top: 60, left: 150, size: 14, opacity: 0.45 },
+//     { bottom: 80, left: 16, size: 18, opacity: 0.55 },
+//   ];
+
+//   return (
+//     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
+//       <WaveBackground />
+
+//       {/* Cercle du cadenas centré */}
+//       <View style={localStyles.lockCircle}>
+//         <Text style={localStyles.lockIcon}>🔒</Text>
+//       </View>
+
+//       {/* Header avec flèche de retour */}
+//       <View style={localStyles.headerRow}>
+//         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+//           <Ionicons name="arrow-back" size={20} color="#6949a8" />
+//         </TouchableOpacity>
+//       </View>
+
+//       {/* TITRE ET SOUS-TITRE */}
+//       <View style={styles.header}>
+//         <View style={styles.titleRow}>
+//           <Text style={styles.title}>Forgot Password ?</Text>
+//         </View>
+//         <Text style={styles.subtitle}>
+//           Enter your phone number to receive a verification code.
+//         </Text>
+//       </View>
+
+//       {/* CARD DU NUMÉRO DE TÉLÉPHONE */}
+//       <View style={styles.card}>
+//         <Text style={styles.label}>Phone Number</Text>
+//         <PhoneInput value={phone} onChange={setPhone} />
+//       </View>
+
+//       {/* BOUTON ENVOYER */}
+//       <TouchableOpacity
+//         style={styles.buttonWrapper}
+//         onPress={() => {
+//           if (phone.trim()) {
+//            router.push("/frontend/screens/verify");
+//           } else {
+//             alert("Please enter your phone number");
+//           }
+//         }}
+//       >
+//         <LinearGradient
+//           colors={["#6949a8", "#9574e0", "#baaae7"]}
+//           start={{ x: 0, y: 0 }}
+//           end={{ x: 1, y: 0 }}
+//           style={styles.button}
+//         >
+//           <Text style={styles.buttonText}>Send Code</Text>
+//         </LinearGradient>
+//       </TouchableOpacity>
+
+//       {/* ÉTOILES EN ARRIÈRE-PLAN */}
+//       <View style={[styles.stars, { pointerEvents: "none" }]}>
+//         {stars.map((star, i) => (
+//           <MaterialIcons
+//             key={i}
+//             name="auto-awesome"
+//             size={star.size}
+//             color="#fff"
+//             style={{
+//               position: "absolute",
+//               ...(star.top !== undefined ? { top: star.top } : {}),
+//               ...(star.bottom !== undefined ? { bottom: star.bottom } : {}),
+//               ...(star.left !== undefined ? { left: star.left } : {}),
+//               ...(star.right !== undefined ? { right: star.right } : {}),
+//               opacity: star.opacity,
+//             }}
+//           />
+//         ))}
+//       </View>
+//     </LinearGradient>
+//   );
+// }
+
+// const localStyles = StyleSheet.create({
+//   headerRow: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     paddingHorizontal: 10,
+//     marginTop: 20,
+//   },
+//   lockCircle: {
+//     width: 40, // même taille que le cercle de la flèche
+//     height: 40,
+//     borderRadius: 20,
+//     backgroundColor: "#f1edff",
+//     justifyContent: "center",
+//     alignItems: "center",
+//     position: "absolute",
+//     top: 80, // distance au-dessus du titre
+//     left: "50%",
+//     marginLeft: -20, // moitié de la largeur pour centrer
+//     elevation: 10,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.2,
+//     shadowRadius: 4,
+//   },
+//   lockIcon: {
+//     fontSize: 18, // légèrement plus petit pour rentrer dans le cercle
+//   },
+// });
+
+// screens/forget-password.tsx
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import PhoneInput from "../components/PhoneInput";
+import { useForgetPasswordViewModel } from "../../../backend/viewmodels/useForgetPasswordViewModel";
+import UsernameInput from "../components/UsernameInput";
 import WaveBackground from "../components/waveBackground";
 import styles from "../styles/LoginStyle";
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const [phone, setPhone] = useState("");
+  const { email, setEmail, loading, error, sendCode } =
+    useForgetPasswordViewModel();
+
+  const handleSend = async () => {
+    const ok = await sendCode();
+    if (ok) {
+      // Passe l'email à verify pour la vérification OTP
+      router.push({
+        pathname: "/frontend/screens/verify",
+        params: { email: email.trim().toLowerCase() },
+      });
+    }
+  };
 
   const stars = [
-    { top: 10, left: 10, size: 20, opacity: 0.6 },
-    { top: 10, right: 10, size: 12, opacity: 0.4 },
-    { bottom: 10, left: 10, size: 15, opacity: 0.5 },
-    { bottom: 10, right: 10, size: 10, opacity: 0.35 },
-    { top: 30, left: 50, size: 8, opacity: 0.25 },
-    { bottom: 40, right: 60, size: 22, opacity: 0.7 },
-    { top: 40, right: 50, size: 22, opacity: 0.7 },
-    { top: 60, left: 150, size: 14, opacity: 0.45 },
-    { bottom: 80, left: 16, size: 18, opacity: 0.55 },
+    { top: 10,    left: 10,   size: 20, opacity: 0.6  },
+    { top: 10,    right: 10,  size: 12, opacity: 0.4  },
+    { bottom: 10, left: 10,   size: 15, opacity: 0.5  },
+    { bottom: 10, right: 10,  size: 10, opacity: 0.35 },
+    { top: 30,    left: 50,   size: 8,  opacity: 0.25 },
+    { bottom: 40, right: 60,  size: 22, opacity: 0.7  },
+    { top: 40,    right: 50,  size: 22, opacity: 0.7  },
+    { top: 60,    left: 150,  size: 14, opacity: 0.45 },
+    { bottom: 80, left: 16,   size: 18, opacity: 0.55 },
   ];
 
   return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
       <WaveBackground />
 
-      {/* Cercle du cadenas centré */}
+      {/* Cercle cadenas centré */}
       <View style={localStyles.lockCircle}>
         <Text style={localStyles.lockIcon}>🔒</Text>
       </View>
 
-      {/* Header avec flèche de retour */}
+      {/* Flèche retour */}
       <View style={localStyles.headerRow}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={20} color="#6949a8" />
         </TouchableOpacity>
       </View>
 
-      {/* TITRE ET SOUS-TITRE */}
+      {/* Titre */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.title}>Forgot Password ?</Text>
+          <Text style={styles.title}>Mot de passe oublié ?</Text>
         </View>
         <Text style={styles.subtitle}>
-          Enter your phone number to receive a verification code.
+          Entrez votre adresse email pour recevoir un code de vérification.
         </Text>
       </View>
 
-      {/* CARD DU NUMÉRO DE TÉLÉPHONE */}
+      {/* Card */}
       <View style={styles.card}>
-        <Text style={styles.label}>Phone Number</Text>
-        <PhoneInput value={phone} onChange={setPhone} />
+        <Text style={styles.label}>Adresse email</Text>
+
+        {/* Réutilise ton composant UsernameInput avec icon="mail" */}
+        <UsernameInput
+          value={email}
+          onChange={setEmail}
+          placeholder="Entrez votre email"
+          icon="mail"
+        />
+
+        {error ? (
+          <Text style={localStyles.errorText}>{error}</Text>
+        ) : null}
       </View>
 
-      {/* BOUTON ENVOYER */}
-      <TouchableOpacity 
-        style={styles.buttonWrapper}
-        onPress={() => {
-          if (phone.trim()) {
-           router.push("/frontend/screens/verify");
-          } else {
-            alert("Please enter your phone number");
-          }
-        }}
+      {/* Bouton */}
+      <TouchableOpacity
+        style={[styles.buttonWrapper, loading && { opacity: 0.7 }]}
+        onPress={handleSend}
+        disabled={loading}
       >
         <LinearGradient
           colors={["#6949a8", "#9574e0", "#baaae7"]}
@@ -72,11 +221,13 @@ export default function ForgotPasswordScreen() {
           end={{ x: 1, y: 0 }}
           style={styles.button}
         >
-          <Text style={styles.buttonText}>Send Code</Text>
+          <Text style={styles.buttonText}>
+            {loading ? "Envoi en cours..." : "Envoyer le code"}
+          </Text>
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* ÉTOILES EN ARRIÈRE-PLAN */}
+      {/* Étoiles */}
       <View style={[styles.stars, { pointerEvents: "none" }]}>
         {stars.map((star, i) => (
           <MaterialIcons
@@ -86,10 +237,10 @@ export default function ForgotPasswordScreen() {
             color="#fff"
             style={{
               position: "absolute",
-              ...(star.top !== undefined ? { top: star.top } : {}),
+              ...(star.top    !== undefined ? { top: star.top }       : {}),
               ...(star.bottom !== undefined ? { bottom: star.bottom } : {}),
-              ...(star.left !== undefined ? { left: star.left } : {}),
-              ...(star.right !== undefined ? { right: star.right } : {}),
+              ...(star.left   !== undefined ? { left: star.left }     : {}),
+              ...(star.right  !== undefined ? { right: star.right }   : {}),
               opacity: star.opacity,
             }}
           />
@@ -107,16 +258,16 @@ const localStyles = StyleSheet.create({
     marginTop: 20,
   },
   lockCircle: {
-    width: 40, // même taille que le cercle de la flèche
+    width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: "#f1edff",
     justifyContent: "center",
     alignItems: "center",
     position: "absolute",
-    top: 80, // distance au-dessus du titre
+    top: 80,
     left: "50%",
-    marginLeft: -20, // moitié de la largeur pour centrer
+    marginLeft: -20,
     elevation: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -124,6 +275,13 @@ const localStyles = StyleSheet.create({
     shadowRadius: 4,
   },
   lockIcon: {
-    fontSize: 18, // légèrement plus petit pour rentrer dans le cercle
+    fontSize: 18,
+  },
+  errorText: {
+    color: "#EF4444",
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

@@ -2,13 +2,13 @@ import { Feather, FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-ico
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
-import { Text, TouchableOpacity, View, Alert } from "react-native";
+import { Alert, Text, TouchableOpacity, View } from "react-native";
 import UsernameInput from "../components/UsernameInput";
 import WaveBackground from "../components/waveBackground";
-import styles from "../styles/LoginStyle";
+import { useAvatar } from "../constants/AvatarContext";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
-import { useAvatar } from "../constants/AvatarContext";
+import styles from "../styles/LoginStyle";
 
 const AVATAR_MAP: Record<string, any> = {
   avatar_1: require("../assets/Avatar3D/fille1.glb"),

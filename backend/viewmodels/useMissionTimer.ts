@@ -1,7 +1,5 @@
 // ============================================================
 //  useMissionTimer.ts
-//  Hook React Native gérant le cycle de vie du timer.
-//  Utilise mission.service.ts pour toutes les ops Supabase.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,10 +18,20 @@ import { formatDateLimite, isDeadlinePassed } from "../models/mission.utils";
 // ─────────────────────────────────────────────────────────────
 
 export interface StatusModalState {
-  visible:      boolean;
-  type:         "success" | "fail";
+  visible: boolean;
+  type: "success" | "fail";
   missionTitle: string;
-  dateLimit?:   string;
+  dateLimit?: string;
+  xp?: number;    // ✅ XP gagné
+  coins?: number;    // ✅ Coins gagnés
+}
+export interface StatusModalState {
+  visible: boolean;
+  type: "success" | "fail";
+  missionTitle: string;
+  dateLimit?: string;
+  xp?: number;
+  coins?: number;
 }
 
 interface UseMissionTimerOptions {
@@ -42,10 +50,9 @@ export function useMissionTimer({
   onStatusModal,
 }: UseMissionTimerOptions) {
   const [timers, setTimers] = useState<Record<number, MissionTimer>>({});
-  const intervalRefs        = useRef<Record<number, ReturnType<typeof setInterval>>>({});
-  const missionsRef         = useRef<Mission[]>([]);
+  const intervalRefs = useRef<Record<number, ReturnType<typeof setInterval>>>({});
+  const missionsRef = useRef<Mission[]>([]);
 
-  // Garder une ref à jour des missions pour les callbacks du setInterval
   useEffect(() => { missionsRef.current = missions; }, [missions]);
 
   // ── Helpers ──────────────────────────────────────────────
@@ -68,7 +75,6 @@ export function useMissionTimer({
   const initTimers = useCallback((initialTimers: Record<number, MissionTimer>) => {
     setTimers(prev => {
       const merged = { ...initialTimers };
-      // Conserver les timers actifs déjà en cours
       Object.entries(prev).forEach(([id, t]) => {
         if (t.state === "running" || t.state === "paused") {
           merged[Number(id)] = t;
@@ -78,24 +84,49 @@ export function useMissionTimer({
     });
   }, []);
 
-  // ── Finish (succès) ───────────────────────────────────────
-  const handleFinish = useCallback(async (missionId: number) => {
-    const t = timers[missionId] ?? { elapsed: 0, validationId: null };
-    clearInterval(intervalRefs.current[missionId]);
+  // ── Finish (succès) ✅ récupère xp + coins depuis le service
+ // ✅ Après — lire le timer frais depuis le state via setTimers
+const handleFinish = useCallback(async (missionId: number) => {
+  clearInterval(intervalRefs.current[missionId]);
 
-    try {
-      await finishMissionSession(missionId, t.validationId, t.elapsed);
-    } catch (err: any) {
-      console.error("❌ finishMission:", err.message);
-      return;
-    }
+  // Lire la valeur fraîche du timer AVANT l'appel async
+  let currentElapsed = 0;
+  let currentValidationId: number | null = null;
 
-    setTimer(missionId, { state: "done" });
+  setTimers(prev => {
+    currentElapsed = prev[missionId]?.elapsed ?? 0;
+    currentValidationId = prev[missionId]?.validationId ?? null;
+    return prev; // pas de mutation
+  });
 
-    const mission = missionsRef.current.find(m => m.id === missionId);
-    onStatusModal({ visible: true, type: "success", missionTitle: mission?.title ?? "" });
-  }, [timers, setTimer, onStatusModal]);
+  let xp = 0;
+  let coins = 0;
 
+  try {
+    const result = await finishMissionSession(
+      missionId,
+      currentValidationId,
+      currentElapsed,   // ✅ valeur fraîche
+      userId
+    );
+    xp = result.xp;
+    coins = result.coins;
+  } catch (err: any) {
+    console.error("❌ finishMission:", err.message);
+    return;
+  }
+
+  setTimer(missionId, { state: "done" });
+
+  const mission = missionsRef.current.find(m => m.id === missionId);
+  onStatusModal({
+    visible: true,
+    type: "success",
+    missionTitle: mission?.title ?? "",
+    xp,
+    coins,
+  });
+}, [userId, setTimer, onStatusModal]); // ← timers retiré des deps
   // ── Start / Resume ────────────────────────────────────────
   const handleStart = useCallback(async (missionId: number) => {
     const t = getTimer(missionId);
@@ -105,8 +136,12 @@ export function useMissionTimer({
         const validationId = await startMissionSession(userId, missionId);
         setTimer(missionId, { state: "running", elapsed: 0, validationId, startedAt: new Date() });
       } else {
-        await resumeMissionSession(missionId);
+        if (t.validationId) {
+          await resumeMissionSession(t.validationId);  // ← validationId, pas missionId
+        }
         setTimer(missionId, { state: "running" });
+        //await resumeMissionSession(missionId);
+        //setTimer(missionId, { state: "running" });
       }
     } catch (err: any) {
       console.error("❌ startMission:", err.message);
@@ -120,16 +155,15 @@ export function useMissionTimer({
         const cur = prev[missionId];
         if (!cur || cur.state !== "running") return prev;
 
-        const newElapsed  = cur.elapsed + 1;
-        const mission     = missionsRef.current.find(m => m.id === missionId);
+        const newElapsed = cur.elapsed + 1;
+        const mission = missionsRef.current.find(m => m.id === missionId);
 
-        // Durée estimée atteinte → terminer automatiquement
         const parseDurationToMinutes = (d: string) => {
           const match = d?.match(/(\d+)h(\d*)/);
           if (!match) return 30;
           return (parseInt(match[1]) || 0) * 60 + (parseInt(match[2]) || 0);
         };
-        const estimatedSec = (parseDurationToMinutes(mission?.duration ?? "0h30")) * 60;
+        const estimatedSec = parseDurationToMinutes(mission?.duration ?? "0h30") * 60;
 
         if (newElapsed >= estimatedSec) {
           clearInterval(intervalRefs.current[missionId]);
@@ -144,17 +178,21 @@ export function useMissionTimer({
   // ── Pause ─────────────────────────────────────────────────
   const handlePause = useCallback(async (missionId: number) => {
     clearInterval(intervalRefs.current[missionId]);
-    await pauseMissionSession(missionId);
+    const t = getTimer(missionId);
+    // ← utilise validationId, pas missionId
+    if (t.validationId) {
+      await pauseMissionSession(t.validationId);
+    }
     setTimer(missionId, { state: "paused" });
-  }, [setTimer]);
+  }, [getTimer, setTimer]);
 
   // ── Vérification deadline (toutes les 60s) ────────────────
   useEffect(() => {
     const deadlineInterval = setInterval(() => {
       setTimers(prev => {
-        const now     = Date.now();
+        const now = Date.now();
         const updated = { ...prev };
-        let changed   = false;
+        let changed = false;
 
         missionsRef.current.forEach(mission => {
           if (!mission.dateLimite) return;
@@ -171,10 +209,10 @@ export function useMissionTimer({
             changed = true;
             failMissionSession(mission.id);
             onStatusModal({
-              visible:      true,
-              type:         "fail",
+              visible: true,
+              type: "fail",
               missionTitle: mission.title,
-              dateLimit:    formatDateLimite(mission.dateLimite),
+              dateLimit: formatDateLimite(mission.dateLimite),
             });
           }
         });
@@ -186,7 +224,7 @@ export function useMissionTimer({
     return () => clearInterval(deadlineInterval);
   }, [onStatusModal]);
 
-  // ── Cleanup à l'unmount ────────────────────────────────────
+  // ── Cleanup ────────────────────────────────────────────────
   useEffect(() => {
     return () => { Object.values(intervalRefs.current).forEach(clearInterval); };
   }, []);

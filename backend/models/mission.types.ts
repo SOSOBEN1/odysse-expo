@@ -25,20 +25,21 @@ export interface Mission {
 }
 
 // ── Mission (raw Supabase row) ────────────────────────────────
+// statut retiré : il est maintenant dans MissionValidationRow (par user)
 export interface MissionRow {
   id_mission: number;
-  titre: string;
+  titre: string | null;
   description: string | null;
   duree_min: number | null;
-  difficulte: number;
-  priorite: number;
+  difficulte: number | null;
+  priorite: number | null;
   id_boss: number | null;
   date_limite: string | null;
-  statut: TimerState;
-  boss_events?: any;   // ← any, Supabase retourne des formes variables
+  boss_events?: { nom: any }[] | null;
 }
 
 // ── MissionValidation (raw Supabase row) ──────────────────────
+// statut ajouté ici — un statut par user, pas global à la mission
 export interface MissionValidationRow {
   id_validation: number;
   id_user: string;
@@ -46,6 +47,7 @@ export interface MissionValidationRow {
   date_debut: string | null;
   date_fin: string | null;
   xp_obtenu: number | null;
+  statut: TimerState;         // ← déplacé depuis MissionRow
 }
 
 // ── Timer local (état UI) ─────────────────────────────────────

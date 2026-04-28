@@ -9,11 +9,11 @@ import {
   Animated,
 } from "react-native";
 import { useRouter } from "expo-router";
-import Svg, { Circle, Path, Ellipse, G, Rect } from "react-native-svg";
+import Svg, { Circle, Path, Ellipse, G, Rect, Polygon, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 import Logo from "../assets/images/logo.svg";
 import { COLORS, SIZES, SHADOWS } from "../styles/theme";
 
-// FIX 1 : "screen" au lieu de "window" pour couvrir toute la hauteur physique
 const { width, height } = Dimensions.get("screen");
 
 const C = {
@@ -23,15 +23,115 @@ const C = {
   bg:        "#EDE8F8",
 };
 
+// ─── Floating Star (animated) ─────────────────────────────────────────────────
+type StarProps = {
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  opacity: number;
+  delay: number;
+  amplitude?: number; // vertical float distance
+  spin?: boolean;     // rotate animation
+};
+
+const FloatingStar = ({ x, y, size, color, opacity, delay, amplitude = 8, spin = false }: StarProps) => {
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(opacity)).current;
+
+  useEffect(() => {
+    // Float up/down loop
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 2200 + delay * 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 2200 + delay * 300,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Opacity pulse
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacityAnim, {
+          toValue: opacity * 0.4,
+          duration: 1500 + delay * 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: opacity,
+          duration: 1500 + delay * 200,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Spin loop (optional)
+    if (spin) {
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 4000 + delay * 500,
+          useNativeDriver: true,
+        })
+      ).start();
+    }
+  }, []);
+
+  const translateY = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -amplitude],
+  });
+
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  // 4-point star path centered at (size/2, size/2)
+  const s = size / 2;
+  const inner = s * 0.4;
+  const starPath = [
+    `M${s},0`,
+    `L${s + inner * 0.4},${s - inner}`,
+    `L${s * 2},${s}`,
+    `L${s + inner * 0.4},${s + inner}`,
+    `L${s},${s * 2}`,
+    `L${s - inner * 0.4},${s + inner}`,
+    `L0,${s}`,
+    `L${s - inner * 0.4},${s - inner}`,
+    "Z",
+  ].join(" ");
+
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        opacity: opacityAnim,
+        transform: [{ translateY }, ...(spin ? [{ rotate }] : [])],
+      }}
+      pointerEvents="none"
+    >
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Path d={starPath} fill={color} />
+      </Svg>
+    </Animated.View>
+  );
+};
+
 // ─── Wave Top ─────────────────────────────────────────────────────────────────
 const WaveTop = () => (
   <>
-    {/* Couche arrière – claire */}
-    <Svg
-      width={width} height={145}
-      style={[styles.absolute]}
-      pointerEvents="none"
-    >
+    <Svg width={width} height={145} style={[styles.absolute]} pointerEvents="none">
       <Path
         d={`M0,0 L${width},0 L${width},58
             Q${width * 0.76},112 ${width * 0.5},74
@@ -40,12 +140,7 @@ const WaveTop = () => (
         opacity={0.55}
       />
     </Svg>
-    {/* Couche avant – foncée */}
-    <Svg
-      width={width} height={115}
-      style={[styles.absolute, { top: 0 }]}
-      pointerEvents="none"
-    >
+    <Svg width={width} height={115} style={[styles.absolute, { top: 0 }]} pointerEvents="none">
       <Path
         d={`M0,0 L${width},0 L${width},50
             Q${width * 0.75},94 ${width * 0.5},64
@@ -57,18 +152,9 @@ const WaveTop = () => (
 );
 
 // ─── Wave Bottom ──────────────────────────────────────────────────────────────
-// FIX 2 : icônes intégrées dans la vague CLAIRE (couche arrière)
-// FIX 3 : bottom: 0 sur les deux couches pour couvrir tout le bas
 const WaveBottom = () => (
   <>
-    {/* ── Couche claire (derrière) — contient les icônes ── */}
-    <Svg
-      width={width}
-      height={210}
-      style={[styles.absolute, { bottom: 0 }]}
-      pointerEvents="none"
-    >
-      {/* Vague claire */}
+    <Svg width={width} height={210} style={[styles.absolute, { bottom: 0 }]} pointerEvents="none">
       <Path
         d={`M0,210 L${width},210 L${width},65
             Q${width * 0.72},5 ${width * 0.5},50
@@ -76,65 +162,29 @@ const WaveBottom = () => (
         fill={C.secondary}
         opacity={0.55}
       />
-
-      {/* ══ ICÔNE 1 — Manette de jeu (gauche) ══ */}
+      {/* ICÔNE 1 — Manette de jeu (gauche) */}
       <G transform={`translate(${width * 0.13 - 24}, 100)`}>
-        {/* Corps */}
-        <Path
-          d="M6,10 Q6,2 16,2 L32,2 Q42,2 42,10 L42,26 Q42,34 32,34 L16,34 Q6,34 6,26 Z"
-          fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}
-        />
-        {/* Croix directionnelle */}
+        <Path d="M6,10 Q6,2 16,2 L32,2 Q42,2 42,10 L42,26 Q42,34 32,34 L16,34 Q6,34 6,26 Z" fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}/>
         <Path d="M14,18 H20 M17,15 V21" stroke="#fff" strokeWidth={2} strokeLinecap="round" opacity={0.75}/>
-        {/* Boutons ABXY */}
         <Circle cx={32} cy={15} r={3} fill="#fff" opacity={0.6}/>
         <Circle cx={36} cy={20} r={3} fill="#fff" opacity={0.6}/>
-        {/* Poignées gauche */}
         <Path d="M10,32 Q8,42 13,46" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" fill="none" opacity={0.75}/>
-        {/* Poignées droite */}
         <Path d="M38,32 Q40,42 35,46" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" fill="none" opacity={0.75}/>
-        {/* Bouton start */}
         <Rect x={19} y={14} width={10} height={5} rx={2.5} fill="none" stroke="#fff" strokeWidth={1.5} opacity={0.6}/>
       </G>
-
-      {/* ══ ICÔNE 2 — Hexagone / médaille (centre) ══ */}
+      {/* ICÔNE 2 — Hexagone / médaille (centre) */}
       <G transform={`translate(${width * 0.5 - 22}, 82)`}>
-        {/* Hexagone */}
-        <Path
-          d="M22,0 L42,12 L42,36 L22,48 L2,36 L2,12 Z"
-          fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}
-        />
-        {/* Étoile intérieure */}
-        <Path
-          d="M22,14 L25,21 L32,21 L27,26 L29,33 L22,29 L15,33 L17,26 L12,21 L19,21 Z"
-          fill="#fff" opacity={0.55}
-        />
+        <Path d="M22,0 L42,12 L42,36 L22,48 L2,36 L2,12 Z" fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}/>
+        <Path d="M22,14 L25,21 L32,21 L27,26 L29,33 L22,29 L15,33 L17,26 L12,21 L19,21 Z" fill="#fff" opacity={0.55}/>
       </G>
-
-      {/* ══ ICÔNE 3 — Cloche de notification (droite) ══ */}
+      {/* ICÔNE 3 — Cloche (droite) */}
       <G transform={`translate(${width * 0.85 - 20}, 88)`}>
-        {/* Anneau supérieur */}
         <Circle cx={20} cy={3} r={3.5} fill="none" stroke="#fff" strokeWidth={2} opacity={0.75}/>
-        {/* Corps de la cloche */}
-        <Path
-          d="M6,36 L34,36 L32,16 Q30,4 20,6 Q10,4 8,16 Z"
-          fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}
-        />
-        {/* Battant */}
-        <Path
-          d="M13,36 Q13,44 20,44 Q27,44 27,36"
-          fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" opacity={0.75}
-        />
+        <Path d="M6,36 L34,36 L32,16 Q30,4 20,6 Q10,4 8,16 Z" fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}/>
+        <Path d="M13,36 Q13,44 20,44 Q27,44 27,36" fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" opacity={0.75}/>
       </G>
     </Svg>
-
-    {/* ── Couche foncée (devant) ── */}
-    <Svg
-      width={width}
-      height={150}
-      style={[styles.absolute, { bottom: 0 }]}
-      pointerEvents="none"
-    >
+    <Svg width={width} height={150} style={[styles.absolute, { bottom: 0 }]} pointerEvents="none">
       <Path
         d={`M0,150 L${width},150 L${width},50
             Q${width * 0.75},0 ${width * 0.5},36
@@ -146,84 +196,109 @@ const WaveBottom = () => (
 );
 
 // ─── Decorations (points, +, blobs, étincelles) ───────────────────────────────
-// FIX 4 : icônes fantômes retirées d'ici (elles sont maintenant dans WaveBottom)
 const Decorations = () => (
-  <Svg
-    width={width} height={height}
-    style={StyleSheet.absoluteFillObject}
-    pointerEvents="none"
-  >
-    {/* ── Haut gauche : croix + ── */}
-    <Path
-      d="M38 196 H52 M45 189 V203"
-      stroke={C.secondary} strokeWidth={2.5} strokeLinecap="round"
-    />
+  <Svg width={width} height={height} style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    {/* Haut gauche : croix + */}
+    <Path d="M38 196 H52 M45 189 V203" stroke={C.secondary} strokeWidth={2.5} strokeLinecap="round"/>
+    {/* Haut droit : petit cercle vide */}
+    <Circle cx={width - 46} cy={228} r={7} stroke={C.secondary} strokeWidth={2} fill="none"/>
+    {/* Haut droit : tout petit point plein */}
+    <Circle cx={width - 42} cy={314} r={4} fill={C.light}/>
+    {/* Milieu gauche : blob ellipse */}
+    <Ellipse cx={20} cy={height * 0.535} rx={15} ry={15} fill={C.light} opacity={0.6}/>
+    {/* Bas gauche : croix + */}
+    <Path d="M34 676 H48 M41 669 V683" stroke={C.secondary} strokeWidth={2} strokeLinecap="round"/>
+    {/* Bas gauche : deux points */}
+    <Circle cx={57} cy={682} r={3.5} fill={C.light}/>
+    <Circle cx={68} cy={682} r={3.5} fill={C.light}/>
 
-    {/* ── Haut droit : petit cercle vide ── */}
-    <Circle cx={width - 46} cy={228} r={7} stroke={C.secondary} strokeWidth={2} fill="none" />
-
-    {/* ── Haut droit : tout petit point plein ── */}
-    <Circle cx={width - 42} cy={314} r={4} fill={C.light} />
-
-    {/* ── Milieu gauche : blob ellipse ── */}
-    <Ellipse cx={20} cy={height * 0.535} rx={15} ry={15} fill={C.light} opacity={0.6} />
-
-    {/* ── Bas gauche : croix + ── */}
-    <Path
-      d="M34 676 H48 M41 669 V683"
-      stroke={C.secondary} strokeWidth={2} strokeLinecap="round"
-    />
-
-    {/* ── Bas gauche : deux points ── */}
-    <Circle cx={57} cy={682} r={3.5} fill={C.light} />
-    <Circle cx={68} cy={682} r={3.5} fill={C.light} />
-
-    {/* ── Étincelles autour du bouton CTA ── */}
-    <Path
-      d="M52 556 L57 544 L62 556"
-      stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none"
-    />
-    <Path
-      d={`M${width - 62} 566 L${width - 57} 554 L${width - 52} 566`}
-      stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none"
-    />
   </Svg>
 );
 
-// ─── Arrow Icon ───────────────────────────────────────────────────────────────
-const ArrowIcon = () => (
-  <Svg width={22} height={22} viewBox="0 0 22 22" fill="none">
-    <Path
-      d="M4 11H18M18 11L12 5M18 11L12 17"
-      stroke={C.primary}
-      strokeWidth={2.3}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
+// ─── Floating Stars Layer ─────────────────────────────────────────────────────
+const FloatingStars = () => (
+  <>
+    {/* Grande étoile — haut droit, tourne lentement */}
+    <FloatingStar x={width * 0.78} y={height * 0.18} size={18} color={C.secondary} opacity={0.85} delay={0} amplitude={10} spin />
+
+    {/* Étoile moyenne — haut gauche */}
+    <FloatingStar x={width * 0.08} y={height * 0.22} size={13} color={C.light} opacity={0.9} delay={1} amplitude={7} />
+
+    {/* Petite étoile — milieu droit */}
+    <FloatingStar x={width * 0.85} y={height * 0.42} size={10} color={C.secondary} opacity={0.7} delay={2} amplitude={6} />
+
+    {/* Étoile — sous le logo gauche */}
+    <FloatingStar x={width * 0.06} y={height * 0.48} size={14} color={C.light} opacity={0.8} delay={0.5} amplitude={9} spin />
+
+    {/* Petite étoile — sous tagline droite */}
+    <FloatingStar x={width * 0.82} y={height * 0.52} size={9} color={C.primary} opacity={0.6} delay={1.5} amplitude={5} />
+
+    {/* Étoile — au-dessus bouton gauche */}
+    <FloatingStar x={width * 0.1} y={height * 0.62} size={12} color={C.secondary} opacity={0.75} delay={2.5} amplitude={8} />
+
+    {/* Étoile — au-dessus bouton droite */}
+    <FloatingStar x={width * 0.78} y={height * 0.63} size={11} color={C.light} opacity={0.8} delay={0.8} amplitude={7} spin />
+
+    {/* Très petite — milieu gauche */}
+    <FloatingStar x={width * 0.04} y={height * 0.35} size={7} color={C.primary} opacity={0.5} delay={3} amplitude={4} />
+
+    {/* Très petite — bas centre-droit */}
+    <FloatingStar x={width * 0.65} y={height * 0.57} size={8} color={C.secondary} opacity={0.55} delay={1.8} amplitude={5} />
+  </>
 );
 
 // ─── CTA Button ───────────────────────────────────────────────────────────────
 const CTAButton = ({ onPress }: { onPress: () => void }) => {
   const scale = useRef(new Animated.Value(1)).current;
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPressIn={() =>
-        Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start()
-      }
-      onPressOut={() =>
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()
-      }
-      onPress={onPress}
-    >
-      <Animated.View style={[styles.ctaButton, { transform: [{ scale }] }]}>
-        <Text style={styles.ctaText}>COMMENCER</Text>
-        <View style={styles.ctaArrowWrapper}>
-          <ArrowIcon />
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale }], alignItems: "center" }}>
+      {/* Étincelles gauche \/ */}
+      <Svg
+        width={28} height={40}
+        style={{ position: "absolute", left: -22, top: "50%", marginTop: -20 }}
+        pointerEvents="none"
+      >
+        <Path d="M18,4 L10,18" stroke={C.secondary} strokeWidth={2.2} strokeLinecap="round" opacity={0.85}/>
+        <Path d="M10,22 L18,36" stroke={C.secondary} strokeWidth={2.2} strokeLinecap="round" opacity={0.85}/>
+      </Svg>
+      {/* Étincelles droite \/ */}
+      <Svg
+        width={28} height={40}
+        style={{ position: "absolute", right: -22, top: "50%", marginTop: -20 }}
+        pointerEvents="none"
+      >
+        <Path d="M10,4 L18,18" stroke={C.secondary} strokeWidth={2.2} strokeLinecap="round" opacity={0.85}/>
+        <Path d="M18,22 L10,36" stroke={C.secondary} strokeWidth={2.2} strokeLinecap="round" opacity={0.85}/>
+      </Svg>
+
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()}
+        onPress={onPress}
+        style={styles.ctaOuter}
+      >
+        <LinearGradient
+          colors={["#6949a8", "#9574e0", "#baaae7"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.ctaButton}
+        >
+          <Text style={styles.ctaText}>COMMENCER</Text>
+          <View style={styles.ctaArrowWrapper}>
+            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M5 12H19M19 12L13 6M19 12L13 18"
+                stroke="#9574e0"
+                strokeWidth={2.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
@@ -258,13 +333,16 @@ const StartScreen = () => {
       {/* 1 — Fond */}
       <View style={styles.bg} />
 
-      {/* 2 — Vague haut (derrière le contenu) */}
+      {/* 2 — Vague haut */}
       <WaveTop />
 
-      {/* 3 — Décorations flottantes */}
+      {/* 3 — Décorations statiques */}
       <Decorations />
 
-      {/* 4 — Contenu principal */}
+      {/* 4 — Étoiles flottantes animées ✨ */}
+      <FloatingStars />
+
+      {/* 5 — Contenu principal */}
 
       {/* Logo + Nom */}
       <Animated.View style={[styles.logoContainer, slidePop(logoAnim)]}>
@@ -293,7 +371,7 @@ const StartScreen = () => {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* 5 — Vague bas (par-dessus le contenu) */}
+      {/* 6 — Vague bas */}
       <WaveBottom />
     </View>
   );
@@ -303,7 +381,7 @@ const StartScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    minHeight: height,      // FIX : garantit la hauteur physique complète
+    minHeight: height,
     alignItems: "center",
     backgroundColor: C.bg,
     overflow: "hidden",
@@ -350,33 +428,38 @@ const styles = StyleSheet.create({
     color: C.primary,
     fontWeight: "700",
   },
+  ctaOuter: {
+    borderRadius: 100,
+    overflow: "hidden",
+    shadowColor: "#6949a8",
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+  },
   ctaButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: C.primary,
-    borderRadius: 50,
-    paddingVertical: 16,
-    paddingLeft: 38,
+    justifyContent: "space-between",
+    borderRadius: 100,
+    paddingVertical: 10,
+    paddingLeft: 30,
     paddingRight: 10,
-    minWidth: 220,
-    shadowColor: "#ffffff",
-    shadowOpacity: 0.9,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 12,
+    width: 230,
   },
   ctaText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
     letterSpacing: 2,
-    marginRight: 16,
   },
   ctaArrowWrapper: {
     backgroundColor: "#fff",
-    borderRadius: 50,
-    padding: 9,
-    ...SHADOWS.light,
+    borderRadius: 100,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   subLinkWrapper: {
     marginTop: 24,

@@ -14,7 +14,6 @@ export interface DefiDB {
   id_user?:          number
   participants?:     number
   duration_label?:   string
-  objectif_minutes?: number
 }
 
 // ─── GET tous les défis d'un utilisateur ─────────────────────────────────────
@@ -29,12 +28,35 @@ export const getDefis = async (userId: number) => {
 
 // ─── GET par statut (pour les 3 tabs) ────────────────────────────────────────
 export const getDefisByStatut = async (userId: number, statut: string) => {
-  const { data, error } = await supabase
+  // Défis créés par l'user
+  const { data: mesDefis } = await supabase
     .from('defis')
     .select('*')
     .eq('id_user', userId)
     .eq('statut', statut)
-  return { data, error }
+
+  // Défis où l'user est participant (invité)
+  const { data: participations } = await supabase
+    .from('defi_participants')
+    .select('id_defi')
+    .eq('id_user', userId)
+
+  const participantIds = (participations ?? []).map((p: any) => p.id_defi)
+
+  let defisParticipant: any[] = []
+  if (participantIds.length > 0) {
+    const { data } = await supabase
+      .from('defis')
+      .select('*')
+      .in('id_defi', participantIds)
+      .eq('statut', statut)
+      .neq('id_user', userId) // éviter les doublons
+    defisParticipant = data ?? []
+  }
+
+  // Fusionner sans doublons
+  const tous = [...(mesDefis ?? []), ...defisParticipant]
+  return { data: tous, error: null }
 }
 
 // ─── ADD ──────────────────────────────────────────────────────────────────────
@@ -44,6 +66,21 @@ export const addDefi = async (defi: DefiDB) => {
     .insert(defi)
     .select()
     .single()
+
+  // ✅ Ajouter le créateur comme participant automatiquement
+  if (data && defi.id_user) {
+    await supabase
+      .from('defi_participants')
+      .insert({
+        id_defi:         data.id_defi,
+        id_user:         defi.id_user,
+        minutes_etudies: 0,
+        xp_total:        0,
+        score:           0,
+        joined_at:       new Date().toISOString(),
+      })
+  }
+
   return { data, error }
 }
 

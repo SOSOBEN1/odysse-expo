@@ -22,6 +22,7 @@ import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 import { fetchMissionStats, fetchRecentMissions } from "../../../backend/models/mission.service";
 import type { MissionStats, RecentMission } from "../../../backend/models/mission.service";
 
+
 // ─────────────────────────────────────────────────────────────
 //  Helpers
 // ─────────────────────────────────────────────────────────────
@@ -56,12 +57,13 @@ export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState("Missions");
   const [activeNav, setActiveNav] = useState("home");
 
-  const { userId }                        = useUser();
-  const { icon: timeIcon, text: timeText } = getTimeGreeting();
+  // ✅ username du contexte utilisé immédiatement (même pattern que le Dashboard)
+  const { userId, username: ctxUsername, isLoading } = useUser();
+  const { icon: timeIcon, text: timeText }  = getTimeGreeting();
   const { selectedModel, setSelectedModel } = useAvatar();
 
   const [userStats, setUserStats] = useState<UserStats>({
-    userName: "...",
+    userName: ctxUsername || "Joueur", // ✅ affiché dès le départ depuis AsyncStorage
     level:    1,
     xp:       0,
     maxXp:    500,
@@ -69,7 +71,6 @@ export default function HomeScreen() {
     energie:  100,
   });
 
-  // ✅ Remplacé par les types du backend
   const [missions, setMissions] = useState<RecentMission[]>([]);
   const [stats,    setStats]    = useState<MissionStats>({
     terminated:  0,
@@ -80,33 +81,41 @@ export default function HomeScreen() {
     successRate: 0,
   });
 
+  // ✅ On attend que isLoading soit false ET que userId soit disponible
   useEffect(() => {
-    if (!userId) return;
+    if (isLoading || !userId) return;
     fetchUserStats();
     loadMissionData();
-  }, [userId]);
+  }, [userId, isLoading]);
 
-  // ── Fetch stats utilisateur ───────────────────────────────
+  // ── Fetch stats utilisateur — aligné sur DashboardScreen ─────
   const fetchUserStats = async () => {
     try {
       const { data, error } = await supabase
         .from("users")
-        .select("nom, prenom, progression, energie, niveau, gold, avatar_url, username")
+        // ✅ On sélectionne xp ET coins comme le Dashboard (+ gold en fallback)
+        .select("nom, prenom, username, xp, coins, gold, niveau, energie, avatar_url")
         .eq("id_user", userId)
         .single();
 
       if (error || !data) return;
 
       const niveau = data.niveau ?? 1;
-      const xp     = data.progression ?? 0;
       const maxXp  = niveau * 500;
-      const xpPreviousLevels  = (niveau - 1) * 500;
-      const xpInCurrentLevel  = Math.max(0, xp - xpPreviousLevels);
 
-      const displayName = data.username
-        ? data.username
-        : `${data.prenom ?? ""} ${data.nom ?? ""}`.trim() || "Joueur";
+      // ✅ Même logique XP que le Dashboard : xp % maxXp
+      const xp             = data.xp ?? 0;
+      const xpInCurrentLevel = xp % maxXp;
 
+      // ✅ Même logique username que le Dashboard
+      const displayName =
+        data.username ??
+        data.prenom ??
+        data.nom ??
+        ctxUsername ??
+        "Joueur";
+
+      // ✅ Même logique avatar que le Dashboard
       if (data.avatar_url) setSelectedModel(data.avatar_url);
 
       setUserStats({
@@ -114,7 +123,8 @@ export default function HomeScreen() {
         level:    niveau,
         xp:       xpInCurrentLevel,
         maxXp,
-        coins:    data.gold ?? 0,
+        // ✅ coins en priorité, gold en fallback
+        coins:    data.coins ?? data.gold ?? 0,
         energie:  data.energie ?? 100,
       });
     } catch (err: any) {
@@ -122,20 +132,20 @@ export default function HomeScreen() {
     }
   };
 
-  // ✅ Toute la logique missions déléguée au backend
-const loadMissionData = async () => {
-  if (!userId) return;
-  try {
-    const [missionStats, recentMissions] = await Promise.all([
-      fetchMissionStats(String(userId)),
-      fetchRecentMissions(String(userId), 5),
-    ]);
-    setStats(missionStats);
-    setMissions(recentMissions);
-  } catch (err: any) {
-    console.error("❌ Erreur loadMissionData:", err.message);
-  }
-};
+  // ── Missions ──────────────────────────────────────────────
+  const loadMissionData = async () => {
+    if (!userId) return;
+    try {
+      const [missionStats, recentMissions] = await Promise.all([
+        fetchMissionStats(String(userId)),
+        fetchRecentMissions(String(userId), 5),
+      ]);
+      setStats(missionStats);
+      setMissions(recentMissions);
+    } catch (err: any) {
+      console.error("❌ Erreur loadMissionData:", err.message);
+    }
+  };
 
   const xpPercent = userStats.maxXp > 0 ? (userStats.xp / userStats.maxXp) * 100 : 0;
 
@@ -160,6 +170,7 @@ const loadMissionData = async () => {
 
           <View style={styles.profileRow}>
             <View style={styles.avatarWrapper}>
+              {/* ✅ selectedModel vient du contexte useAvatar, mis à jour par fetchUserStats */}
               {selectedModel ? (
                 <AvatarCrd model={selectedModel} bgColor="#ede9fe" />
               ) : (
@@ -242,7 +253,7 @@ const loadMissionData = async () => {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Styles (identiques à l'original)
+//  Styles
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({

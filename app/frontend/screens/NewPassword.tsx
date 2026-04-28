@@ -256,6 +256,7 @@ const NewPassword = () => {
   const router  = useRouter();
   // Reçoit l'id_user depuis verify
   const { userId } = useLocalSearchParams<{ userId: string }>();
+  console.log("📱 userId depuis params:", userId); // ← ajoute
 
   const {
     password, confirmPassword,
@@ -268,6 +269,7 @@ const NewPassword = () => {
 
   const handleSubmit = async () => {
     const ok = await submit();
+    console.log("✅ ok:", ok);
     if (ok) {
       // replace pour ne pas pouvoir revenir en arrière
       router.replace("/frontend/screens/Login");

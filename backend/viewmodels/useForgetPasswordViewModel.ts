@@ -24,9 +24,16 @@ export function useForgetPasswordViewModel() {
     try {
       const result = await authService.sendOtpByEmail(email.trim().toLowerCase());
       if (!result.success) {
-        setError(result.error ?? "Erreur inconnue");
-        return false;
-      }
+  console.log("❌ erreur reçue:", result.error);
+  if (result.error?.includes("Aucun compte")) {
+    setError("Aucun compte trouvé avec cet email. Vérifiez votre adresse.");
+  } else if (result.error?.includes("network") || result.error?.includes("fetch")) {
+    setError("Problème de connexion. Vérifiez votre internet.");
+  } else {
+    setError("Une erreur est survenue. Réessayez plus tard.");
+  }
+  return false;
+}
       return true;
     } finally {
       setLoading(false);

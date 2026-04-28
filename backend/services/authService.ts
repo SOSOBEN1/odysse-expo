@@ -90,12 +90,31 @@ export const authService = {
   /**
    * Étape 1 — envoie OTP via Supabase Auth (Brevo SMTP en backend)
    */
-  async sendOtpByEmail(email: string) {
-  const { data, error } = await supabase.functions.invoke("send-otp", {
-    body: { email },
-  });
-  if (error) return { success: false, error: error.message };
-  return { success: true };
+ async sendOtpByEmail(email: string) {
+  try {
+    const supabaseUrl = "https://yjyqecksqhhsmkywtrgt.supabase.co";
+    const supabaseKey = (supabase as any).supabaseKey ?? "";
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/send-otp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token ?? supabaseKey}`,
+        "apikey": supabaseKey,
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      return { success: false, error: data?.error ?? "Erreur inconnue" };
+    }
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: "Problème de connexion" };
+  }
 },
 
 async verifyOtp(email: string, token: string) {

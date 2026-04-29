@@ -18,6 +18,8 @@ const AVATAR_MAP: Record<string, any> = {
   avatar_5: require("../assets/Avatar3D/garcon4.glb"),
 };
 
+const INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 heures
+
 export default function LoginScreen() {
   const router = useRouter();
   const { setUserId, setUsername } = useUser();
@@ -70,11 +72,29 @@ export default function LoginScreen() {
         setSelectedModel(AVATAR_MAP[avatarKey]);
       }
 
-      // ✅ Sync userId + username dans contexte + AsyncStorage
+      // ✅ Sync userId + username dans contexte
       setUserId(data.id_user);
       setUsername(data.username ?? data.prenom ?? data.nom ?? "Joueur");
 
-      router.push("/frontend/screens/QuestionPeriodicScreen");
+      // ✅ Vérifie la dernière fois que le questionnaire a été montré
+      const { data: statsData } = await supabase
+        .from("player_stats")
+        .select("last_periodic_questionnaire")
+        .eq("id_user", Number(data.id_user))
+        .maybeSingle();
+
+      const lastShown = statsData?.last_periodic_questionnaire;
+      const needsQuestionnaire =
+        !lastShown ||
+        Date.now() - new Date(lastShown).getTime() >= INTERVAL_MS;
+
+      // ✅ Redirige selon le résultat
+      if (needsQuestionnaire) {
+        router.push("/frontend/screens/QuestionPeriodicScreen");
+      } else {
+        router.push("/frontend/screens/Dashbord");
+      }
+
     } catch (err) {
       Alert.alert("Erreur", "Une erreur est survenue");
     } finally {
@@ -119,9 +139,9 @@ export default function LoginScreen() {
             </View>
             <Text style={styles.rememberText}>Se souvenir de moi</Text>
           </TouchableOpacity>
-         <TouchableOpacity onPress={() => router.push("/frontend/screens/forget-password")}>
-  <Text style={styles.forgot}>Mot de passe oublié?</Text>
-</TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/frontend/screens/forget-password")}>
+            <Text style={styles.forgot}>Mot de passe oublié?</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.buttonWrapper} onPress={handleLogin} disabled={loading}>

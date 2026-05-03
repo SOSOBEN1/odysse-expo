@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
-import { View, Text, StyleSheet, Modal, Image, Dimensions, TouchableOpacity, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import { useState } from "react";
+import { Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import BackButton from "./BackButton";
 import CoinPrice from "./CoinPrice";
 
@@ -23,13 +23,13 @@ export default function MissionStatusModal({ visible, onClose, type, missionTitl
   const isSuccess = type === "success";
   const [activeBtn, setActiveBtn] = useState<'secondary' | 'primary'>('primary');
 
-const theme = {
-    bg: (isSuccess ? ["#f0fff4", "#dcfce7", "#bbf7d0"] : ["#fff5f5", "#fee2e2", "#fecaca"]) as [string, string, string],
+  const theme = {
+    bg: (isSuccess ? ["#f0fff4", "#dcfce7", "#bbf7d0"] : ["#fff5f5", "#fee2e2", "#fecaca"]) as const,
     border: isSuccess ? "#4A7C59" : "#E53E3E",
     title: isSuccess ? "#2E7D32" : "#C62828",
-    btnGradient: (isSuccess ? ["#4CAF50", "#2E7D32"] : ["#FF8A8A", "#E53E3E"]) as [string, string],
+    btnGradient: isSuccess ? ["#4CAF50", "#2E7D32"] : ["#FF8A8A", "#E53E3E"],
     pillBg: "rgba(0,0,0,0.08)"
-};
+  };
 
   return (
     <Modal visible={visible} transparent animationType="fade">

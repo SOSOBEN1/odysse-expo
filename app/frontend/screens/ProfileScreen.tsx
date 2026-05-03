@@ -1,342 +1,361 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator, ScrollView, StyleSheet,
-  Text, TouchableOpacity, View,
+  ActivityIndicator, Animated, Dimensions, Easing, Image,
+  ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View,
 } from "react-native";
-import AvatarCrd from "../components/AvatarCrd";
 import BackButton from "../components/BackButton";
-import Navbar from "../components/Navbar";
-import WaveBackground from "../components/waveBackground";
-import { useAvatar } from "../constants/AvatarContext";
-import { useUser } from "../constants/UserContext";
 import { supabase } from "../constants/supabase";
+import { useUser } from "../constants/UserContext";
 
-const AVATAR_MAP: Record<string, any> = {
-  avatar_1: require("../assets/Avatar3D/fille1.glb"),
-  avatar_2: require("../assets/Avatar3D/fille3Corrige.glb"),
-  avatar_3: require("../assets/Avatar3D/garcon1.glb"),
-  avatar_4: require("../assets/Avatar3D/garcon2.glb"),
-  avatar_5: require("../assets/Avatar3D/garcon4.glb"),
-};
+const { width: SW } = Dimensions.get("window");
+const GRID_COLS    = 3;
+const TOTAL_PIECES = 9;
 
-interface StatCardProps  { emoji: string; value: number; label: string; }
-interface BadgeItemProps { emoji: string; label: string; color: string; }
-interface StarItem {
-  top?: number; bottom?: number;
-  left?: number; right?: number;
-  size: number; opacity: number;
+interface ZoneInfo {
+  nom: string;
+  image_url: string;
+  accent_color: string;
+  dark_color: string;
+  light_color: string;
 }
 
-const BADGES: BadgeItemProps[] = [
-  { label: "Maître de la\nTo-Do",   emoji: "📋", color: "#f9c74f" },
-  { label: "Planificateur\nExpert", emoji: "⏰", color: "#90be6d" },
-  { label: "Organisateur\nPro",     emoji: "📊", color: "#4cc9f0" },
-  { label: "Journée\nProductive",   emoji: "☀️", color: "#f8961e" },
-];
-
-const stars: StarItem[] = [
-  { top: 10,    left: 10,   size: 20, opacity: 0.6  },
-  { top: 10,    right: 10,  size: 12, opacity: 0.4  },
-  { bottom: 10, left: 10,   size: 15, opacity: 0.5  },
-  { bottom: 10, right: 10,  size: 10, opacity: 0.35 },
-  { top: 30,    left: 50,   size: 8,  opacity: 0.25 },
-  { bottom: 40, right: 60,  size: 22, opacity: 0.7  },
-  { top: 40,    right: 50,  size: 22, opacity: 0.7  },
-  { top: 60,    left: 150,  size: 14, opacity: 0.45 },
-  { bottom: 80, left: 16,   size: 18, opacity: 0.55 },
-];
-
-function getLevelTitle(niveau: number): string {
-  if (niveau <= 2)  return "Débutant curieux";
-  if (niveau <= 5)  return "Explorateur de savoir";
-  if (niveau <= 10) return "Apprenti maître";
-  if (niveau <= 20) return "Expert confirmé";
-  return "Maître légendaire";
+interface PuzzleState {
+  id_puzzle: number;
+  total_pieces: number;
+  pieces_earned: number;
+  is_complete: boolean;
 }
 
-function StatCard({ emoji, value, label }: StatCardProps) {
+// ─── Étoile animée ────────────────────────────────────────────────────────────
+
+function AnimStar({ style, size = 14, delay = 0, color = "#c4b5fd" }: any) {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(Animated.sequence([
+      Animated.delay(delay),
+      Animated.timing(a, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(a, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.delay(400),
+    ])).start();
+  }, []);
   return (
-    <View style={statStyles.card}>
-      <View style={statStyles.row}>
-        <Text style={statStyles.emoji}>{emoji}</Text>
-        <Text style={statStyles.value}>{value}</Text>
-      </View>
-      <Text style={statStyles.label}>{label}</Text>
+    <Animated.View style={[style, {
+      opacity:   a.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.9] }),
+      transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.3] }) }],
+    }]}>
+      <MaterialIcons name="auto-awesome" size={size} color={color} />
+    </Animated.View>
+  );
+}
+
+// ─── Cellule de puzzle ────────────────────────────────────────────────────────
+
+function PuzzleCell({ index, revealed, imageUri, cellSize, accent }: {
+  index: number; revealed: boolean; imageUri: string; cellSize: number; accent: string;
+}) {
+  const sc    = useRef(new Animated.Value(0)).current;
+  const glow  = useRef(new Animated.Value(0)).current;
+
+  const row  = Math.floor(index / GRID_COLS);
+  const col  = index % GRID_COLS;
+  const imgX = -(col * cellSize);
+  const imgY = -(row * cellSize);
+
+  useEffect(() => {
+    Animated.spring(sc, { toValue: 1, friction: 5, delay: index * 80, useNativeDriver: true }).start();
+  }, []);
+
+  useEffect(() => {
+    if (revealed) {
+      Animated.loop(Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 1300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 0, duration: 1300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])).start();
+    }
+  }, [revealed]);
+
+  return (
+    <Animated.View style={[styles.cell, {
+      width: cellSize, height: cellSize,
+      borderColor: revealed ? accent : "rgba(255,255,255,0.25)",
+      transform: [{ scale: sc }],
+    }]}>
+      {revealed ? (
+        <>
+          <View style={{ width: cellSize, height: cellSize, overflow: "hidden" }}>
+            <Image
+              source={{ uri: imageUri }}
+              style={{ width: cellSize * GRID_COLS, height: cellSize * GRID_COLS, position: "absolute", left: imgX, top: imgY }}
+              resizeMode="cover"
+            />
+          </View>
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: accent + "22", borderRadius: 10, opacity: glow }]} />
+          <View style={[styles.cellCheck, { backgroundColor: accent }]}>
+            <Ionicons name="checkmark" size={10} color="#fff" />
+          </View>
+        </>
+      ) : (
+        <View style={styles.cellLocked}>
+          <Ionicons name="lock-closed" size={18} color="rgba(255,255,255,0.5)" />
+        </View>
+      )}
+    </Animated.View>
+  );
+}
+
+// ─── Barre de progression ─────────────────────────────────────────────────────
+
+function ProgressBar({ value, total, accent }: { value: number; total: number; accent: string }) {
+  const w = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(w, {
+      toValue: total > 0 ? value / total : 0,
+      duration: 900, delay: 400, easing: Easing.out(Easing.cubic), useNativeDriver: false,
+    }).start();
+  }, [value, total]);
+  return (
+    <View style={styles.progressTrack}>
+      <Animated.View style={[styles.progressFill, {
+        backgroundColor: accent,
+        width: w.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
+      }]} />
     </View>
   );
 }
 
-const statStyles = StyleSheet.create({
-  card:  { width: "48%", backgroundColor: "#f0edff", borderRadius: 18, padding: 14, marginBottom: 10, minHeight: 78, justifyContent: "space-between" },
-  row:   { flexDirection: "row", alignItems: "center", gap: 8 },
-  emoji: { fontSize: 22 },
-  value: { fontSize: 24, fontWeight: "900", color: "#2d1a6e" },
-  label: { fontSize: 12, color: "#7f5af0", fontWeight: "600", marginTop: 4 },
-});
+// ─── Écran ────────────────────────────────────────────────────────────────────
 
-function BadgeItem({ emoji, label, color }: BadgeItemProps) {
-  return (
-    <View style={badgeStyles.container}>
-      <View style={[badgeStyles.iconBox, { backgroundColor: color + "33", borderColor: color + "55" }]}>
-        <Text style={badgeStyles.emoji}>{emoji}</Text>
-      </View>
-      <Text style={badgeStyles.label}>{label}</Text>
-    </View>
-  );
-}
-
-const badgeStyles = StyleSheet.create({
-  container: { alignItems: "center", width: 70 },
-  iconBox:   { width: 60, height: 60, borderRadius: 14, justifyContent: "center", alignItems: "center", marginBottom: 5, borderWidth: 1.5 },
-  emoji:     { fontSize: 26 },
-  label:     { fontSize: 9.5, color: "#5c3ca8", textAlign: "center", fontWeight: "600", lineHeight: 13 },
-});
-
-export default function ProfileScreen() {
+export default function PuzzleScreen() {
   const router = useRouter();
-  const { selectedModel, setSelectedModel } = useAvatar();
-  const { userId, username: ctxUsername, isLoading: ctxLoading } = useUser();
+  const { userId } = useUser();
+  const { zoneId, zoneSlug } = useLocalSearchParams<{ zoneId: string; zoneSlug: string }>();
 
-  const [userData, setUserData] = useState({
-    username: "", prenom: "", nom: "",
-    level: 1, levelTitle: "Explorateur de savoir",
-    xp: 0, xpMax: 500, coins: 0,
-    badges: BADGES.length, missions: 0, defis: 0,
-  });
-  const [fetching, setFetching] = useState(false);
+  const [zoneInfo, setZoneInfo] = useState<ZoneInfo | null>(null);
+  const [puzzle,   setPuzzle]   = useState<PuzzleState | null>(null);
+  const [loading,  setLoading]  = useState(true);
 
-  useFocusEffect(useCallback(() => {
-    // ── On attend que AsyncStorage soit chargé ──
-    if (ctxLoading) return;
-    if (!userId) return;
+  const CELL_SIZE = Math.floor((SW - 32 - 16) / GRID_COLS) - 4;
 
-    let cancelled = false;
+  const headerFade = useRef(new Animated.Value(0)).current;
+  const headerY    = useRef(new Animated.Value(-20)).current;
+  const cardFade   = useRef(new Animated.Value(0)).current;
+  const cardSlide  = useRef(new Animated.Value(40)).current;
 
-    const fetchProfile = async () => {
-      setFetching(true);
-      try {
-        const { data: user, error } = await supabase
-          .from("users")
-          .select("username, prenom, nom, xp, gold, id_level, avatar_url")
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      // 1. Infos de la zone
+      const { data: zone } = await supabase
+        .from("zone")
+        .select("nom, image_url, accent_color, dark_color, light_color")
+        .eq("id_zone", Number(zoneId))
+        .single();
+      if (zone) setZoneInfo(zone);
+
+      // 2. Config puzzle
+      const { data: config } = await supabase
+        .from("puzzle_config")
+        .select("id_puzzle, total_pieces, image_url")
+        .eq("id_zone", Number(zoneId))
+        .single();
+
+      if (config) {
+        // 3. Progression user
+        const { data: prog } = await supabase
+          .from("puzzle_progress")
+          .select("pieces_earned, is_complete")
           .eq("id_user", userId)
-          .single();
+          .eq("id_puzzle", config.id_puzzle)
+          .maybeSingle();
 
-        if (cancelled) return;
-
-        if (error || !user) {
-          console.warn("Erreur fetch profil:", error?.message);
-          return;
-        }
-
-        // ── Sync avatar : priorité AvatarContext déjà chargé,
-        //    sinon on charge depuis Supabase ──────────────────
-        const avatarKey = user.avatar_url ?? "avatar_1";
-        if (AVATAR_MAP[avatarKey]) {
-          // Toujours sync pour être sûr que c'est le bon avatar
-          setSelectedModel(AVATAR_MAP[avatarKey]);
-        } else if (!selectedModel) {
-          // Fallback sur avatar_1 si rien de valide
-          setSelectedModel(AVATAR_MAP["avatar_1"]);
-        }
-
-        const { count: missionsCount } = await supabase
-          .from("mission")
-          .select("id_mission", { count: "exact", head: true })
-          .eq("statut", "done");
-
-        if (cancelled) return;
-
-        const niveau = user.id_level ?? 1;
-        const xp     = user.xp      ?? 0;
-        const maxXp  = niveau * 500;
-
-        setUserData({
-          username:   user.username ?? "",
-          prenom:     user.prenom   ?? "",
-          nom:        user.nom      ?? "",
-          level:      niveau,
-          levelTitle: getLevelTitle(niveau),
-          xp:         xp % maxXp,
-          xpMax:      maxXp,
-          coins:      user.gold     ?? 0,
-          badges:     BADGES.length,
-          missions:   missionsCount ?? 0,
-          defis:      0,
+        setPuzzle({
+          id_puzzle:     config.id_puzzle,
+          total_pieces:  config.total_pieces,
+          pieces_earned: prog?.pieces_earned ?? 0,
+          is_complete:   prog?.is_complete   ?? false,
         });
-      } catch (e) {
-        console.warn("Erreur fetchProfile :", e);
-      } finally {
-        if (!cancelled) setFetching(false);
       }
-    };
+    } finally {
+      setLoading(false);
+      Animated.parallel([
+        Animated.timing(headerFade, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.spring(headerY,    { toValue: 0, friction: 7,   useNativeDriver: true }),
+        Animated.timing(cardFade,   { toValue: 1, duration: 500, delay: 200, useNativeDriver: true }),
+        Animated.spring(cardSlide,  { toValue: 0, friction: 7,   delay: 200, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [zoneId, userId]);
 
-    fetchProfile();
+  useEffect(() => { load(); }, [load]);
 
-    // Cleanup pour éviter les setState sur composant démonté
-    return () => { cancelled = true; };
-
-  }, [userId, ctxLoading]));
-
-  const xpPct = Math.min((userData.xp / userData.xpMax) * 100, 100);
-
-  const displayName = userData.username
-    || [userData.prenom, userData.nom].filter(Boolean).join(" ")
-    || ctxUsername
-    || "Joueur";
-
-  // ── Loader ──
-  if (ctxLoading || fetching) {
+  if (loading) {
     return (
-      <LinearGradient
-        colors={["#ffffff", "#dcd2f9"]}
-        style={[styles.container, { justifyContent: "center", alignItems: "center" }]}
-      >
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
         <ActivityIndicator size="large" color="#7f5af0" />
-      </LinearGradient>
+      </View>
     );
   }
 
+  const accent       = zoneInfo?.accent_color ?? "#22c55e";
+  const light        = zoneInfo?.light_color  ?? "#dcfce7";
+  const dark         = zoneInfo?.dark_color   ?? "#14532d";
+  const imageUri     = zoneInfo?.image_url    ?? "";
+  const piecesEarned = puzzle?.pieces_earned  ?? 0;
+  const totalPieces  = puzzle?.total_pieces   ?? TOTAL_PIECES;
+  const isComplete   = puzzle?.is_complete    ?? false;
+
+  const STARS = [
+    { top: 100, left: 14,  size: 16, delay: 0   },
+    { top: 120, right: 16, size: 11, delay: 350  },
+    { top: 155, right: 8,  size: 8,  delay: 650  },
+    { top: 185, left: 32,  size: 7,  delay: 180  },
+  ];
+
   return (
-    <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
-      <WaveBackground />
+    <View style={styles.container}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
 
-      <View style={styles.backBtnWrapper}>
+      <View style={StyleSheet.absoluteFill}>
+        <View style={[styles.bgTop, { backgroundColor: light }]} />
+      </View>
+
+      {STARS.map((s, i) => (
+        <AnimStar key={i} size={s.size} delay={s.delay} color={accent} style={{
+          position: "absolute", zIndex: 2,
+          ...(s.top   !== undefined ? { top:   s.top   } : {}),
+          ...(s.left  !== undefined ? { left:  s.left  } : {}),
+          ...(s.right !== undefined ? { right: s.right } : {}),
+        }} />
+      ))}
+
+      {/* Header */}
+      <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerY }] }]}>
         <BackButton />
-      </View>
-
-      <View style={styles.stars} pointerEvents="none">
-        {stars.map((s, i) => (
-          <MaterialIcons
-            key={i} name="auto-awesome" size={s.size} color="#fff"
-            style={{
-              position: "absolute",
-              ...(s.top    !== undefined ? { top: s.top }       : {}),
-              ...(s.bottom !== undefined ? { bottom: s.bottom } : {}),
-              ...(s.left   !== undefined ? { left: s.left }     : {}),
-              ...(s.right  !== undefined ? { right: s.right }   : {}),
-              opacity: s.opacity,
-            }}
-          />
-        ))}
-      </View>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>{zoneInfo?.nom ?? zoneSlug}</Text>
+          <Text style={[styles.headerSub, { color: accent }]}>Puzzle de zone</Text>
+        </View>
+        <View style={[styles.piecesBadge, { backgroundColor: accent }]}>
+          <Text style={styles.piecesBadgeText}>🧩 {piecesEarned}/{totalPieces}</Text>
+        </View>
+      </Animated.View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <Animated.View style={[styles.puzzleCard, { opacity: cardFade, transform: [{ translateY: cardSlide }] }]}>
 
-        {/* Avatar + Nom */}
-        <View style={styles.avatarSection}>
-          <View style={styles.avatarWrapper}>
-            {selectedModel ? (
-              <AvatarCrd model={selectedModel} bgColor="#f0ecff" />
+          {/* Image / grille */}
+          <View style={[styles.puzzleImageContainer, { borderColor: accent + "44" }]}>
+            <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={isComplete ? 0 : 8} />
+
+            {!isComplete && (
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(20,10,50,0.35)" }]} />
+            )}
+
+            {isComplete ? (
+              <View style={styles.completeBanner}>
+                <Text style={styles.completeBannerText}>🎉 Zone révélée !</Text>
+              </View>
             ) : (
-              // Fallback : si selectedModel est encore null après le fetch,
-              // on affiche l'icône personne
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={52} color="#7f5af0" />
+              <View style={styles.grid}>
+                {Array.from({ length: totalPieces }).map((_, i) => (
+                  <PuzzleCell
+                    key={i} index={i} revealed={i < piecesEarned}
+                    imageUri={imageUri} cellSize={CELL_SIZE} accent={accent}
+                  />
+                ))}
               </View>
             )}
           </View>
-          <Text style={styles.userName}>{displayName.toUpperCase()}</Text>
-          <Text style={styles.userLevel}>
-            Niveau {userData.level} – {userData.levelTitle}
-          </Text>
-        </View>
 
-        <View style={styles.card}>
-          <View style={styles.xpBox}>
-            <View style={styles.xpHeader}>
-              <Text style={styles.xpLabel}>XP : {userData.xp}/{userData.xpMax}</Text>
-              <MaterialIcons name="auto-awesome" size={18} color="#7f5af0" />
+          {/* Progression */}
+          <View style={styles.progressSection}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressLabel}>{piecesEarned}/{totalPieces} pièces débloquées</Text>
+              <Text style={[styles.progressPct, { color: accent }]}>
+                {Math.round((piecesEarned / totalPieces) * 100)}%
+              </Text>
             </View>
-            <View style={styles.xpTrack}>
-              <LinearGradient
-                colors={["#7f5af0", "#bbaaff"]}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={[styles.xpFill, { width: `${xpPct}%` }]}
-              />
-            </View>
+            <ProgressBar value={piecesEarned} total={totalPieces} accent={accent} />
           </View>
 
-          <View style={styles.statsGrid}>
-            <StatCard emoji="🪙" value={userData.coins}    label="Pièces d'or" />
-            <StatCard emoji="🏆" value={userData.badges}   label="Badges" />
-            <StatCard emoji="📋" value={userData.missions} label="Missions" />
-            <StatCard emoji="🎯" value={userData.defis}    label="Défis" />
-          </View>
-
-          <Text style={styles.badgesTitle}>Badges gagnés</Text>
-          <View style={styles.badgesRow}>
-            {BADGES.map((b, i) => (
-              <BadgeItem key={i} emoji={b.emoji} label={b.label} color={b.color} />
-            ))}
-          </View>
-
+          {/* Bouton missions */}
           <TouchableOpacity
-            style={styles.editButton}
+            style={[styles.missionsBtn, { backgroundColor: accent, borderColor: accent + "88" }]}
+            onPress={() => router.push({ pathname: "/frontend/screens/ZoneScreen", params: { zoneId, zoneSlug } })}
             activeOpacity={0.85}
-            onPress={() => router.push("/frontend/screens/EditProfileScreen")}
           >
-            <LinearGradient
-              colors={["#6949a8", "#9574e0", "#baaae7"]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={styles.editGradient}
-            >
-              <Text style={styles.editText}>Modifier profil</Text>
-              <MaterialIcons name="auto-awesome" size={16} color="#fff" style={{ marginLeft: 6 }} />
-            </LinearGradient>
+            <View style={styles.missionsBtnIcon}>
+              <Ionicons name="rocket" size={16} color={accent} />
+            </View>
+            <Text style={styles.missionsBtnText}>Continuer les missions</Text>
           </TouchableOpacity>
-        </View>
+
+          {/* Info */}
+          <View style={[styles.infoCard, { backgroundColor: light, borderColor: accent + "33" }]}>
+            <Ionicons name="information-circle" size={18} color={accent} />
+            <Text style={[styles.infoText, { color: dark }]}>
+              Complète les missions de cette zone pour débloquer toutes les pièces et révéler la photo !
+            </Text>
+          </View>
+        </Animated.View>
+
+        {/* Stats */}
+        <Animated.View style={[styles.statsRow, { opacity: cardFade }]}>
+          <View style={[styles.statCard, { borderColor: accent + "33" }]}>
+            <Text style={[styles.statVal, { color: accent }]}>{piecesEarned}</Text>
+            <Text style={styles.statLabel}>Gagnées</Text>
+          </View>
+          <View style={[styles.statCard, { borderColor: accent + "33" }]}>
+            <Text style={[styles.statVal, { color: "#f59e0b" }]}>{totalPieces - piecesEarned}</Text>
+            <Text style={styles.statLabel}>Restantes</Text>
+          </View>
+          <View style={[styles.statCard, { borderColor: accent + "33" }]}>
+            <Text style={[styles.statVal, { color: "#22c55e" }]}>
+              {Math.round((piecesEarned / totalPieces) * 100)}%
+            </Text>
+            <Text style={styles.statLabel}>Complété</Text>
+          </View>
+        </Animated.View>
 
         <View style={{ height: 20 }} />
       </ScrollView>
-
-      <Navbar active="profil" onChange={() => {}} />
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container:      { flex: 1 },
-  backBtnWrapper: { position: "absolute", top: 54, left: 20, zIndex: 10 },
-  stars:          { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "hidden" },
-  scroll:         { paddingTop: 50, paddingBottom: 120, paddingHorizontal: 20 },
-  avatarSection:  { alignItems: "center", marginTop: 70, marginBottom: 20 },
-  avatarWrapper: {
-    width: 110, height: 110, borderRadius: 55,
-    backgroundColor: "#fff",
-    justifyContent: "center", alignItems: "center",
-    shadowColor: "#7f5af0", shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18, shadowRadius: 14,
-    elevation: 8, marginBottom: 14, overflow: "hidden",
-  },
-  avatarPlaceholder: {
-    width: "100%", height: "100%",
-    backgroundColor: "#f0ecff",
-    justifyContent: "center", alignItems: "center",
-  },
-  userName:    { fontSize: 22, fontWeight: "900", color: "#2d1a6e", letterSpacing: 1.5, marginBottom: 4 },
-  userLevel:   { fontSize: 13, color: "#9b87c9", fontWeight: "600" },
-  card: {
-    backgroundColor: "#fff", borderRadius: 28, padding: 20,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08, shadowRadius: 12, elevation: 6,
-  },
-  xpBox:       { backgroundColor: "#f0edff", borderRadius: 18, padding: 14, marginBottom: 16 },
-  xpHeader:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  xpLabel:     { fontSize: 14, fontWeight: "800", color: "#2d1a6e" },
-  xpTrack:     { height: 10, backgroundColor: "#d1c4e9", borderRadius: 10, overflow: "hidden" },
-  xpFill:      { height: "100%", borderRadius: 10 },
-  statsGrid:   { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 8 },
-  badgesTitle: { fontSize: 16, fontWeight: "800", color: "#2d1a6e", textAlign: "center", marginBottom: 14, marginTop: 6 },
-  badgesRow:   { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
-  editButton: {
-    width: "100%", borderRadius: 15, overflow: "hidden", elevation: 7,
-    shadowColor: "#6949a8", shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 10,
-  },
-  editGradient: { flexDirection: "row", paddingVertical: 15, alignItems: "center", justifyContent: "center" },
-  editText:     { color: "#fff", fontWeight: "bold", fontSize: 16, letterSpacing: 0.4 },
+  container:   { flex: 1, backgroundColor: "#f5f3ff" },
+  bgTop:       { height: 260, borderBottomLeftRadius: 40, borderBottomRightRadius: 40 },
+  header:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 54, paddingBottom: 10, zIndex: 5 },
+  headerCenter:{ flex: 1, alignItems: "center" },
+  headerTitle: { fontSize: 18, fontWeight: "900", color: "#2d1a6e", letterSpacing: 0.2 },
+  headerSub:   { fontSize: 11, fontWeight: "700", marginTop: 2 },
+  piecesBadge: { borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5 },
+  piecesBadgeText: { color: "#fff", fontWeight: "800", fontSize: 12 },
+  scroll:      { paddingHorizontal: 16, paddingBottom: 120, paddingTop: 6 },
+  puzzleCard:  { backgroundColor: "#fff", borderRadius: 28, overflow: "hidden", marginBottom: 14, shadowColor: "#7f5af0", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 8, padding: 16 },
+  puzzleImageContainer: { width: "100%", aspectRatio: 1, borderRadius: 20, overflow: "hidden", marginBottom: 16, position: "relative", borderWidth: 2 },
+  completeBanner:     { position: "absolute", bottom: 14, left: 0, right: 0, alignItems: "center" },
+  completeBannerText: { fontSize: 20, fontWeight: "900", color: "#fff", backgroundColor: "rgba(0,0,0,0.5)", paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, overflow: "hidden" },
+  grid:        { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, flexDirection: "row", flexWrap: "wrap", padding: 6, gap: 4, alignContent: "flex-start" },
+  cell:        { borderRadius: 10, overflow: "hidden", borderWidth: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3, margin: 2 },
+  cellCheck:   { position: "absolute", bottom: 3, right: 3, width: 16, height: 16, borderRadius: 8, justifyContent: "center", alignItems: "center", borderWidth: 1.5, borderColor: "#fff" },
+  cellLocked:  { flex: 1, backgroundColor: "rgba(60,20,120,0.5)", justifyContent: "center", alignItems: "center" },
+  progressSection: { marginBottom: 14 },
+  progressHeader:  { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  progressLabel:   { fontSize: 13, fontWeight: "800", color: "#2d1a6e" },
+  progressPct:     { fontSize: 13, fontWeight: "900" },
+  progressTrack:   { height: 10, backgroundColor: "#e8e0ff", borderRadius: 10, overflow: "hidden" },
+  progressFill:    { height: "100%", borderRadius: 10 },
+  missionsBtn:     { borderRadius: 24, paddingVertical: 13, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 12, borderWidth: 2 },
+  missionsBtnIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#fff", justifyContent: "center", alignItems: "center" },
+  missionsBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  infoCard:    { flexDirection: "row", alignItems: "flex-start", gap: 8, borderRadius: 14, padding: 12, borderWidth: 1.5 },
+  infoText:    { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
+  statsRow:    { flexDirection: "row", gap: 10, marginBottom: 4 },
+  statCard:    { flex: 1, backgroundColor: "#fff", borderRadius: 18, padding: 14, alignItems: "center", gap: 4, shadowColor: "#7f5af0", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4, borderWidth: 1 },
+  statVal:     { fontSize: 22, fontWeight: "900" },
+  statLabel:   { fontSize: 10, color: "#9b87c9", fontWeight: "600", textAlign: "center" },
 });

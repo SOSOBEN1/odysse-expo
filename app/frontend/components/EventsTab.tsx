@@ -1,12 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { COLORS, SHADOWS } from "../styles/theme";
 import CreateEventModal from "./CreateEventModal";
 import { useRouter } from "expo-router";
+import { supabase } from "../../../app/frontend/constants/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
 type Event = {
   id: string;
   title: string;
@@ -24,18 +26,20 @@ type UpcomingEvent = {
   daysLeft: number;
 };
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
-const EVENTS: Event[] = [
-  { id: "1", title: "Soutenance PFE", date: "10 JUIN", total: 5, done: 3, icon: "🎓", iconBg: "#fef3c7" },
-  { id: "2", title: "Projet mobile", date: "10 JUIN", total: 4, done: 2, icon: "📱", iconBg: "#fee2e2" },
-  { id: "3", title: "Examen de maths", date: "10 JUIN", total: 3, done: 0, icon: "🧮", iconBg: "#fef9c3" },
-];
+// ─── Icônes et couleurs selon type_boss ───────────────────────────────────────
 
-const UPCOMING: UpcomingEvent[] = [
-  { id: "u1", title: "Hackathon 2024", date: "25 JUIN", daysLeft: 10 },
-];
+const TYPE_CONFIG: Record<string, { icon: string; iconBg: string }> = {
+  event:      { icon: "🎉", iconBg: "#fef3c7" },
+  examen:     { icon: "📝", iconBg: "#fce7f3" },
+  soutenance: { icon: "🎓", iconBg: "#ede9fe" },
+  projet:     { icon: "📱", iconBg: "#fee2e2" },
+};
+
+const getTypeConfig = (type: string) =>
+  TYPE_CONFIG[type] ?? { icon: "📅", iconBg: "#f3f4f6" };
 
 // ─── Donut Chart ──────────────────────────────────────────────────────────────
+
 function DonutChart({ percent }: { percent: number }) {
   const size = 110;
   const strokeWidth = 12;
@@ -64,12 +68,13 @@ function DonutChart({ percent }: { percent: number }) {
 
 const donut = StyleSheet.create({
   wrapper: { position: "relative", width: 110, height: 110 },
-  center: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center" },
+  center:  { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center" },
   percent: { fontSize: 20, fontWeight: "800", color: "#4c1d95" },
-  label: { fontSize: 9, color: COLORS.primary, textAlign: "center", lineHeight: 13 },
+  label:   { fontSize: 9, color: COLORS.primary, textAlign: "center", lineHeight: 13 },
 });
 
 // ─── Event Card ───────────────────────────────────────────────────────────────
+
 function EventCard({ event, onPress }: { event: Event; onPress: () => void }) {
   const percent = event.total > 0 ? Math.round((event.done / event.total) * 100) : 0;
   const progressColor = percent === 100 ? "#22c55e" : percent === 0 ? "#e5e7eb" : COLORS.primary;
@@ -81,7 +86,7 @@ function EventCard({ event, onPress }: { event: Event; onPress: () => void }) {
       </View>
       <View style={eventStyles.content}>
         <View style={eventStyles.topRow}>
-          <Text style={eventStyles.title}>{event.title}</Text>
+          <Text style={eventStyles.title} numberOfLines={1}>{event.title}</Text>
           <View style={[eventStyles.percentBadge, { backgroundColor: COLORS.primary }]}>
             <Text style={eventStyles.percentText}>{percent}%</Text>
           </View>
@@ -101,26 +106,24 @@ function EventCard({ event, onPress }: { event: Event; onPress: () => void }) {
 }
 
 const eventStyles = StyleSheet.create({
-  card: {
-    backgroundColor: "#fff", borderRadius: 20, padding: 14,
-    flexDirection: "row", alignItems: "center", gap: 12, ...SHADOWS.light,
-  },
-  iconWrapper: { width: 48, height: 48, borderRadius: 14, justifyContent: "center", alignItems: "center" },
-  icon: { fontSize: 24 },
-  content: { flex: 1 },
-  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 3 },
-  title: { fontSize: 14, fontWeight: "800", color: "#1e1b4b" },
+  card:         { backgroundColor: "#fff", borderRadius: 20, padding: 14, flexDirection: "row", alignItems: "center", gap: 12, ...SHADOWS.light },
+  iconWrapper:  { width: 48, height: 48, borderRadius: 14, justifyContent: "center", alignItems: "center" },
+  icon:         { fontSize: 24 },
+  content:      { flex: 1 },
+  topRow:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 3 },
+  title:        { fontSize: 14, fontWeight: "800", color: "#1e1b4b", flex: 1, marginRight: 8 },
   percentBadge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
-  percentText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  date: { fontSize: 11, color: "#9ca3af", marginBottom: 6 },
-  barBg: { height: 6, backgroundColor: "#f3f4f6", borderRadius: 10, overflow: "hidden", marginBottom: 6 },
-  barFill: { height: "100%", borderRadius: 10 },
-  bottomRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  percentText:  { color: "#fff", fontSize: 11, fontWeight: "700" },
+  date:         { fontSize: 11, color: "#9ca3af", marginBottom: 6 },
+  barBg:        { height: 6, backgroundColor: "#f3f4f6", borderRadius: 10, overflow: "hidden", marginBottom: 6 },
+  barFill:      { height: "100%", borderRadius: 10 },
+  bottomRow:    { flexDirection: "row", alignItems: "center", gap: 4 },
   missionsText: { fontSize: 11, color: "#9ca3af" },
-  chevron: { marginLeft: 4 },
+  chevron:      { marginLeft: 4 },
 });
 
 // ─── Upcoming Card ────────────────────────────────────────────────────────────
+
 function UpcomingCard({ event }: { event: UpcomingEvent }) {
   return (
     <TouchableOpacity style={upcomingStyles.card} activeOpacity={0.85}>
@@ -141,34 +144,113 @@ function UpcomingCard({ event }: { event: UpcomingEvent }) {
 }
 
 const upcomingStyles = StyleSheet.create({
-  card: {
-    backgroundColor: "#fff", borderRadius: 20, padding: 14,
-    flexDirection: "row", alignItems: "center", gap: 12, ...SHADOWS.light,
-  },
-  iconWrapper: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#ede9fe", justifyContent: "center", alignItems: "center" },
-  icon: { fontSize: 22 },
-  content: { flex: 1 },
-  title: { fontSize: 14, fontWeight: "700", color: "#1e1b4b" },
-  date: { fontSize: 11, color: "#9ca3af", marginVertical: 3 },
+  card:         { backgroundColor: "#fff", borderRadius: 20, padding: 14, flexDirection: "row", alignItems: "center", gap: 12, ...SHADOWS.light },
+  iconWrapper:  { width: 44, height: 44, borderRadius: 12, backgroundColor: "#ede9fe", justifyContent: "center", alignItems: "center" },
+  icon:         { fontSize: 22 },
+  content:      { flex: 1 },
+  title:        { fontSize: 14, fontWeight: "700", color: "#1e1b4b" },
+  date:         { fontSize: 11, color: "#9ca3af", marginVertical: 3 },
   countdownRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  countdown: { fontSize: 11, color: COLORS.secondary, fontWeight: "600" },
+  countdown:    { fontSize: 11, color: COLORS.secondary, fontWeight: "600" },
 });
 
 // ─── Props ────────────────────────────────────────────────────────────────────
+
 interface EventsTabProps {
   onViewAll?: () => void;
 }
 
 // ─── Main EventsTab ───────────────────────────────────────────────────────────
+
 export default function EventsTab({ onViewAll }: EventsTabProps) {
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal]   = useState(false);
+  const [events, setEvents]         = useState<Event[]>([]);
+  const [upcoming, setUpcoming]     = useState<UpcomingEvent[]>([]);
+  const [loading, setLoading]       = useState(true);
   const router = useRouter();
 
-  const totalMissions = EVENTS.reduce((acc, e) => acc + e.total, 0);
-  const doneMissions = EVENTS.reduce((acc, e) => acc + e.done, 0);
-  const globalPercent = totalMissions > 0 ? Math.round((doneMissions / totalMissions) * 100) : 0;
-  const terminatedEvents = EVENTS.filter(e => e.done === e.total).length;
-  const lateEvents = EVENTS.filter(e => e.done === 0).length;
+  // ── Fetch depuis Supabase ─────────────────────────────────────────────────
+
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+
+      // 🔵 Récupérer les 4 derniers boss_events
+      const { data: bossEvents, error } = await supabase
+        .from("boss_events")
+        .select(`
+          id_boss,
+          nom,
+          type_boss,
+          created_at,
+          mission ( id_mission, mission_validation ( statut ) )
+        `)
+        .order("created_at", { ascending: false })
+        .limit(8); // on prend 8 pour avoir assez pour "actifs" + "à venir"
+
+      if (error) throw error;
+
+      const now = new Date();
+      const activeEvents: Event[]    = [];
+      const upcomingEvents: UpcomingEvent[] = [];
+
+      (bossEvents ?? []).forEach((boss: any) => {
+        const cfg        = getTypeConfig(boss.type_boss ?? "event");
+        const createdAt  = new Date(boss.created_at);
+        const daysLeft   = Math.ceil((createdAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Compter les missions et celles terminées
+        const missions   = boss.mission ?? [];
+        const total      = missions.length;
+        const done       = missions.filter((m: any) =>
+          (m.mission_validation ?? []).some((v: any) => v.statut === "done")
+        ).length;
+
+        // Formater la date
+        const dateStr = createdAt.toLocaleDateString("fr-FR", {
+          day: "2-digit", month: "short",
+        }).toUpperCase();
+
+        if (activeEvents.length < 4) {
+          activeEvents.push({
+            id:     String(boss.id_boss),
+            title:  boss.nom ?? "Événement",
+            date:   dateStr,
+            total,
+            done,
+            icon:   cfg.icon,
+            iconBg: cfg.iconBg,
+          });
+        } else if (upcomingEvents.length < 3) {
+          upcomingEvents.push({
+            id:       String(boss.id_boss),
+            title:    boss.nom ?? "Événement",
+            date:     dateStr,
+            daysLeft: Math.max(0, daysLeft),
+          });
+        }
+      });
+
+      setEvents(activeEvents);
+      setUpcoming(upcomingEvents);
+    } catch (err: any) {
+      console.error("❌ loadEvents error:", err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadEvents();
+  }, []);
+
+  // ── Stats globales ────────────────────────────────────────────────────────
+
+  const totalMissions    = events.reduce((acc, e) => acc + e.total, 0);
+  const doneMissions     = events.reduce((acc, e) => acc + e.done, 0);
+  const globalPercent    = totalMissions > 0 ? Math.round((doneMissions / totalMissions) * 100) : 0;
+  const terminatedEvents = events.filter(e => e.total > 0 && e.done === e.total).length;
+  const lateEvents       = events.filter(e => e.done === 0).length;
 
   return (
     <View style={styles.container}>
@@ -182,7 +264,7 @@ export default function EventsTab({ onViewAll }: EventsTabProps) {
           <View style={styles.legend}>
             <View style={styles.legendItem}>
               <Text style={styles.legendIcon}>🔔</Text>
-              <Text style={styles.legendCount}>{EVENTS.length}</Text>
+              <Text style={styles.legendCount}>{events.length}</Text>
               <Text style={styles.legendLabel}>Événements actifs</Text>
             </View>
             <View style={styles.legendItem}>
@@ -204,33 +286,44 @@ export default function EventsTab({ onViewAll }: EventsTabProps) {
         </TouchableOpacity>
       </View>
 
-      {/* ── Liste événements ── */}
+      {/* ── Liste 4 événements ── */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Mes événements</Text>
         <TouchableOpacity onPress={() => router.push("/frontend/screens/EventsScreen")}>
           <Text style={styles.seeAll}>Voir tout</Text>
         </TouchableOpacity>
       </View>
+
       <View style={styles.list}>
-        {EVENTS.map(e => (
-          <EventCard
-            key={e.id}
-            event={e}
-            onPress={() => router.push("/frontend/screens/missionEvent")}
-          />
-        ))}
+        {loading ? (
+          <Text style={styles.emptyText}>Chargement...</Text>
+        ) : events.length === 0 ? (
+          <Text style={styles.emptyText}>Aucun événement trouvé</Text>
+        ) : (
+          events.map(e => (
+            <EventCard
+              key={e.id}
+              event={e}
+              onPress={() => router.push("/frontend/screens/missionEvent")}
+            />
+          ))
+        )}
       </View>
 
       {/* ── Événements à venir ── */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Événements à venir</Text>
-        <TouchableOpacity onPress={onViewAll}>
-          <Text style={styles.seeAll}>Voir tout</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.list}>
-        {UPCOMING.map(e => <UpcomingCard key={e.id} event={e} />)}
-      </View>
+      {upcoming.length > 0 && (
+        <>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Événements à venir</Text>
+            <TouchableOpacity onPress={onViewAll}>
+              <Text style={styles.seeAll}>Voir tout</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.list}>
+            {upcoming.map(e => <UpcomingCard key={e.id} event={e} />)}
+          </View>
+        </>
+      )}
 
       {/* ── Conseil hibou ── */}
       <View style={styles.tipCard}>
@@ -244,58 +337,39 @@ export default function EventsTab({ onViewAll }: EventsTabProps) {
       </View>
 
       {/* ── Modal ── */}
-    <CreateEventModal
-  visible={showModal}
-  onClose={() => setShowModal(false)}
-  onCreate={() => {
-    setShowModal(false);
-  }}
-/>
+      <CreateEventModal
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+        onCreate={() => { setShowModal(false); loadEvents(); }}
+      />
     </View>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: { paddingHorizontal: 16, paddingBottom: 120 },
-  card: { backgroundColor: "#fff", borderRadius: 20, padding: 18, marginTop: 16, ...SHADOWS.light },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: "#1e1b4b", marginBottom: 2 },
+  container:    { paddingHorizontal: 16, paddingBottom: 120 },
+  card:         { backgroundColor: "#fff", borderRadius: 20, padding: 18, marginTop: 16, ...SHADOWS.light },
+  cardTitle:    { fontSize: 15, fontWeight: "700", color: "#1e1b4b", marginBottom: 2 },
   cardSubtitle: { fontSize: 11, color: COLORS.secondary, marginBottom: 16 },
-  progressRow: { flexDirection: "row", alignItems: "center", gap: 24, marginBottom: 16 },
-  legend: { flex: 1, gap: 10 },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 8 },
-  legendIcon: { fontSize: 14 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  legendCount: { fontSize: 15, fontWeight: "700", color: "#1e1b4b", width: 24 },
-  legendLabel: { fontSize: 12, color: "#6b7280", flex: 1 },
-  createBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 50,
-    paddingVertical: 12,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  createBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-  sectionHeader: {
-    flexDirection: "row", justifyContent: "space-between",
-    alignItems: "center", marginTop: 22, marginBottom: 10,
-  },
+  progressRow:  { flexDirection: "row", alignItems: "center", gap: 24, marginBottom: 16 },
+  legend:       { flex: 1, gap: 10 },
+  legendItem:   { flexDirection: "row", alignItems: "center", gap: 8 },
+  legendIcon:   { fontSize: 14 },
+  dot:          { width: 10, height: 10, borderRadius: 5 },
+  legendCount:  { fontSize: 15, fontWeight: "700", color: "#1e1b4b", width: 24 },
+  legendLabel:  { fontSize: 12, color: "#6b7280", flex: 1 },
+  createBtn:    { backgroundColor: COLORS.primary, borderRadius: 50, paddingVertical: 12, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+  createBtnText:{ color: "#fff", fontWeight: "700", fontSize: 14 },
+  sectionHeader:{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 22, marginBottom: 10 },
   sectionTitle: { fontSize: 16, fontWeight: "800", color: "#1e1b4b" },
-  seeAll: { fontSize: 13, color: COLORS.primary, fontWeight: "600" },
-  list: { gap: 10 },
-  tipCard: {
-    backgroundColor: "#f5f3ff", borderRadius: 20, padding: 16, marginTop: 24,
-    flexDirection: "row", alignItems: "center", borderWidth: 1,
-    borderColor: "#ddd6fe", overflow: "hidden",
-  },
-  tipLeft: { flex: 1 },
-  tipTitle: { fontSize: 13, fontWeight: "700", color: COLORS.primary, marginBottom: 4 },
-  tipText: { fontSize: 12, color: "#6b7280", lineHeight: 18 },
-  hibou: { width: 80, height: 80, marginRight: -8 },
+  seeAll:       { fontSize: 13, color: COLORS.primary, fontWeight: "600" },
+  list:         { gap: 10 },
+  emptyText:    { textAlign: "center", color: "#9ca3af", paddingVertical: 20 },
+  tipCard:      { backgroundColor: "#f5f3ff", borderRadius: 20, padding: 16, marginTop: 24, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#ddd6fe", overflow: "hidden" },
+  tipLeft:      { flex: 1 },
+  tipTitle:     { fontSize: 13, fontWeight: "700", color: COLORS.primary, marginBottom: 4 },
+  tipText:      { fontSize: 12, color: "#6b7280", lineHeight: 18 },
+  hibou:        { width: 80, height: 80, marginRight: -8 },
 });

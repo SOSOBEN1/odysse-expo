@@ -1,8 +1,10 @@
 import { Feather, FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Text, TouchableOpacity, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import UsernameInput from "../components/UsernameInput";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
@@ -18,7 +20,10 @@ const AVATAR_MAP: Record<string, any> = {
   avatar_5: require("../assets/Avatar3D/garcon4.glb"),
 };
 
-const INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 heures
+const INTERVAL_MS          = 12 * 60 * 60 * 1000; // 12 heures
+const STORAGE_EMAIL_KEY    = "remember_email";
+const STORAGE_REMEMBER_KEY = "remember_me";
+const SECURE_PASSWORD_KEY  = "remember_password";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -42,6 +47,41 @@ export default function LoginScreen() {
     { bottom: 80, left: 16,   size: 18, opacity: 0.55 },
   ];
 
+  // ── Au démarrage : recharger email/password si "remember me" était coché ──
+  useEffect(() => {
+    const loadSaved = async () => {
+      try {
+        const savedRemember = await AsyncStorage.getItem(STORAGE_REMEMBER_KEY);
+        if (savedRemember === "true") {
+          const savedEmail    = await AsyncStorage.getItem(STORAGE_EMAIL_KEY);
+          const savedPassword = await SecureStore.getItemAsync(SECURE_PASSWORD_KEY);
+          if (savedEmail)    setEmail(savedEmail);
+          if (savedPassword) setPassword(savedPassword);
+          setRemember(true);
+        }
+      } catch (e) {
+        console.warn("Erreur chargement remember me:", e);
+      }
+    };
+    loadSaved();
+  }, []);
+
+  // ── Sauvegarde ou suppression des credentials selon la checkbox ──
+  const handleRememberToggle = async () => {
+    const newValue = !remember;
+    setRemember(newValue);
+    if (!newValue) {
+      // L'utilisateur décoche → on efface tout
+      try {
+        await AsyncStorage.removeItem(STORAGE_EMAIL_KEY);
+        await AsyncStorage.removeItem(STORAGE_REMEMBER_KEY);
+        await SecureStore.deleteItemAsync(SECURE_PASSWORD_KEY);
+      } catch (e) {
+        console.warn("Erreur suppression remember me:", e);
+      }
+    }
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Erreur", "Remplis tous les champs");
@@ -59,6 +99,24 @@ export default function LoginScreen() {
       if (error || !data) {
         Alert.alert("Erreur", "Email ou mot de passe incorrect");
         return;
+      }
+
+      // ── Sauvegarde credentials si "remember me" coché ──
+      if (remember) {
+        try {
+          await AsyncStorage.setItem(STORAGE_EMAIL_KEY,    email);
+          await AsyncStorage.setItem(STORAGE_REMEMBER_KEY, "true");
+          await SecureStore.setItemAsync(SECURE_PASSWORD_KEY, password);
+        } catch (e) {
+          console.warn("Erreur sauvegarde remember me:", e);
+        }
+      } else {
+        // Connexion réussie mais sans remember → on nettoie au cas où
+        try {
+          await AsyncStorage.removeItem(STORAGE_EMAIL_KEY);
+          await AsyncStorage.removeItem(STORAGE_REMEMBER_KEY);
+          await SecureStore.deleteItemAsync(SECURE_PASSWORD_KEY);
+        } catch (_) {}
       }
 
       await supabase
@@ -131,7 +189,8 @@ export default function LoginScreen() {
         />
 
         <View style={styles.optionsRow}>
-          <TouchableOpacity style={styles.remember} onPress={() => setRemember(!remember)}>
+          {/* ✅ Checkbox "Se souvenir de moi" maintenant fonctionnelle */}
+          <TouchableOpacity style={styles.remember} onPress={handleRememberToggle}>
             <View style={[styles.checkbox, remember && styles.checkboxActive, { marginRight: 4 }]}>
               {remember && (
                 <Feather name="check" size={12} color="#fff" style={{ alignSelf: "center" }} />

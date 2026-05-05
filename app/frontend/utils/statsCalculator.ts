@@ -4,14 +4,17 @@ import { PlayerStatsModel } from '../../../backend/models/UserModel';
 
 export interface Question {
   id: string;
+  text: string; 
   category: 'stress' | 'energie' | 'connaissance' | 'organisation';
   type: 'multiple' | 'boolean' | 'star' | 'scale';
   min_value?: number | null;
   max_value?: number | null;
   question_option?: Array<{
     id: string;
+    label: string;       
     value: number;
     impact: number;
+    order_index: number;  
   }>;
 }
 

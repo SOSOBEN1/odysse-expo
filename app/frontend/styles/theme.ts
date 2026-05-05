@@ -1,5 +1,3 @@
-
-
 // styles/theme.ts
 
 export const COLORS = {
@@ -124,6 +122,95 @@ export const COLORS = {
   badgeRoseBg:       "#fce7f3",
   badgeDefault:      "#7f5af0",        // badge inconnu
   badgeDefaultBg:    "#ede7f6",
+
+  // ── SuggestedMissions ───────────────────────
+  // Couleurs des stats joueur (cercles, barres, mission colors)
+  statEnergie:           "#F5A623",   // énergie / jaune-orange
+  statStress:            "#E84040",   // stress / rouge
+  statConnaissance:      "#4A90E2",   // connaissance / bleu
+  statOrganisation:      "#4CAF50",   // organisation / vert
+  statBoost:             "#8A5AD8",   // missions boost / violet foncé
+
+  // Priorités de suggestion
+  suggPriorityCritical:  "#E84040",   // = statStress, urgent
+  suggPriorityHigh:      "#F5A623",   // = statEnergie, recommandé
+  suggPriorityMedium:    "#8A5AD8",   // = statBoost, suggéré
+  suggPriorityLow:       "#4CAF50",   // = statOrganisation, bonus
+
+  // Card critique
+  suggCardCriticalBg:    "#FFF5F5",   // fond carte mission urgente
+  suggUrgentBadgeBg:     "#FEE2E2",   // fond badge "X urgent(s)"
+
+  // Chips / métadonnées
+  suggMetaChipBg:        "#f0ecfb",   // fond chip durée / XP
+  suggStatTrackBg:       "#f0ecfb",   // fond barre stat dans la section
+  suggCoinChipBg:        "#fffbeb",   // fond chip pièces
+  suggCoinText:          "#d97706",   // texte pièces (ambre)
+
+  // Résumé
+  suggSummaryBg:         "#faf5ff",   // fond bloc résumé
+  suggSummaryText:       "#7c3aed",   // texte résumé (violet vif)
+
+  // Bouton dismiss
+  suggDismissBg:         "#f3f4f6",   // fond bouton ✕
+  suggDismissText:       "#9ca3af",   // couleur ✕ et icône collapse
+
+  // Textes secondaires
+  suggDescText:          "#6b7280",   // description mission, label stat, metaText
+  suggReasonText:        "#9b87c9",   // raison italique (= badgeMuted)
+  suggMutedText:         "#9ca3af",   // sous-titre section, loading, empty
+
+  // ── Dashboard / Home shared ──────────────────
+  // Backgrounds
+  screenBg:              "#f5f3ff",   // fond général des screens
+  xpBarBg:               "#ddd6fe",   // fond barre XP
+  xpBarTrack:            "#EEE8F8",   // fond barre XP circulaire (CircularProgress)
+  coinsBadgeBg:          "#ede9fe",   // fond badge pièces + avatar
+  levelBadgeBg:          "#6949a8",   // = primary, fond badge niveau (alias explicite)
+
+  // Textes
+  greetingColor:         "#6b7280",   // texte "Bonjour,"
+  xpTextColor:           "#9ca3af",   // "X XP / Y XP"
+  streakColor:           "#F59E0B",   // texte streak 🔥
+  levelTitleColor:       "#9b87c9",   // sous-titre titre de niveau
+  statSubColor:          "#AAA",      // "Niveau actuel" sous les cercles
+
+  // Mission cards
+  missionCardBg:         "#F8F4FF",   // fond carte mission normale
+  missionSuggestedBg:    "#F0EBF9",   // fond carte mission suggérée
+  missionSuggestedBorder:"#DDD5F5",   // bordure carte mission suggérée
+  missionIconBg:         "#EDE8F8",   // fond icône mission
+  missionBtnStart:       "#DDD5F5",   // fond bouton "Démarrer"
+  missionTagColor:       "#9574e0",   // = secondary, tag "Suggérée"
+  missionSubColor:       "#888",      // sous-titre mission
+
+  // Tabs (HomeScreen)
+  tabBarBg:              "#ede9fe",   // fond barre onglets
+
+  // Boss Event Banner
+  bossOuter:             "#8A5AD8",   // fond externe banner boss
+  bossTopBanner:         "#7B4FC8",   // fond bande supérieure
+  bossSubText:           "#EDD9FF",   // texte secondaire boss
+  bossXpChipBg:          "#5A2EA0",   // fond chip XP (foncé)
+  bossXpText:            "#FFD700",   // texte XP doré
+  bossVoirBg:            "#FF6B9D",   // bouton "Voir"
+  bossProgressBg:        "#9B6DE0",   // fond bande progression
+  bossProgressTrack:     "rgba(255,255,255,0.3)", // fond barre progress boss
+  bossProgressFill:      "#FFD700",   // remplissage barre boss (= bossXpText)
+  bossBottomCard:        "#6A3DB8",   // fond carte basse boss
+  bossCircleBg:          "#5A2EA0",   // fond cercle gauge
+  bossCircleBorder:      "#FFD700",   // bordure cercle gauge (= bossXpText)
+  bossXpChipSmallBg:     "#FF6B9D",   // = bossVoirBg
+
+  // Global Progress Section
+  masterFill:            "#FFD700",   // barre maître progression (dorée)
+  masterTrackBg:         "#DDD5F5",   // fond barre maître
+  progressTrackBg:       "#EEE8F8",   // fond barres stats individuelles
+  chipBonusBg:           "#E8F5E9",   // fond chip bonus XP
+  chipBonusText:         "#4CAF50",   // texte chip bonus XP (= statOrganisation)
+
+  // Circular progress (StatsCard)
+  circleTrack:           "#EEE8F8",   // fond anneau SVG
 };
 
 export const SIZES = {

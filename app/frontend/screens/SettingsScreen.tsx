@@ -109,17 +109,20 @@ export default function SettingsScreen() {
                     <Ionicons name="chevron-forward" size={20} color="#6949a8" />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={localStyles.logoutBtn}>
-                    <LinearGradient
-                        colors={["#FF9AA2", "#FF6B6B"]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={localStyles.logoutGradient}
-                    >
-                        <Ionicons name="log-out-outline" size={20} color="#fff" />
-                        <Text style={localStyles.logoutText}>Se Déconnecter</Text>
-                    </LinearGradient>
-                </TouchableOpacity>
+               <TouchableOpacity 
+    style={localStyles.logoutBtn}
+    onPress={() => router.replace('/frontend/screens/Login')}
+>
+    <LinearGradient
+        colors={["#FF9AA2", "#FF6B6B"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={localStyles.logoutGradient}
+    >
+        <Ionicons name="log-out-outline" size={20} color="#fff" />
+        <Text style={localStyles.logoutText}>Se Déconnecter</Text>
+    </LinearGradient>
+</TouchableOpacity>
             </ScrollView>
 
             {stars.map((star, i) => (

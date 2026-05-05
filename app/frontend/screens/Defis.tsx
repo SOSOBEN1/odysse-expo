@@ -43,7 +43,6 @@ interface Defi {
   statut:           string;
   date_debut:       string | null;
   date_fin:         string | null;
-  objectif_minutes: number;
   progression:      number;
   isInvite: boolean
 }
@@ -224,7 +223,6 @@ const DefiCard = ({
               <Text style={styles.xpText}>+{defi.xp} XP</Text>
             </View>
             <Text style={styles.cardDuration}>{defi.duration}</Text>
-            <Text style={styles.cardObjectif}>{defi.objectif_minutes} min</Text>
           </View>
         </View>
         <View style={styles.cardProgressTrack}>
@@ -590,7 +588,6 @@ const EditModal = ({
   const [icon,        setIcon]        = useState<IconKey>("rocket");
   const [dateDebut,   setDateDebut]   = useState<Date | null>(null);
   const [dateFin,     setDateFin]     = useState<Date | null>(null);
-  const [objMin,      setObjMin]      = useState("");
   const [statut,      setStatut]      = useState("actif");
 
   const [missions, setMissions] = useState<MissionLocal[]>([]);
@@ -606,36 +603,41 @@ const EditModal = ({
     setIcon(defi.icon);
     setDateDebut(defi.date_debut ? new Date(defi.date_debut) : null);
     setDateFin(defi.date_fin   ? new Date(defi.date_fin)   : null);
-    setObjMin(String(defi.objectif_minutes));
     setStatut(defi.statut);
     setOpenIdx(null);
     loadMissions(defi.id);
   }, [visible, defi]);
 
   const loadMissions = async (id_defi: number) => {
-    setLoadingM(true);
-    const { data } = await supabase
-      .from("mission")
-      .select("id_mission, titre, description, statut, duree_min, difficulte, priorite, xp_gain, date_limite")
-      .eq("id_defi", id_defi)
-      .order("id_mission");
-    if (data) {
-      setMissions(data.map((m: any) => ({
-        id_mission:  m.id_mission,
-        titre:       m.titre        ?? "",
-        description: m.description  ?? "",
-        duree_min:   m.duree_min    ?? 30,
-        difficulte:  (m.difficulte  ?? 1) as 1|2|3,
-        priorite:    (m.priorite    ?? 2) as 1|2|3|4,
-        xp_gain:     m.xp_gain      ?? 50,
-        date_limite: m.date_limite ? new Date(m.date_limite) : null,
-        statut:      m.statut       ?? "actif",
-        dirty:       false,
-      })));
-    }
-    setLoadingM(false);
-  };
+  console.log("📋 loadMissions id_defi =", id_defi)
+  if (!id_defi) return
+  setLoadingM(true)
 
+  const { data, error } = await supabase
+    .from("mission")
+    .select("id_mission, titre, description, duree_min, difficulte, priorite, xp_gain, date_limite")
+    // ✅ statut retiré
+    .eq("id_defi", id_defi)
+    .order("id_mission")
+
+  console.log("📋 data =", data?.length, "error =", error)
+
+  if (data) {
+    setMissions(data.map((m: any) => ({
+      id_mission:  m.id_mission,
+      titre:       m.titre       ?? "",
+      description: m.description ?? "",
+      duree_min:   m.duree_min   ?? 30,
+      difficulte:  (m.difficulte ?? 1) as 1|2|3,
+      priorite:    (m.priorite   ?? 2) as 1|2|3|4,
+      xp_gain:     m.xp_gain     ?? 50,
+      date_limite: m.date_limite ? new Date(m.date_limite) : null,
+      statut:      "actif",  // ✅ valeur locale uniquement
+      dirty:       false,
+    })))
+  }
+  setLoadingM(false)
+}
   const updateMission = (idx: number, patch: Partial<MissionLocal>) =>
     setMissions(prev => prev.map((m, i) => i === idx ? { ...m, ...patch, dirty: true } : m));
 
@@ -682,7 +684,6 @@ const EditModal = ({
         icon,
         date_debut:       debutStr,
         date_fin:         finStr,
-        objectif_minutes: parseInt(objMin) || 120,
         statut:           statut as any,
       });
       if (errD) throw new Error(errD.message);
@@ -697,7 +698,6 @@ const EditModal = ({
           priorite:    m.priorite,
           xp_gain:     m.xp_gain,
           date_limite: m.date_limite ? m.date_limite.toISOString() : null,
-          statut:      m.statut,
           id_defi:     defi.id,
         };
         if (m.id_mission > 0)
@@ -714,7 +714,6 @@ const EditModal = ({
         icon,
         date_debut:       debutStr ?? null,
         date_fin:         finStr   ?? null,
-        objectif_minutes: parseInt(objMin) || 120,
         statut,
         duration: formatDuration(debutStr ?? null, finStr ?? null),
       };
@@ -945,22 +944,38 @@ export default function DefiScreen() {
   }, [activeTab]);
 
   const calculerProgression = async (id_defi: number): Promise<number> => {
-    const { data: missions } = await supabase
-      .from("mission").select("statut").eq("id_defi", id_defi);
-    if (!missions || missions.length === 0) return 0;
-    const terminees = missions.filter((m: any) => m.statut === "termine").length;
-    return Math.round((terminees / missions.length) * 100);
-  };
+  // 1. Récupère toutes les missions du défi
+  const { data: missions } = await supabase
+    .from("mission")
+    .select("id_mission")
+    .eq("id_defi", id_defi)
 
-  const getNbParticipants = async (id_defi: number): Promise<number> => {
-    const { data } = await supabase
-      .from("mission_validation")
-      .select("id_user, mission!inner(id_defi)")
-      .eq("mission.id_defi", id_defi);
-    if (!data) return 1;
-    const uniques = new Set(data.map((r: any) => r.id_user));
-    return Math.max(1, uniques.size);
-  };
+  if (!missions || missions.length === 0) return 0
+
+  const missionIds = missions.map((m: any) => m.id_mission)
+
+  // 2. Compte combien ont au moins une validation 'done' (peu importe qui)
+  const { data: validations } = await supabase
+    .from("mission_validation")
+    .select("id_mission")
+    .eq("statut", "done")
+    .in("id_mission", missionIds)
+
+  // 3. Compter les missions uniques complétées (éviter les doublons si plusieurs users)
+  const missionsDone = new Set((validations ?? []).map((v: any) => v.id_mission))
+  
+  return Math.round((missionsDone.size / missions.length) * 100)
+}
+
+ // ✅ Plus simple et fiable
+const getNbParticipants = async (id_defi: number): Promise<number> => {
+  const { data } = await supabase
+    .from("defi_participants")
+    .select("id_user")
+    .eq("id_defi", id_defi)
+
+  return Math.max(1, (data ?? []).length)
+}
 
   const loadDefis = useCallback(async () => {
     setLoading(true);
@@ -988,7 +1003,6 @@ export default function DefiScreen() {
       statut:           d.statut ?? "actif",
       date_debut:       d.date_debut ?? null,
       date_fin:         d.date_fin   ?? null,
-      objectif_minutes: d.objectif_minutes ?? 120,
       progression,
       isInvite:         d.id_user !== userId,  // ✅ pas le créateur = invité
     }
@@ -1016,9 +1030,10 @@ export default function DefiScreen() {
   };
 
   const handleEdit = (defi: Defi) => {
-    setEditingDefi(defi);
-    setModalVisible(true);
-  };
+  console.log("✏️ handleEdit defi =", JSON.stringify(defi))  // ← ajoute ça
+  setEditingDefi(defi)
+  setModalVisible(true)
+}
 
   const handleSaved = (updatedDefi: Defi) => {
     setDefis(prev => prev.map(d => d.id === updatedDefi.id ? updatedDefi : d));

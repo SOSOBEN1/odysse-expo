@@ -1,187 +1,76 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  Dimensions,
-  Easing,
-  Image,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ViewStyle,
+  ActivityIndicator, Animated, Dimensions, Easing, GestureResponderEvent,
+  Image, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View,
 } from "react-native";
 import Navbar from "../components/Navbar";
+import NeonBackground, { NeonBackgroundRef } from "../components/NeonBackground";
+import { supabase } from "../constants/supabase";
+import { useUser } from "../constants/UserContext";
 
+const { width: SW, height: SH } = Dimensions.get("window");
 
-const { width: SW } = Dimensions.get("window");
-
-// ── Types ────────────────────────────────────────────────────
 interface World {
-  id: string;
-  name: string;
+  id_world: number;
+  nom: string;
+  slug: string;
   subtitle: string;
   cover: string;
   accent: string;
   dark: string;
   light: string;
-  sound: number; // require() returns a number in RN
-  zones: number;
-  zonesUnlocked: number;
+  totalZones: number;
+  unlockedZones: number;
   locked: boolean;
   xpTotal: number;
 }
 
-interface AnimStarProps {
-  style: ViewStyle;
-  size: number;
-  delay: number;
-}
+const WORLD_SUBTITLES: Record<string, string> = {
+  foret:    "Concentration & pleine conscience",
+  ville:    "Gestion du temps & organisation",
+  espace:   "Sciences & mathématiques",
+  ocean:    "Bien-être & gestion du stress",
+  montagne: "Résilience & dépassement de soi",
+  japon:    "Méthodes d'étude & discipline",
+  lumiere:  "Créativité & inspiration",
+};
 
-interface WorldCardProps {
-  world: World;
-  index: number;
-  onPress: (world: World) => void;
-}
+// ─── AnimStar ─────────────────────────────────────────────────────────────────
 
-// ── Données mondes ───────────────────────────────────────────
-export const WORLDS: World[] = [
-  {
-    id: "foret",
-    name: "Monde Forêt",
-    subtitle: "Concentration & pleine conscience",
-    cover: "https://images.unsplash.com/photo-1448375240586-882707db888b?w=800&q=85",
-    accent: "#22c55e",
-    dark: "#14532d",
-    light: "#dcfce7",
-    sound: require("../assets/sounds/foret.mp3"),
-    zones: 4,
-    zonesUnlocked: 2,
-    locked: false,
-    xpTotal: 240,
-  },
-  {
-    id: "ville",
-    name: "Monde Ville",
-    subtitle: "Gestion du temps & organisation",
-    cover: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&q=85",
-    accent: "#3b82f6",
-    dark: "#1e3a8a",
-    light: "#dbeafe",
-    sound: require("../assets/sounds/ville.mp3"),
-    zones: 4,
-    zonesUnlocked: 0,
-    locked: true,
-    xpTotal: 280,
-  },
-  {
-    id: "espace",
-    name: "Monde Espace",
-    subtitle: "Sciences & mathématiques",
-    cover: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&q=85",
-    accent: "#8b5cf6",
-    dark: "#4c1d95",
-    light: "#ede9fe",
-    sound: require("../assets/sounds/espace.mp3"),
-    zones: 4,
-    zonesUnlocked: 0,
-    locked: true,
-    xpTotal: 320,
-  },
-  {
-    id: "ocean",
-    name: "Monde Océan",
-    subtitle: "Bien-être & gestion du stress",
-    cover: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=85",
-    accent: "#0ea5e9",
-    dark: "#0c4a6e",
-    light: "#e0f2fe",
-    sound: require("../assets/sounds/ocean.mp3"),
-    zones: 4,
-    zonesUnlocked: 0,
-    locked: true,
-    xpTotal: 260,
-  },
-  {
-    id: "montagne",
-    name: "Monde Montagne",
-    subtitle: "Résilience & dépassement de soi",
-    cover: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&q=85",
-    accent: "#f59e0b",
-    dark: "#78350f",
-    light: "#fef3c7",
-    sound: require("../assets/sounds/montagne.mp3"),
-    zones: 4,
-    zonesUnlocked: 0,
-    locked: true,
-    xpTotal: 300,
-  },
-  {
-    id: "japon",
-    name: "Monde Japon",
-    subtitle: "Méthodes d'étude & discipline",
-    cover: "https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800&q=85",
-    accent: "#ec4899",
-    dark: "#831843",
-    light: "#fce7f3",
-    sound: require("../assets/sounds/japon.mp3"),
-    zones: 4,
-    zonesUnlocked: 0,
-    locked: true,
-    xpTotal: 290,
-  },
-  {
-    id: "lumiere",
-    name: "Monde Lumière",
-    subtitle: "Créativité & inspiration",
-    cover: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?w=800&q=85",
-    accent: "#f97316",
-    dark: "#7c2d12",
-    light: "#ffedd5",
-    sound: require("../assets/sounds/lumiere.mp3"),
-    zones: 4,
-    zonesUnlocked: 0,
-    locked: true,
-    xpTotal: 270,
-  },
-];
-
-// ── Étoile animée ─────────────────────────────────────────────
-function AnimStar({ style, size, delay }: AnimStarProps) {
+function AnimStar({ style, size, delay }: any) {
   const a = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(a, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(a, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.delay(500),
-      ])
-    ).start();
+    Animated.loop(Animated.sequence([
+      Animated.delay(delay),
+      Animated.timing(a, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(a, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.delay(500),
+    ])).start();
   }, []);
   return (
-    <Animated.View
-      style={[
-        style,
-        {
-          opacity: a.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.8] }),
-          transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.2] }) }],
-        },
-      ]}
-    >
+    <Animated.View style={[style, {
+      opacity:   a.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.8] }),
+      transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.2] }) }],
+    }]}>
       <MaterialIcons name="auto-awesome" size={size} color="#c4b5fd" />
     </Animated.View>
   );
 }
 
-// ── Carte monde ───────────────────────────────────────────────
-function WorldCard({ world, index, onPress }: WorldCardProps) {
-  const slideY  = useRef(new Animated.Value(80)).current;
-  const fadeIn  = useRef(new Animated.Value(0)).current;
-  const scaleIn = useRef(new Animated.Value(0.94)).current;
+// ─── WorldCard ────────────────────────────────────────────────────────────────
+
+function WorldCard({ world, index, onPress }: { world: World; index: number; onPress: (w: World) => void }) {
+  const slideY    = useRef(new Animated.Value(80)).current;
+  const fadeIn    = useRef(new Animated.Value(0)).current;
+  const scaleIn   = useRef(new Animated.Value(0.94)).current;
+  const progressW = useRef(new Animated.Value(0)).current;
+
+  const pct = world.locked ? 0 : world.totalZones > 0
+    ? Math.round((world.unlockedZones / world.totalZones) * 100)
+    : 0;
 
   useEffect(() => {
     Animated.parallel([
@@ -189,19 +78,10 @@ function WorldCard({ world, index, onPress }: WorldCardProps) {
       Animated.timing(fadeIn,  { toValue: 1, duration: 500, delay: index * 100, useNativeDriver: true }),
       Animated.spring(scaleIn, { toValue: 1, friction: 6, delay: index * 100, useNativeDriver: true }),
     ]).start();
-  }, []);
-
-  const pct = world.locked ? 0 : Math.round((world.zonesUnlocked / world.zones) * 100);
-  const progressWidth = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
     if (!world.locked) {
-      Animated.timing(progressWidth, {
-        toValue: pct,
-        duration: 900,
-        delay: index * 100 + 400,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
+      Animated.timing(progressW, {
+        toValue: pct, duration: 900, delay: index * 100 + 400,
+        easing: Easing.out(Easing.cubic), useNativeDriver: false,
       }).start();
     }
   }, []);
@@ -213,14 +93,9 @@ function WorldCard({ world, index, onPress }: WorldCardProps) {
         onPress={() => !world.locked && onPress(world)}
         activeOpacity={world.locked ? 0.95 : 0.88}
       >
-        {/* Cover photo */}
         <View style={styles.coverWrapper}>
           <Image source={{ uri: world.cover }} style={styles.coverImage} resizeMode="cover" />
-
-          {/* Overlay — LinearGradient remplacé par une View semi-transparente (pas de CSS 'background' en RN) */}
           <View style={styles.coverOverlay} />
-
-          {/* Cadenas si verrouillé */}
           {world.locked && (
             <View style={styles.lockOverlay}>
               <View style={[styles.lockCircle, { borderColor: "rgba(255,255,255,0.5)" }]}>
@@ -228,51 +103,32 @@ function WorldCard({ world, index, onPress }: WorldCardProps) {
               </View>
             </View>
           )}
-
-          {/* Badge zones en haut à droite */}
           <View style={styles.zonesBadge}>
             <MaterialIcons name="place" size={12} color="#fff" />
             <Text style={styles.zonesBadgeText}>
-              {world.locked ? `${world.zones} zones` : `${world.zonesUnlocked}/${world.zones} zones`}
+              {world.locked ? `${world.totalZones} zones` : `${world.unlockedZones}/${world.totalZones} zones`}
             </Text>
           </View>
-
-          {/* Son badge */}
           <View style={[styles.soundBadge, { backgroundColor: world.accent + "cc" }]}>
             <Ionicons name="musical-notes" size={11} color="#fff" />
           </View>
-
-          {/* Titre sur la photo */}
           <View style={styles.coverTitleWrapper}>
-            <Text style={styles.coverTitle}>{world.name}</Text>
+            <Text style={styles.coverTitle}>{world.nom}</Text>
             <Text style={styles.coverSubtitle}>{world.subtitle}</Text>
           </View>
         </View>
-
-        {/* Body */}
         <View style={styles.cardBody}>
           {!world.locked ? (
             <>
-              {/* Barre de progression animée */}
               <View style={styles.progressRow}>
                 <View style={styles.progressTrack}>
-                  <Animated.View
-                    style={[
-                      styles.progressFill,
-                      {
-                        backgroundColor: world.accent,
-                        width: progressWidth.interpolate({
-                          inputRange: [0, 100],
-                          outputRange: ["0%", "100%"],
-                        }),
-                      },
-                    ]}
-                  />
+                  <Animated.View style={[styles.progressFill, {
+                    backgroundColor: world.accent,
+                    width: progressW.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }),
+                  }]} />
                 </View>
                 <Text style={[styles.progressPct, { color: world.accent }]}>{pct}%</Text>
               </View>
-
-              {/* XP total */}
               <View style={styles.cardFooter}>
                 <View style={[styles.xpChip, { backgroundColor: world.light }]}>
                   <Text style={[styles.xpChipText, { color: world.dark }]}>⚡ {world.xpTotal} XP à gagner</Text>
@@ -290,8 +146,8 @@ function WorldCard({ world, index, onPress }: WorldCardProps) {
           ) : (
             <View style={styles.cardFooter}>
               <Text style={styles.lockedHint}>Terminez les missions précédentes pour débloquer</Text>
-              <View style={[styles.xpChip, { backgroundColor: "#f3f4f6" }]}>
-                <Text style={[styles.xpChipText, { color: "#6b7280" }]}>🔒 {world.xpTotal} XP</Text>
+              <View style={[styles.xpChip, { backgroundColor: "rgba(255,255,255,0.08)" }]}>
+                <Text style={[styles.xpChipText, { color: "#9ca3af" }]}>🔒 {world.xpTotal} XP</Text>
               </View>
             </View>
           )}
@@ -301,14 +157,55 @@ function WorldCard({ world, index, onPress }: WorldCardProps) {
   );
 }
 
-// ── Écran ─────────────────────────────────────────────────────
+// ─── Écran ────────────────────────────────────────────────────────────────────
+
 export default function WorldsScreen() {
-  
-  const router     = useRouter();
-  const [activeNav, setActiveNav] = useState("carte");
-  const headerY    = useRef(new Animated.Value(-30)).current;
+  const router       = useRouter();
+  const { userId }   = useUser();
+  const [worlds,     setWorlds]   = useState<World[]>([]);
+  const [userXp,     setUserXp]   = useState(0);
+  const [loading,    setLoading]  = useState(true);
+  const [activeNav,  setActiveNav] = useState("carte");
+  const [soundOn,    setSoundOn]  = useState(false);
+
+  const neonRef   = useRef<NeonBackgroundRef>(null);
+  const soundRef  = useRef<Audio.Sound | null>(null);
+  const headerY   = useRef(new Animated.Value(-30)).current;
   const headerFade = useRef(new Animated.Value(0)).current;
 
+  // ── Touch → ripple bridge ────────────────────────────────────
+  const handleScreenTouch = (e: GestureResponderEvent) => {
+    const nx = e.nativeEvent.pageX / SW;
+    const ny = e.nativeEvent.pageY / SH;
+    neonRef.current?.sendRipple(nx, ny);
+  };
+
+  // ── Sound ────────────────────────────────────────────────────
+  useEffect(() => {
+    Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false });
+    return () => { soundRef.current?.unloadAsync(); };
+  }, []);
+
+  const toggleSound = useCallback(async () => {
+    if (!soundOn) {
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          require("../assets/sounds/espace.mp3"),
+          { isLooping: true, volume: 0.35 }
+        );
+        soundRef.current = sound;
+        await sound.playAsync();
+        setSoundOn(true);
+      } catch (e) { console.warn("Sound error:", e); }
+    } else {
+      await soundRef.current?.stopAsync();
+      await soundRef.current?.unloadAsync();
+      soundRef.current = null;
+      setSoundOn(false);
+    }
+  }, [soundOn]);
+
+  // ── Header anim ──────────────────────────────────────────────
   useEffect(() => {
     Animated.parallel([
       Animated.spring(headerY,    { toValue: 0, friction: 7, useNativeDriver: true }),
@@ -316,7 +213,63 @@ export default function WorldsScreen() {
     ]).start();
   }, []);
 
-  const STARS: Array<{ top?: number; left?: number; right?: number; size: number; delay: number }> = [
+  // ── Data ─────────────────────────────────────────────────────
+  const loadWorlds = useCallback(async () => {
+      console.log("userId au chargement:", userId); // ← ajoute ça
+    setLoading(true);
+    try {
+      const { data: userRow } = await supabase.from("users").select("xp").eq("id_user", userId).single();
+      setUserXp(userRow?.xp ?? 0);
+
+      const { data: worldsData } = await supabase
+        .from("world")
+        .select("id_world, nom, slug, image_url, accent_color, dark_color, light_color, ordre")
+        .order("ordre", { ascending: true });
+      // console.log("worldsData:", worldsData);
+      // console.log("worldsError:", worldsError);
+      if (!worldsData?.length) { setWorlds([]); return; }
+
+      const worldIds = worldsData.map(w => w.id_world);
+      const { data: allZones } = await supabase.from("zone").select("id_zone, id_world").in("id_world", worldIds);
+      const zoneIds = (allZones ?? []).map(z => z.id_zone);
+      const { data: allProgress } = zoneIds.length
+        ? await supabase.from("zone_progress").select("id_zone, unlocked").eq("id_user", userId).in("id_zone", zoneIds)
+        : { data: [] };
+      const { data: allMissions } = await supabase.from("mission").select("id_zone, xp_gain").in("id_zone", zoneIds);
+
+      const zonesByWorld: Record<number, number[]> = {};
+      (allZones ?? []).forEach(z => { if (!zonesByWorld[z.id_world]) zonesByWorld[z.id_world] = []; zonesByWorld[z.id_world].push(z.id_zone); });
+      const unlockedSet = new Set((allProgress ?? []).filter(p => p.unlocked).map(p => p.id_zone));
+      const xpByZone: Record<number, number> = {};
+      (allMissions ?? []).forEach(m => { xpByZone[m.id_zone] = (xpByZone[m.id_zone] ?? 0) + (m.xp_gain ?? 0); });
+
+      const sortedWorlds = [...worldsData].sort((a, b) => a.ordre - b.ordre);
+      const result: World[] = sortedWorlds.map((w, idx) => {
+        const zIds     = zonesByWorld[w.id_world] ?? [];
+        const unlocked = zIds.filter(id => unlockedSet.has(id)).length;
+        const xpTotal  = zIds.reduce((sum, id) => sum + (xpByZone[id] ?? 0), 0);
+        let locked = false;
+        if (idx > 0) {
+          const prevZones = zonesByWorld[sortedWorlds[idx-1].id_world] ?? [];
+          locked = prevZones.filter(id => unlockedSet.has(id)).length < prevZones.length;
+        }
+        return {
+          id_world: w.id_world, nom: w.nom, slug: w.slug,
+          subtitle: WORLD_SUBTITLES[w.slug] ?? "",
+          cover: w.image_url,
+          accent: w.accent_color ?? "#22c55e",
+          dark:   w.dark_color   ?? "#14532d",
+          light:  w.light_color  ?? "#dcfce7",
+          totalZones: zIds.length, unlockedZones: unlocked, locked, xpTotal,
+        };
+      });
+      setWorlds(result);
+    } finally { setLoading(false); }
+  }, [userId]);
+
+  useEffect(() => { loadWorlds(); }, [loadWorlds]);
+
+  const STARS = [
     { top: 14, left: 16,  size: 14, delay: 0   },
     { top: 14, right: 20, size: 10, delay: 400  },
     { top: 60, right: 8,  size: 8,  delay: 700  },
@@ -324,28 +277,24 @@ export default function WorldsScreen() {
   ];
 
   return (
-    <View style={styles.container}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+    <View
+      style={styles.container}
+      // Capture every touch on the screen and forward to WebView as ripple
+      onStartShouldSetResponder={() => true}
+      onResponderGrant={handleScreenTouch}
+    >
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* Fond subtil */}
-      <View style={StyleSheet.absoluteFill}>
-        <View style={styles.bgTop} />
-      </View>
+      {/* Neon animated background */}
+      <NeonBackground ref={neonRef} />
 
-      {/* Étoiles */}
       {STARS.map((s, i) => (
-        <AnimStar
-          key={i}
-          size={s.size}
-          delay={s.delay}
-          style={{
-            position: "absolute",
-            zIndex: 2,
-            ...(s.top   !== undefined ? { top:   s.top   } : {}),
-            ...(s.left  !== undefined ? { left:  s.left  } : {}),
-            ...(s.right !== undefined ? { right: s.right } : {}),
-          }}
-        />
+        <AnimStar key={i} size={s.size} delay={s.delay} style={{
+          position: "absolute", zIndex: 2,
+          ...(s.top   !== undefined ? { top:   s.top   } : {}),
+          ...(s.left  !== undefined ? { left:  s.left  } : {}),
+          ...(s.right !== undefined ? { right: s.right } : {}),
+        }} />
       ))}
 
       {/* Header */}
@@ -355,24 +304,39 @@ export default function WorldsScreen() {
           <Text style={styles.headerSub}>Explore et débloque de nouveaux univers</Text>
         </View>
         <View style={styles.headerRight}>
-          <View style={styles.xpTotalBadge}>
-            <Text style={styles.xpTotalText}>⚡ 245 XP</Text>
+          <TouchableOpacity
+            style={[styles.soundBtn, soundOn && styles.soundBtnOn]}
+            onPress={toggleSound}
+            activeOpacity={0.8}
+          >
+            <Ionicons name={soundOn ? "musical-notes" : "musical-notes-outline"} size={16} color={soundOn ? "#fff" : "#c4b5fd"} />
+          </TouchableOpacity>
+          <View style={styles.xpBadge}>
+            <Text style={styles.xpBadgeText}>⚡ {userXp} XP</Text>
           </View>
         </View>
       </Animated.View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        {WORLDS.map((world, i) => (
-          <WorldCard
-            key={world.id}
-            world={world}
-            index={i}
-            // onPress={(w: World) => router.push({ pathname: "/world-map", params: { worldId: w.id } })}
-            onPress={(w: World) => router.push("/frontend/screens/WorldMapScreen")}
-          />
-        ))}
-        <View style={{ height: 20 }} />
-      </ScrollView>
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" color="#a78bfa" />
+        </View>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+          {worlds.map((world, i) => (
+            <WorldCard
+              key={world.id_world}
+              world={world}
+              index={i}
+              onPress={(w) => router.push({
+                pathname: "/frontend/screens/WorldMapScreen",
+                params: { worldSlug: w.slug },
+              })}
+            />
+          ))}
+          <View style={{ height: 20 }} />
+        </ScrollView>
+      )}
 
       <Navbar active={activeNav} onChange={setActiveNav} />
     </View>
@@ -380,110 +344,55 @@ export default function WorldsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f3ff" },
-
-  bgTop: {
-    height: 220,
-    backgroundColor: "#ede9fe",
-    borderBottomLeftRadius: 40,
-    borderBottomRightRadius: 40,
-  },
-
+  container: { flex: 1, backgroundColor: "#0d0620" },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 54,
-    paddingBottom: 16,
-    zIndex: 5,
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 20, paddingTop: 54, paddingBottom: 16, zIndex: 5,
   },
-  headerTitle: { fontSize: 24, fontWeight: "900", color: "#2d1a6e", letterSpacing: 0.8 },
-  headerSub:   { fontSize: 12, color: "#9b87c9", fontWeight: "600", marginTop: 3 },
-  headerRight: { alignItems: "flex-end" },
-  xpTotalBadge: {
-    backgroundColor: "#7f5af0",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  headerTitle:  { fontSize: 24, fontWeight: "900", color: "#ede9fe", letterSpacing: 0.8 },
+  headerSub:    { fontSize: 12, color: "#a78bfa", fontWeight: "600", marginTop: 3 },
+  headerRight:  { flexDirection: "row", alignItems: "center", gap: 8 },
+  soundBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "rgba(167,139,250,0.12)",
+    borderWidth: 1, borderColor: "rgba(167,139,250,0.4)",
+    justifyContent: "center", alignItems: "center",
   },
-  xpTotalText: { color: "#fff", fontWeight: "800", fontSize: 13 },
-
-  scroll: { paddingHorizontal: 16, paddingBottom: 120, paddingTop: 4 },
-
-  /* Card */
+  soundBtnOn: { backgroundColor: "rgba(167,139,250,0.35)", borderColor: "#a78bfa" },
+  xpBadge: {
+    backgroundColor: "rgba(127,90,240,0.85)",
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+    borderWidth: 1, borderColor: "rgba(196,181,253,0.3)",
+  },
+  xpBadgeText:  { color: "#fff", fontWeight: "800", fontSize: 13 },
+  scroll:       { paddingHorizontal: 16, paddingBottom: 120, paddingTop: 4 },
   worldCard: {
-    backgroundColor: "#fff",
-    borderRadius: 24,
-    marginBottom: 20,
-    overflow: "hidden",
-    shadowColor: "#7f5af0",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 8,
+    backgroundColor: "rgba(15,8,40,0.75)",
+    borderRadius: 24, marginBottom: 20, overflow: "hidden",
+    borderWidth: 1, borderColor: "rgba(167,139,250,0.2)",
+    shadowColor: "#7f5af0", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25, shadowRadius: 20, elevation: 10,
   },
-
-  /* Cover photo */
-  coverWrapper: { height: 180, position: "relative" },
-  coverImage:   { width: "100%", height: "100%" },
-
-  // FIX — suppression de 'background' (propriété CSS web invalide en RN)
-  // Utilisez expo-linear-gradient si vous voulez un vrai dégradé
-  coverOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.25)",
-  },
-
-  lockOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  lockCircle: {
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "center", alignItems: "center",
-    borderWidth: 2,
-  },
-
-  zonesBadge: {
-    position: "absolute", top: 12, right: 12,
-    flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4,
-  },
-  zonesBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-
-  soundBadge: {
-    position: "absolute", top: 12, left: 12,
-    width: 28, height: 28, borderRadius: 14,
-    justifyContent: "center", alignItems: "center",
-  },
-
-  coverTitleWrapper: { position: "absolute", bottom: 14, left: 14, right: 14 },
-  coverTitle:    { fontSize: 20, fontWeight: "900", color: "#fff", textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  coverSubtitle: { fontSize: 12, color: "rgba(255,255,255,0.85)", fontWeight: "600", marginTop: 2 },
-
-  /* Body */
-  cardBody: { paddingHorizontal: 16, paddingVertical: 14 },
-
-  progressRow:   { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
-  progressTrack: { flex: 1, height: 8, backgroundColor: "#e8e0ff", borderRadius: 8, overflow: "hidden" },
-  progressFill:  { height: "100%", borderRadius: 8 },
-  progressPct:   { fontSize: 12, fontWeight: "800", minWidth: 34, textAlign: "right" },
-
-  cardFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-
-  xpChip:     { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
-  xpChipText: { fontSize: 12, fontWeight: "700" },
-
-  lockedHint: { fontSize: 11, color: "#9ca3af", fontWeight: "500", flex: 1, marginRight: 10, fontStyle: "italic" },
-
-  exploreBtn: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16,
-  },
-  exploreBtnText: { color: "#fff", fontWeight: "800", fontSize: 13 },
+  coverWrapper:     { height: 180, position: "relative" },
+  coverImage:       { width: "100%", height: "100%" },
+  coverOverlay:     { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(5,0,20,0.3)" },
+  lockOverlay:      { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
+  lockCircle:       { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", alignItems: "center", borderWidth: 2 },
+  zonesBadge:       { position: "absolute", top: 12, right: 12, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
+  zonesBadgeText:   { color: "#fff", fontSize: 11, fontWeight: "700" },
+  soundBadge:       { position: "absolute", top: 12, left: 12, width: 28, height: 28, borderRadius: 14, justifyContent: "center", alignItems: "center" },
+  coverTitleWrapper:{ position: "absolute", bottom: 14, left: 14, right: 14 },
+  coverTitle:       { fontSize: 20, fontWeight: "900", color: "#fff", textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  coverSubtitle:    { fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: "600", marginTop: 2 },
+  cardBody:         { paddingHorizontal: 16, paddingVertical: 14 },
+  progressRow:      { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  progressTrack:    { flex: 1, height: 8, backgroundColor: "rgba(167,139,250,0.15)", borderRadius: 8, overflow: "hidden" },
+  progressFill:     { height: "100%", borderRadius: 8 },
+  progressPct:      { fontSize: 12, fontWeight: "800", minWidth: 34, textAlign: "right" },
+  cardFooter:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  xpChip:           { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
+  xpChipText:       { fontSize: 12, fontWeight: "700" },
+  lockedHint:       { fontSize: 11, color: "#6b7280", fontWeight: "500", flex: 1, marginRight: 10, fontStyle: "italic" },
+  exploreBtn:       { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16 },
+  exploreBtnText:   { color: "#fff", fontWeight: "800", fontSize: 13 },
 });

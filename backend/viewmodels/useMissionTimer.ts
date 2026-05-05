@@ -1,241 +1,272 @@
-// ============================================================
-//  useMissionTimer.ts
-// ============================================================
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  failMissionSession,
+  fetchMissions,
   finishMissionSession,
   pauseMissionSession,
   resumeMissionSession,
   startMissionSession,
+  deleteMission,
 } from "../models/mission.service";
-import type { Mission, MissionTimer, TimerState } from "../models/mission.types";
-import { formatDateLimite, isDeadlinePassed } from "../models/mission.utils";
+import type { Mission, MissionTimer } from "../models/mission.types";
 
 // ─────────────────────────────────────────────────────────────
 //  Types
 // ─────────────────────────────────────────────────────────────
 
-export interface StatusModalState {
+interface StatusModal {
   visible: boolean;
   type: "success" | "fail";
-  missionTitle: string;
-  dateLimit?: string;
-  xp?: number;    // ✅ XP gagné
-  coins?: number;    // ✅ Coins gagnés
-}
-export interface StatusModalState {
-  visible: boolean;
-  type: "success" | "fail";
-  missionTitle: string;
-  dateLimit?: string;
-  xp?: number;
-  coins?: number;
-}
-
-interface UseMissionTimerOptions {
-  userId: string;
-  missions: Mission[];
-  onStatusModal: (s: StatusModalState) => void;
+  missionTitle: string | undefined;
+  dateLimit: string | undefined;
+  xp: number;
+  coins: number;
 }
 
 // ─────────────────────────────────────────────────────────────
 //  Hook
 // ─────────────────────────────────────────────────────────────
 
-export function useMissionTimer({
-  userId,
-  missions,
-  onStatusModal,
-}: UseMissionTimerOptions) {
+export function useMissions(userId: string | null) {
+  const [missions, setMissions] = useState<Mission[]>([]);
   const [timers, setTimers] = useState<Record<number, MissionTimer>>({});
-  const intervalRefs = useRef<Record<number, ReturnType<typeof setInterval>>>({});
-  const missionsRef = useRef<Mission[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { missionsRef.current = missions; }, [missions]);
-
-  // ── Helpers ──────────────────────────────────────────────
-  const getTimer = useCallback(
-    (id: number): MissionTimer =>
-      timers[id] ?? { state: "idle", elapsed: 0, validationId: null, startedAt: null },
-    [timers]
-  );
-
-  const setTimer = useCallback(
-    (id: number, update: Partial<MissionTimer>) =>
-      setTimers(prev => ({
-        ...prev,
-        [id]: { ...(prev[id] ?? { state: "idle", elapsed: 0, validationId: null, startedAt: null }), ...update },
-      })),
-    []
-  );
-
-  // ── Init timers depuis fetchMissions ─────────────────────
-  const initTimers = useCallback((initialTimers: Record<number, MissionTimer>) => {
-    setTimers(prev => {
-      const merged = { ...initialTimers };
-      Object.entries(prev).forEach(([id, t]) => {
-        if (t.state === "running" || t.state === "paused") {
-          merged[Number(id)] = t;
-        }
-      });
-      return merged;
-    });
-  }, []);
-
-  // ── Finish (succès) ✅ récupère xp + coins depuis le service
- // ✅ Après — lire le timer frais depuis le state via setTimers
-const handleFinish = useCallback(async (missionId: number) => {
-  clearInterval(intervalRefs.current[missionId]);
-
-  // Lire la valeur fraîche du timer AVANT l'appel async
-  let currentElapsed = 0;
-  let currentValidationId: number | null = null;
-
-  setTimers(prev => {
-    currentElapsed = prev[missionId]?.elapsed ?? 0;
-    currentValidationId = prev[missionId]?.validationId ?? null;
-    return prev; // pas de mutation
-  });
-
-  let xp = 0;
-  let coins = 0;
-
-  try {
-    const result = await finishMissionSession(
-      missionId,
-      currentValidationId,
-      currentElapsed,   // ✅ valeur fraîche
-      userId
-    );
-    xp = result.xp;
-    coins = result.coins;
-  } catch (err: any) {
-    console.error("❌ finishMission:", err.message);
-    return;
-  }
-
-  setTimer(missionId, { state: "done" });
-
-  const mission = missionsRef.current.find(m => m.id === missionId);
-  onStatusModal({
-    visible: true,
+  // ✅ statusModal inclut xp et coins (initialisés à 0)
+  const [statusModal, setStatusModal] = useState<StatusModal>({
+    visible: false,
     type: "success",
-    missionTitle: mission?.title ?? "",
-    xp,
-    coins,
+    missionTitle: undefined,
+    dateLimit: undefined,
+    xp: 0,
+    coins: 0,
   });
-}, [userId, setTimer, onStatusModal]); // ← timers retiré des deps
-  // ── Start / Resume ────────────────────────────────────────
-  const handleStart = useCallback(async (missionId: number) => {
-    const t = getTimer(missionId);
 
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ─────────────────────────────────────────────────────────
+  //  Chargement des missions
+  // ─────────────────────────────────────────────────────────
+
+  const loadMissions = useCallback(async () => {
+    if (!userId) return;
     try {
-      if (t.state === "idle") {
-        const validationId = await startMissionSession(userId, missionId);
-        setTimer(missionId, { state: "running", elapsed: 0, validationId, startedAt: new Date() });
-      } else {
-        if (t.validationId) {
-          await resumeMissionSession(t.validationId);  // ← validationId, pas missionId
-        }
-        setTimer(missionId, { state: "running" });
-        //await resumeMissionSession(missionId);
-        //setTimer(missionId, { state: "running" });
-      }
-    } catch (err: any) {
-      console.error("❌ startMission:", err.message);
-      return;
+      setLoading(true);
+      const { missions: fetchedMissions, timers: fetchedTimers } =
+        await fetchMissions(userId);
+      setMissions(fetchedMissions);
+      setTimers(fetchedTimers);
+    } catch (err) {
+      console.error("❌ loadMissions error:", err);
+    } finally {
+      setLoading(false);
     }
+  }, [userId]);
 
-    if (intervalRefs.current[missionId]) clearInterval(intervalRefs.current[missionId]);
-
-    intervalRefs.current[missionId] = setInterval(() => {
-      setTimers(prev => {
-        const cur = prev[missionId];
-        if (!cur || cur.state !== "running") return prev;
-
-        const newElapsed = cur.elapsed + 1;
-        const mission = missionsRef.current.find(m => m.id === missionId);
-
-        const parseDurationToMinutes = (d: string) => {
-          const match = d?.match(/(\d+)h(\d*)/);
-          if (!match) return 30;
-          return (parseInt(match[1]) || 0) * 60 + (parseInt(match[2]) || 0);
-        };
-        const estimatedSec = parseDurationToMinutes(mission?.duration ?? "0h30") * 60;
-
-        if (newElapsed >= estimatedSec) {
-          clearInterval(intervalRefs.current[missionId]);
-          setTimeout(() => handleFinish(missionId), 0);
-        }
-
-        return { ...prev, [missionId]: { ...cur, elapsed: newElapsed } };
-      });
-    }, 1000);
-  }, [getTimer, userId, setTimer, handleFinish]);
-
-  // ── Pause ─────────────────────────────────────────────────
-  const handlePause = useCallback(async (missionId: number) => {
-    clearInterval(intervalRefs.current[missionId]);
-    const t = getTimer(missionId);
-    // ← utilise validationId, pas missionId
-    if (t.validationId) {
-      await pauseMissionSession(t.validationId);
-    }
-    setTimer(missionId, { state: "paused" });
-  }, [getTimer, setTimer]);
-
-  // ── Vérification deadline (toutes les 60s) ────────────────
   useEffect(() => {
-    const deadlineInterval = setInterval(() => {
-      setTimers(prev => {
-        const now = Date.now();
+    loadMissions();
+  }, [loadMissions]);
+
+  // ─────────────────────────────────────────────────────────
+  //  Ticker global (toutes les secondes)
+  // ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      setTimers((prev) => {
         const updated = { ...prev };
         let changed = false;
 
-        missionsRef.current.forEach(mission => {
-          if (!mission.dateLimite) return;
-          const t = prev[mission.id];
-          if (
-            mission.dateLimite.getTime() < now &&
-            (!t || (t.state !== "done" && t.state !== "fail"))
-          ) {
-            if (intervalRefs.current[mission.id]) clearInterval(intervalRefs.current[mission.id]);
-            updated[mission.id] = {
-              ...(t ?? { elapsed: 0, validationId: null, startedAt: null }),
-              state: "fail",
-            };
+        Object.entries(updated).forEach(([id, timer]) => {
+          if (timer.state === "running") {
+            updated[Number(id)] = { ...timer, elapsed: timer.elapsed + 1 };
             changed = true;
-            failMissionSession(mission.id);
-            onStatusModal({
-              visible: true,
-              type: "fail",
-              missionTitle: mission.title,
-              dateLimit: formatDateLimite(mission.dateLimite),
-            });
           }
         });
 
         return changed ? updated : prev;
       });
-    }, 60_000);
+    }, 1000);
 
-    return () => clearInterval(deadlineInterval);
-  }, [onStatusModal]);
-
-  // ── Cleanup ────────────────────────────────────────────────
-  useEffect(() => {
-    return () => { Object.values(intervalRefs.current).forEach(clearInterval); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, []);
 
+  // ─────────────────────────────────────────────────────────
+  //  Accesseur timer
+  // ─────────────────────────────────────────────────────────
+
+  const getTimer = useCallback(
+    (missionId: number): MissionTimer =>
+      timers[missionId] ?? {
+        state: "idle",
+        elapsed: 0,
+        validationId: null,
+        startedAt: null,
+      },
+    [timers]
+  );
+
+  // ─────────────────────────────────────────────────────────
+  //  Démarrer / Reprendre
+  // ─────────────────────────────────────────────────────────
+
+  const handleStart = useCallback(
+    async (missionId: number) => {
+      if (!userId) return;
+      const timer = timers[missionId];
+
+      try {
+        if (timer?.state === "paused" && timer.validationId) {
+          // Reprise
+          await resumeMissionSession(timer.validationId);
+          setTimers((prev) => ({
+            ...prev,
+            [missionId]: { ...prev[missionId], state: "running" },
+          }));
+        } else {
+          // Nouveau démarrage
+          const validationId = await startMissionSession(userId, missionId);
+          setTimers((prev) => ({
+            ...prev,
+            [missionId]: {
+              state: "running",
+              elapsed: 0,
+              validationId,
+              startedAt: new Date(),
+            },
+          }));
+        }
+      } catch (err) {
+        console.error("❌ handleStart error:", err);
+      }
+    },
+    [userId, timers]
+  );
+
+  // ─────────────────────────────────────────────────────────
+  //  Pause
+  // ─────────────────────────────────────────────────────────
+
+  const handlePause = useCallback(
+    async (missionId: number) => {
+      const timer = timers[missionId];
+      if (!timer?.validationId) return;
+
+      try {
+        await pauseMissionSession(timer.validationId);
+        setTimers((prev) => ({
+          ...prev,
+          [missionId]: { ...prev[missionId], state: "paused" },
+        }));
+      } catch (err) {
+        console.error("❌ handlePause error:", err);
+      }
+    },
+    [timers]
+  );
+
+  // ─────────────────────────────────────────────────────────
+  //  ✅ FIX — Terminer (récupère et transmet xp + coins)
+  // ─────────────────────────────────────────────────────────
+
+  const handleFinish = useCallback(
+    async (missionId: number) => {
+      const timer = timers[missionId];
+      if (!timer || !userId) return;
+
+      try {
+        // ✅ Capturer le retour { xp, coins }
+        const { xp, coins } = await finishMissionSession(
+          missionId,
+          timer.validationId,
+          timer.elapsed,
+          userId
+        );
+
+        // Mettre à jour le timer local
+        setTimers((prev) => ({
+          ...prev,
+          [missionId]: { ...prev[missionId], state: "done" },
+        }));
+
+        const mission = missions.find((m) => m.id === missionId);
+
+        // ✅ Passer xp et coins réels à la modal
+        setStatusModal({
+          visible: true,
+          type: "success",
+          missionTitle: mission?.title,
+          dateLimit:
+            mission?.dateLimite?.toLocaleDateString("fr-FR") ?? undefined,
+          xp,
+          coins,
+        });
+      } catch (err) {
+        console.error("❌ handleFinish error:", err);
+      }
+    },
+    [timers, missions, userId]
+  );
+
+  // ─────────────────────────────────────────────────────────
+  //  Supprimer
+  // ─────────────────────────────────────────────────────────
+
+  const handleDelete = useCallback(async (missionId: number) => {
+    try {
+      await deleteMission(missionId);
+      setMissions((prev) => prev.filter((m) => m.id !== missionId));
+      setTimers((prev) => {
+        const copy = { ...prev };
+        delete copy[missionId];
+        return copy;
+      });
+    } catch (err) {
+      console.error("❌ handleDelete error:", err);
+    }
+  }, []);
+
+  // ─────────────────────────────────────────────────────────
+  //  Fermer la modal
+  // ─────────────────────────────────────────────────────────
+
+  const closeStatusModal = useCallback(() => {
+    setStatusModal((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  // ─────────────────────────────────────────────────────────
+  //  Payload pour l'édition
+  // ─────────────────────────────────────────────────────────
+
+  const buildEditPayload = useCallback((mission: Mission) => {
+    return {
+      id: mission.id,
+      titre: mission.title,
+      description: mission.description,
+      duration: mission.duration,
+      difficulty: mission.difficulty,
+      urgent: mission.urgent,
+      dateLimite: mission.dateLimite,
+      event: mission.event,
+    };
+  }, []);
+
+  // ─────────────────────────────────────────────────────────
+  //  Retour du hook
+  // ─────────────────────────────────────────────────────────
+
   return {
-    timers,
+    missions,
+    loading,
+    statusModal,
     getTimer,
-    setTimer,
-    initTimers,
     handleStart,
     handlePause,
     handleFinish,
+    handleDelete,
+    buildEditPayload,
+    loadMissions,
+    closeStatusModal,
   };
 }

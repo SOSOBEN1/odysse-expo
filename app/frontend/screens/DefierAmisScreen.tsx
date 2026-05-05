@@ -56,9 +56,9 @@ const CheckCircle = ({ selected }: { selected: boolean }) => (
 );
 
 // ─── User Row ─────────────────────────────────────────────────────────────────
-const UserRow = ({ user, index, selected, onToggle, delay }: {
+const UserRow = ({ user, index, selected, onToggle, delay, disabled = false }: {
   user: User; index: number; selected: boolean;
-  onToggle: () => void; delay: number;
+  onToggle: () => void; delay: number; disabled?: boolean;
 }) => {
   const anim  = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1)).current;
@@ -68,6 +68,7 @@ const UserRow = ({ user, index, selected, onToggle, delay }: {
   }, []);
 
   const handlePress = () => {
+    if (disabled) return;
     Animated.sequence([
       Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }),
       Animated.spring(scale, { toValue: 1,    useNativeDriver: true }),
@@ -86,16 +87,27 @@ const UserRow = ({ user, index, selected, onToggle, delay }: {
       ],
     }}>
       <TouchableOpacity
-        style={[styles.userRow, selected && styles.userRowSelected]}
-        onPress={handlePress}
-        activeOpacity={0.9}
+        style={[
+          styles.userRow,
+          selected && styles.userRowSelected,
+          disabled && styles.userRowDisabled,
+        ]}
+        onPress={disabled ? undefined : handlePress}
+        activeOpacity={disabled ? 1 : 0.9}
       >
         <MiniAvatar user={user} index={index} />
         <View style={{ flex: 1 }}>
           <Text style={styles.userName}>{displayName}</Text>
           <Text style={styles.userEmail}>{user.email}</Text>
         </View>
-        <CheckCircle selected={selected} />
+        {disabled ? (
+          // Badge "Invité" pour les utilisateurs déjà invités
+          <View style={styles.invitedBadge}>
+            <Text style={styles.invitedBadgeText}>Invité ✓</Text>
+          </View>
+        ) : (
+          <CheckCircle selected={selected} />
+        )}
       </TouchableOpacity>
     </Animated.View>
   );
@@ -149,13 +161,10 @@ const CustomAlert = ({
 
   return (
     <View style={alertStyles.overlay}>
-      {/* Backdrop blur effect via opacity layer */}
       <Animated.View style={[alertStyles.card, {
         opacity: opacityAnim,
         transform: [{ scale: scaleAnim }],
       }]}>
-
-        {/* ── Icône animée ── */}
         <Animated.View style={[alertStyles.iconOuter, {
           transform: [{ scale: checkAnim }],
         }]}>
@@ -172,7 +181,6 @@ const CustomAlert = ({
           </View>
         </Animated.View>
 
-        {/* ── Texte ── */}
         <Text style={alertStyles.title}>C'est parti ! 🎉</Text>
         <Text style={alertStyles.subtitle}>
           <Text style={alertStyles.count}>
@@ -182,10 +190,8 @@ const CustomAlert = ({
           <Text style={alertStyles.defiHighlight}>« {defiNom} »</Text>
         </Text>
 
-        {/* ── Séparateur ── */}
         <View style={alertStyles.separator} />
 
-        {/* ── Bouton principal ── */}
         <TouchableOpacity style={alertStyles.btn} onPress={onNavigate} activeOpacity={0.88}>
           <Text style={alertStyles.btnText}>Voir la progression</Text>
           <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8 }}>
@@ -193,7 +199,6 @@ const CustomAlert = ({
               strokeLinecap="round" strokeLinejoin="round" />
           </Svg>
         </TouchableOpacity>
-
       </Animated.View>
     </View>
   );
@@ -302,21 +307,23 @@ export default function DefierAmisScreen() {
   const defiNom = params.defiNom ? String(params.defiNom) : "Mon défi";
   const defiDesc= params.defiDesc? String(params.defiDesc): "";
 
-  const [users,        setUsers]        = useState<User[]>([]);
-  const [selected,     setSelected]     = useState<number[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [sending,      setSending]      = useState(false);
-  const [emailInput,   setEmailInput]   = useState("");
-  const [emailEntries, setEmailEntries] = useState<EmailEntry[]>([]);
-  const [emailCounter, setEmailCounter] = useState(1);
-  const [alertVisible, setAlertVisible] = useState(false);
-  const [sentCount,    setSentCount]    = useState(0);
+  const [users,          setUsers]          = useState<User[]>([]);
+  const [alreadyInvited, setAlreadyInvited] = useState<number[]>([]);
+  const [selected,       setSelected]       = useState<number[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [sending,        setSending]        = useState(false);
+  const [emailInput,     setEmailInput]     = useState("");
+  const [emailEntries,   setEmailEntries]   = useState<EmailEntry[]>([]);
+  const [emailCounter,   setEmailCounter]   = useState(1);
+  const [alertVisible,   setAlertVisible]   = useState(false);
+  const [sentCount,      setSentCount]      = useState(0);
 
   const titleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.spring(titleAnim, { toValue: 1, useNativeDriver: true, tension: 55, friction: 9 }).start();
     fetchUsers();
+    fetchAlreadyInvited();
   }, []);
 
   const fetchUsers = async () => {
@@ -328,6 +335,34 @@ export default function DefierAmisScreen() {
       .order("prenom", { ascending: true });
     if (!error && data) setUsers(data);
     setLoading(false);
+  };
+
+  // ─── Récupère les users qui ont déjà accepté un de mes défis ───────────
+  // = ceux présents dans defi_participants sur des défis que j'ai créés
+  const fetchAlreadyInvited = async () => {
+    // 1. Récupère les défis que j'ai créés
+    const { data: mesDefis } = await supabase
+      .from("defis")
+      .select("id_defi")
+      .eq("id_user", userId ?? 0);
+
+    if (!mesDefis || mesDefis.length === 0) return;
+
+    const mesDefiIds = mesDefis.map((d) => d.id_defi);
+
+    // 2. Récupère les participants de ces défis (sauf moi)
+    const { data, error } = await supabase
+      .from("defi_participants")
+      .select("id_user")
+      .in("id_defi", mesDefiIds)
+      .neq("id_user", userId ?? 0);
+
+    console.log("fetchAlreadyInvited data:", data, "error:", error);
+
+    if (data && data.length > 0) {
+      const ids = [...new Set(data.map((d) => Number(d.id_user)).filter(Boolean))];
+      setAlreadyInvited(ids);
+    }
   };
 
   const toggle = (id: number) => {
@@ -372,6 +407,7 @@ export default function DefierAmisScreen() {
       ...selectedUsers.map((u) =>
         inviterAmi({
           email:           u.email,
+          invitedUserId:   u.id_user,   // ← évite le lookup email, id_user_cible direct
           defiId,
           defiNom,
           defiDescription: defiDesc,
@@ -394,7 +430,16 @@ export default function DefierAmisScreen() {
     setSending(false);
     setSentCount(totalCount);
     setAlertVisible(true);
+
+    // Rafraîchir la liste des déjà invités après envoi
+    fetchAlreadyInvited();
+    setSelected([]);
+    setEmailEntries([]);
   };
+
+  // ─── Listes filtrées ──────────────────────────────────────────────────────
+  const notYetInvited = users.filter((u) => !alreadyInvited.includes(u.id_user));
+  const invitedUsers  = users.filter((u) =>  alreadyInvited.includes(u.id_user));
 
   const totalSelected = selected.length + emailEntries.length;
 
@@ -426,29 +471,44 @@ export default function DefierAmisScreen() {
           </Animated.View>
 
           {/* ── Section 1 : Utilisateurs de l'app ── */}
-          <Text style={styles.sectionLabel}>👥 Utilisateurs de l'app</Text>
+          <Text style={styles.sectionLabel}> Utilisateurs de l'app</Text>
           <View style={styles.listCard}>
             {loading ? (
               <ActivityIndicator color={COLORS.primary} style={{ padding: 24 }} />
             ) : users.length === 0 ? (
               <Text style={styles.emptyText}>Aucun utilisateur trouvé</Text>
             ) : (
-              users.map((u, i) => (
-                <React.Fragment key={u.id_user}>
-                  <UserRow
-                    user={u} index={i}
-                    selected={selected.includes(u.id_user)}
-                    onToggle={() => toggle(u.id_user)}
-                    delay={i * 60}
-                  />
-                  {i < users.length - 1 && <View style={styles.separator} />}
-                </React.Fragment>
-              ))
+              <>
+                {/* ── Déjà dans mes défis (en haut, sélectionnables) ── */}
+                {invitedUsers.length > 0 && (
+                  <>
+                    <View style={styles.alreadyInvitedDivider}>
+                      <View style={styles.dividerLine} />
+                      <Text style={styles.alreadyLabel}> Déjà dans tes défis</Text>
+                      <View style={styles.dividerLine} />
+                    </View>
+
+                    {invitedUsers.map((u, i) => (
+                      <React.Fragment key={u.id_user}>
+                        <UserRow
+                          user={u}
+                          index={i}
+                          selected={selected.includes(u.id_user)}
+                          onToggle={() => toggle(u.id_user)}
+                          delay={i * 60}
+                        />
+                        {i < invitedUsers.length - 1 && <View style={styles.separator} />}
+                      </React.Fragment>
+                    ))}
+
+                  </>
+                )}
+              </>
             )}
           </View>
 
           {/* ── Section 2 : Emails externes ── */}
-          <Text style={[styles.sectionLabel, { marginTop: 20 }]}>📧 Inviter par email</Text>
+          <Text style={[styles.sectionLabel, { marginTop: 20 }]}> Inviter par email</Text>
           <View style={styles.emailCard}>
             <View style={styles.emailInputRow}>
               <View style={styles.emailInputWrap}>
@@ -570,6 +630,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10, borderRadius: SIZES.radius, gap: 12,
   },
   userRowSelected: { backgroundColor: `${COLORS.primary}08` },
+  userRowDisabled: { opacity: 0.45 },
   avatarCircle:    {
     width: 46, height: 46, borderRadius: 23,
     alignItems: "center", justifyContent: "center",
@@ -585,6 +646,40 @@ const styles = StyleSheet.create({
   checkCircleSelected: {
     backgroundColor: COLORS.primary, borderColor: COLORS.primary,
     ...SHADOWS.purple,
+  },
+  // ── Badge "Invité ✓" ──
+  invitedBadge: {
+    backgroundColor: `${COLORS.primary}12`,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}30`,
+  },
+  invitedBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  // ── Divider "Déjà invités" ──
+  alreadyInvitedDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 10,
+    gap: 8,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+    opacity: 0.5,
+  },
+  alreadyLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.textLight,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
   separator:     { height: 1, backgroundColor: COLORS.border, marginHorizontal: 4, opacity: 0.6 },
   emptyText:     { textAlign: "center", padding: 24, color: COLORS.textLight },

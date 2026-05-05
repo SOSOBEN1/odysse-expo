@@ -1,4 +1,4 @@
-import { useCallback, useState ,useEffect} from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import {
   ScrollView, StatusBar, StyleSheet, Text,
   TouchableOpacity, View,
@@ -241,11 +241,18 @@ export default function MissionsScreen() {
   } = useMissions(userId !== null ? String(userId) : null);
 
   // ── Intercepter la navigation si mission en cours ───────────
-  useEffect(() => {
-  if (!isFocused) {
-    requestExit(() => {}); // pas de navigation à dispatcher, juste afficher la modal
+const wasFocused = useRef(false);
+useEffect(() => {
+  if (wasFocused.current && !isFocused) {
+    // Vérifier si une mission est en cours via les missions chargées
+    const hasRunning = missions.some((m) => {
+      const t = getTimer(m.id);
+      return t.state === "running";
+    });
+    if (hasRunning) requestExit(() => {});
   }
-}, [isFocused]);
+  wasFocused.current = isFocused;
+}, [isFocused, missions, getTimer, requestExit]);
 
   const filteredMissions = missions.filter((m) => {
     if (activeTab === "Urgent")         return m.urgent;

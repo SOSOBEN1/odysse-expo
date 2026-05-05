@@ -293,30 +293,12 @@ export async function completeMission(
     return null;
   }
 
-  // 4. Compute and apply XP + gold rewards
-  const { xp: xpEarned, gold: goldEarned } = computeRewards(mission);
-
-  const { data: userData, error: userError } = await supabase
-    .from("users")
-    .select("xp, gold")
-    .eq("id_user", userId)
-    .single();
-
-  if (!userError && userData) {
-    await supabase
-      .from("users")
-      .update({
-        xp:   (userData.xp   ?? 0) + xpEarned,
-        gold: (userData.gold ?? 0) + goldEarned,
-      })
-      .eq("id_user", userId);
-  }
 
   return {
-    newStats,
-    xpEarned,
-    goldEarned,
-  };
+  newStats,
+  xpEarned: 0,   // XP géré par missionRewardService.ts
+  goldEarned: 0,
+};
 }
 
 // ─── Fetch mission from DB ────────────────────────────────────────────────────

@@ -828,7 +828,9 @@ const DashboardHeader = () => {
         </View>
         <View style={headerStyles.headerIcons}>
           <PuzzleIcone onPress={() => router.push("/frontend/screens/WorldsScreen")} />
-          <NotifIcone />
+          <NotifIcone onPress={() => {
+  router.push("/frontend/screens/NotificationsScreen");
+}} /> 
           <SettingIcone />
         </View>
       </View>

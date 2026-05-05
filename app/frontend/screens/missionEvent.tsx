@@ -796,4 +796,4 @@ const detailStyles = StyleSheet.create({
   ctaGroup:       { gap: 10, marginTop: 20 },
   ctaBtn:         { flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 50, paddingVertical: 15, gap: 8 },
   ctaBtnText:     { color: "#fff", fontSize: 16, fontWeight: "800" },
-});
+}); 

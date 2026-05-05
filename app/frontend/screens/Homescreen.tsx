@@ -452,7 +452,9 @@ export default function HomeScreen() {
               <Text style={styles.coinsText}>{userStats.coins.toLocaleString()}</Text>
             </View>
             <View style={styles.headerIcons}>
-              <NotifIcone onPress={() => console.log("Notifications")} />
+              <NotifIcone onPress={() => {
+  router.push("/frontend/screens/NotificationsScreen");
+}} />
               <SettingIcone onPress={() => console.log("Settings")} />
             </View>
           </View>

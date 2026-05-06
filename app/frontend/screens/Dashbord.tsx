@@ -778,6 +778,7 @@ function getLevelTitle(niveau: number): string {
   return "Maître légendaire";
 }
 
+
 function useDashboardUser(): DashboardUser {
   const { userId, username: ctxUsername } = useUser();
   const [user, setUser] = useState<DashboardUser>({

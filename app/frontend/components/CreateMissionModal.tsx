@@ -200,7 +200,8 @@ if (initialData?.id_mission) {
     .from("mission")
     .insert({
       ...missionData,
-      id_user: userId,  // ✅ ajouter ici
+      id_user: userId, 
+      id_defi: initialData?.id_defi ?? null, // ✅ ajouter ici
     })
     .select()
     .single();

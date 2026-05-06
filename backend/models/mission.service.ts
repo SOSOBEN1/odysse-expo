@@ -53,10 +53,12 @@ export const fetchMissions = async (
     difficulte,
     priorite,
     id_boss,
+    id_defi,
     date_limite,
     boss_events ( nom )
   `)
-  .eq("id_user", userId)  // ✅ filtre par utilisateur
+  
+    .or(`id_user.eq.${userId},id_defi.not.is.null`)
   .order("id_mission", { ascending: false });
 
   if (errM) throw errM;

@@ -11,7 +11,7 @@ import { supabase } from "../constants/supabase";
 import { COLORS, SIZES, SHADOWS } from "../constants/theme";
 import CreateMissionModal from "../components/CreateMissionModal";
 import HibouGuide from "../components/ui/Hibou";
-import { useUser } from "../constants/UserContext"; // ✅ ajout
+import { useUser } from "../constants/UserContext";
 
 const { width } = Dimensions.get("window");
 
@@ -41,6 +41,10 @@ interface Mission {
 const DIFF_LABELS: Record<number, string> = { 1: "Facile", 2: "Moyen", 3: "Difficile" };
 const DIFF_ICONS:  Record<number, string>  = { 1: "⚡", 2: "🔥", 3: "💀" };
 const MAP_STEP = 150;
+
+// Calcul gold identique à finishMissionSession
+const computeGold = (difficulte: number, priorite: number) =>
+  difficulte * 10 + priorite * 5;
 
 const dbStatusToLocal = (statut: string | null): MissionStatus => {
   switch (statut) {
@@ -117,15 +121,13 @@ const ProgressBar = ({ progress }: { progress: number }) => {
 };
 
 // ─── Mission Node ─────────────────────────────────────────────────────────────
-interface MissionNodeProps {
+const MissionNode = ({ mission, index, onPress, onEdit, onDelete }: {
   mission:  Mission;
   index:    number;
   onPress:  () => void;
   onEdit:   () => void;
   onDelete: () => void;
-}
-
-const MissionNode = ({ mission, index, onPress, onEdit, onDelete }: MissionNodeProps) => {
+}) => {
   const { top, isLeft } = getNodePosition(index);
   const cfg      = STATUS_CONFIG[mission.localStatus];
   const anim     = useRef(new Animated.Value(0)).current;
@@ -217,16 +219,14 @@ const MissionNode = ({ mission, index, onPress, onEdit, onDelete }: MissionNodeP
 };
 
 // ─── Mission Detail Modal ─────────────────────────────────────────────────────
-interface MissionDetailModalProps {
+const MissionDetailModal = ({ mission, visible, onClose, onStart, onPause, onComplete }: {
   mission:    Mission | null;
   visible:    boolean;
   onClose:    () => void;
   onStart:    () => void;
   onPause:    () => void;
   onComplete: () => void;
-}
-
-const MissionDetailModal = ({ mission, visible, onClose, onStart, onPause, onComplete }: MissionDetailModalProps) => {
+}) => {
   if (!mission) return null;
   const cfg = STATUS_CONFIG[mission.localStatus];
   return (
@@ -256,10 +256,11 @@ const MissionDetailModal = ({ mission, visible, onClose, onStart, onPause, onCom
             )}
             <View style={detailStyles.infoGrid}>
               {[
-                { emoji: DIFF_ICONS[mission.difficulte], label: "Difficulté",    val: DIFF_LABELS[mission.difficulte] },
-                { emoji: "🏆",                           label: "XP",            val: `+${mission.xp_gain}` },
-                ...(mission.duree_min   ? [{ emoji: "⏱",  label: "Durée",       val: `${mission.duree_min} min` }] : []),
-                ...(mission.date_limite ? [{ emoji: "📅", label: "Limite",       val: new Date(mission.date_limite).toLocaleDateString("fr-FR") }] : []),
+                { emoji: DIFF_ICONS[mission.difficulte], label: "Difficulté", val: DIFF_LABELS[mission.difficulte] },
+                { emoji: "🏆", label: "XP",   val: `+${mission.xp_gain}` },
+                { emoji: "🪙", label: "Gold", val: `+${computeGold(mission.difficulte, mission.priorite)}` },
+                ...(mission.duree_min   ? [{ emoji: "⏱",  label: "Durée",  val: `${mission.duree_min} min` }] : []),
+                ...(mission.date_limite ? [{ emoji: "📅", label: "Limite", val: new Date(mission.date_limite).toLocaleDateString("fr-FR") }] : []),
                 { emoji: "📚", label: "Connaissance", val: `+${mission.connaissance_gain}` },
                 { emoji: "📋", label: "Organisation", val: `+${mission.organisation_gain}` },
               ].map(g => (
@@ -269,6 +270,14 @@ const MissionDetailModal = ({ mission, visible, onClose, onStart, onPause, onCom
                   <Text style={detailStyles.infoVal}>{g.val}</Text>
                 </View>
               ))}
+            </View>
+
+            {/* Note récompense à la fin de l'événement */}
+            <View style={detailStyles.rewardNote}>
+              <Ionicons name="information-circle-outline" size={16} color="#7C3AED" />
+              <Text style={detailStyles.rewardNoteText}>
+                XP et gold crédités à la complétion de l'événement 🎁
+              </Text>
             </View>
 
             <View style={detailStyles.ctaGroup}>
@@ -316,6 +325,46 @@ const MissionDetailModal = ({ mission, visible, onClose, onStart, onPause, onCom
   );
 };
 
+// ─── Event Reward Modal ───────────────────────────────────────────────────────
+const EventRewardModal = ({ visible, eventTitle, totalXP, totalGold, onClose }: {
+  visible:    boolean;
+  eventTitle: string;
+  totalXP:    number;
+  totalGold:  number;
+  onClose:    () => void;
+}) => (
+  <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <View style={rewardStyles.overlay}>
+      <View style={rewardStyles.container}>
+        <Text style={rewardStyles.emoji}>🏆</Text>
+        <Text style={rewardStyles.title}>Événement complété !</Text>
+        <Text style={rewardStyles.subtitle}>{eventTitle}</Text>
+
+        <View style={rewardStyles.rewardsRow}>
+          <View style={rewardStyles.rewardCard}>
+            <Text style={rewardStyles.rewardEmoji}>⭐</Text>
+            <Text style={rewardStyles.rewardVal}>+{totalXP}</Text>
+            <Text style={rewardStyles.rewardLabel}>XP</Text>
+          </View>
+          <View style={rewardStyles.rewardCard}>
+            <Text style={rewardStyles.rewardEmoji}>🪙</Text>
+            <Text style={rewardStyles.rewardVal}>+{totalGold}</Text>
+            <Text style={rewardStyles.rewardLabel}>Gold</Text>
+          </View>
+        </View>
+
+        <Text style={rewardStyles.congrats}>
+          Félicitations ! Tu as terminé toutes les missions 🎉
+        </Text>
+
+        <TouchableOpacity style={rewardStyles.closeBtn} onPress={onClose}>
+          <Text style={rewardStyles.closeBtnText}>Super ! 🚀</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
+
 // ─── Speech Bubble ────────────────────────────────────────────────────────────
 const SpeechBubble = ({ message }: { message: string }) => (
   <View style={styles.bubbleWrapper}>
@@ -329,9 +378,7 @@ const SpeechBubble = ({ message }: { message: string }) => (
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function MissionMapScreen() {
   const { eventId, eventTitle } = useLocalSearchParams<{ eventId: string; eventTitle: string }>();
-  const router = useRouter();
-
-  // ✅ userId numérique depuis UserContext (plus de supabase.auth.getUser)
+  const router  = useRouter();
   const { userId } = useUser();
 
   const [missions,           setMissions]           = useState<Mission[]>([]);
@@ -340,6 +387,7 @@ export default function MissionMapScreen() {
   const [detailVisible,      setDetailVisible]      = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [editData,           setEditData]           = useState<any>(null);
+  const [rewardModal,        setRewardModal]        = useState({ visible: false, totalXP: 0, totalGold: 0 });
 
   const hibouMsg = missions.length === 0
     ? "Crée ta\npremière\nmission !"
@@ -353,7 +401,7 @@ export default function MissionMapScreen() {
     try {
       setLoading(true);
 
-      // 1. Missions de l'événement
+      // 1. Missions de l'événement — filtrées par id_user ✅
       const { data: missionsData, error: errM } = await supabase
         .from("mission")
         .select(`
@@ -362,7 +410,8 @@ export default function MissionMapScreen() {
           stress_gain, connaissance_gain, organisation_gain,
           date_limite, id_boss
         `)
-        .eq("id_boss", Number(eventId));
+        .eq("id_boss", Number(eventId))
+        .eq("id_user", String(userId));
 
       if (errM) throw errM;
 
@@ -374,14 +423,11 @@ export default function MissionMapScreen() {
         const { data: validations } = await supabase
           .from("mission_validation")
           .select("id_validation, id_mission, statut")
-          .eq("id_user", String(userId))   // ✅ String(userId)
+          .eq("id_user", String(userId))
           .in("id_mission", missionIds);
 
         (validations ?? []).forEach(v => {
-          validationMap[v.id_mission] = {
-            id_validation: v.id_validation,
-            statut:        v.statut,
-          };
+          validationMap[v.id_mission] = { id_validation: v.id_validation, statut: v.statut };
         });
       }
 
@@ -393,38 +439,27 @@ export default function MissionMapScreen() {
         return new Date(a.date_limite).getTime() - new Date(b.date_limite).getTime();
       });
 
-      // 4. Appliquer les statuts
+      // 4. Appliquer les statuts — déblocage séquentiel corrigé ✅
+      // La prochaine mission disponible = la première sans validation "done"
       let firstUnlockedFound = false;
       const withStatus: Mission[] = sorted.map((m) => {
         const validation       = validationMap[m.id_mission];
         const validationStatut = validation?.statut ?? null;
         const dbLocal          = dbStatusToLocal(validationStatut);
 
+        // Mission déjà en cours / pause / terminée → statut DB direct
         if (dbLocal === "done" || dbLocal === "in_progress" || dbLocal === "paused") {
-          return {
-            ...m,
-            validationId:     validation?.id_validation ?? null,
-            validationStatut,
-            localStatus:      dbLocal,
-          };
+          return { ...m, validationId: validation?.id_validation ?? null, validationStatut, localStatus: dbLocal };
         }
 
+        // Première mission non encore faite → débloquée
         if (!firstUnlockedFound) {
           firstUnlockedFound = true;
-          return {
-            ...m,
-            validationId:     validation?.id_validation ?? null,
-            validationStatut,
-            localStatus:      "active" as MissionStatus,
-          };
+          return { ...m, validationId: validation?.id_validation ?? null, validationStatut, localStatus: "active" as MissionStatus };
         }
 
-        return {
-          ...m,
-          validationId:     null,
-          validationStatut: null,
-          localStatus:      "locked" as MissionStatus,
-        };
+        // Reste → verrouillé
+        return { ...m, validationId: null, validationStatut: null, localStatus: "locked" as MissionStatus };
       });
 
       setMissions(withStatus);
@@ -435,32 +470,18 @@ export default function MissionMapScreen() {
     }
   }, [eventId, userId]);
 
-  useEffect(() => {
-    fetchMissions();
-  }, [fetchMissions]);
+  useEffect(() => { fetchMissions(); }, [fetchMissions]);
 
-  // ─── Upsert validation ────────────────────────────────────────────────────
-  const upsertValidation = async (
-    missionId:    number,
-    validationId: number | null,
-    statut:       string
-  ): Promise<number> => {
+  // ─── Upsert validation (sans XP/gold — crédités en fin d'événement) ───────
+  const upsertValidation = async (missionId: number, validationId: number | null, statut: string): Promise<number> => {
     if (validationId) {
-      const { error } = await supabase
-        .from("mission_validation")
-        .update({ statut })
-        .eq("id_validation", validationId);
+      const { error } = await supabase.from("mission_validation").update({ statut }).eq("id_validation", validationId);
       if (error) throw error;
       return validationId;
     } else {
       const { data, error } = await supabase
         .from("mission_validation")
-        .insert({
-          id_user:    String(userId),   // ✅ String(userId)
-          id_mission: missionId,
-          date_debut: new Date().toISOString(),
-          statut,
-        })
+        .insert({ id_user: String(userId), id_mission: missionId, date_debut: new Date().toISOString(), statut })
         .select("id_validation")
         .single();
       if (error) throw error;
@@ -468,50 +489,76 @@ export default function MissionMapScreen() {
     }
   };
 
+  // ─── Vérifier complétion événement → créditer récompenses UNE seule fois ──
+  const checkEventCompletion = async (updatedMissions: Mission[]) => {
+    if (!updatedMissions.length || !userId || !eventId) return;
+    const allDone = updatedMissions.every(m => m.localStatus === "done");
+    if (!allDone) return;
+
+    try {
+      // Vérifier si déjà récompensé via completed_at
+      const { data: eventData } = await supabase
+        .from("boss_events")
+        .select("completed_at")
+        .eq("id_boss", Number(eventId))
+        .single();
+
+      if (eventData?.completed_at) return; // ✅ Déjà récompensé, on sort
+
+      // Calculer totaux
+      const totalXP   = updatedMissions.reduce((acc, m) => acc + (m.xp_gain ?? 0), 0);
+      const totalGold = updatedMissions.reduce((acc, m) => acc + computeGold(m.difficulte, m.priorite), 0);
+
+      // Marquer l'événement complété
+      await supabase
+        .from("boss_events")
+        .update({ completed_at: new Date().toISOString() })
+        .eq("id_boss", Number(eventId));
+
+      // Créditer XP + gold
+      const userIdInt = parseInt(String(userId), 10);
+      const { error: errRpc } = await supabase.rpc("increment_user_rewards", {
+        p_user_id: userIdInt,
+        p_xp:      totalXP,
+        p_gold:    totalGold,
+      });
+
+      if (errRpc) {
+        // Fallback manuel
+        const { data: userData } = await supabase.from("users").select("xp, gold").eq("id_user", userIdInt).single();
+        await supabase.from("users").update({
+          xp:   (userData?.xp   ?? 0) + totalXP,
+          gold: (userData?.gold ?? 0) + totalGold,
+        }).eq("id_user", userIdInt);
+      }
+
+      // Afficher la modal 🎉
+      setRewardModal({ visible: true, totalXP, totalGold });
+
+    } catch (err: any) {
+      console.error("❌ checkEventCompletion:", err.message);
+    }
+  };
+
   // ─── Actions ─────────────────────────────────────────────────────────────
   const handleStart = async () => {
     if (!selectedMission || !userId) return;
     try {
-      const newValidationId = await upsertValidation(
-        selectedMission.id_mission,
-        selectedMission.validationId,
-        "running"
-      );
-      const updated: Mission = {
-        ...selectedMission,
-        localStatus:      "in_progress",
-        validationId:     newValidationId,
-        validationStatut: "running",
-      };
-      setMissions(prev => prev.map(m =>
-        m.id_mission === selectedMission.id_mission ? updated : m
-      ));
+      const newValidationId = await upsertValidation(selectedMission.id_mission, selectedMission.validationId, "running");
+      const updated: Mission = { ...selectedMission, localStatus: "in_progress", validationId: newValidationId, validationStatut: "running" };
+      setMissions(prev => prev.map(m => m.id_mission === selectedMission.id_mission ? updated : m));
       setSelectedMission(updated);
-    } catch (err: any) {
-      Alert.alert("Erreur", err.message);
-    }
+    } catch (err: any) { Alert.alert("Erreur", err.message); }
   };
 
   const handlePause = async () => {
     if (!selectedMission || !userId) return;
     try {
-      await upsertValidation(
-        selectedMission.id_mission,
-        selectedMission.validationId,
-        "paused"
-      );
-      const updated: Mission = {
-        ...selectedMission,
-        localStatus:      "paused",
-        validationStatut: "paused",
-      };
-      setMissions(prev => prev.map(m =>
-        m.id_mission === selectedMission.id_mission ? updated : m
-      ));
+      await upsertValidation(selectedMission.id_mission, selectedMission.validationId, "paused");
+      const updated: Mission = { ...selectedMission, localStatus: "paused", validationStatut: "paused" };
+      setMissions(prev => prev.map(m => m.id_mission === selectedMission.id_mission ? updated : m));
       setSelectedMission(updated);
-    } catch (err: any) {
-      Alert.alert("Erreur", err.message);
-    }
+    } catch (err: any) { Alert.alert("Erreur", err.message); }
   };
 
   const handleComplete = async () => {
@@ -520,22 +567,30 @@ export default function MissionMapScreen() {
     try {
       await upsertValidation(id, selectedMission.validationId, "done");
 
-      setMissions(prev => {
-        const idx = prev.findIndex(m => m.id_mission === id);
-        return prev.map((m, i) => {
-          if (m.id_mission === id)
-            return { ...m, localStatus: "done" as MissionStatus, validationStatut: "done" };
-          if (i === idx + 1 && m.localStatus === "locked")
-            return { ...m, localStatus: "active" as MissionStatus };
-          return m;
-        });
+      // Mettre à jour date_fin
+      if (selectedMission.validationId) {
+        await supabase.from("mission_validation")
+          .update({ date_fin: new Date().toISOString() })
+          .eq("id_validation", selectedMission.validationId);
+      }
+
+      // Débloquer la prochaine mission verrouillée
+      const updatedMissions = missions.map((m, i) => {
+        const idx = missions.findIndex(x => x.id_mission === id);
+        if (m.id_mission === id)
+          return { ...m, localStatus: "done" as MissionStatus, validationStatut: "done" };
+        if (i === idx + 1 && m.localStatus === "locked")
+          return { ...m, localStatus: "active" as MissionStatus };
+        return m;
       });
 
+      setMissions(updatedMissions);
       setDetailVisible(false);
-      Alert.alert("🎉 Mission terminée !", `Tu as gagné ${selectedMission.xp_gain} XP !`);
-    } catch (err: any) {
-      Alert.alert("Erreur", err.message);
-    }
+
+      // ✅ Vérifier si toutes les missions sont done → récompense événement
+      await checkEventCompletion(updatedMissions);
+
+    } catch (err: any) { Alert.alert("Erreur", err.message); }
   };
 
   const handleDelete = (mission: Mission) => {
@@ -544,10 +599,7 @@ export default function MissionMapScreen() {
       {
         text: "Supprimer", style: "destructive",
         onPress: async () => {
-          const { error } = await supabase
-            .from("mission")
-            .delete()
-            .eq("id_mission", mission.id_mission);
+          const { error } = await supabase.from("mission").delete().eq("id_mission", mission.id_mission);
           if (error) { Alert.alert("Erreur", error.message); return; }
           setMissions(prev => prev.filter(m => m.id_mission !== mission.id_mission));
         },
@@ -572,16 +624,12 @@ export default function MissionMapScreen() {
   // ─── Stats ────────────────────────────────────────────────────────────────
   const doneCount = missions.filter(m => m.localStatus === "done").length;
   const progress  = missions.length > 0 ? doneCount / missions.length : 0;
-  const totalXP   = missions
-    .filter(m => m.localStatus === "done")
-    .reduce((acc, m) => acc + m.xp_gain, 0);
+  const totalXPDisplay = missions.reduce((acc, m) => acc + m.xp_gain, 0);
   const mapH = Math.max(80 + missions.length * MAP_STEP + 220, 600);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.spring(headerAnim, {
-      toValue: 1, useNativeDriver: true, tension: 50, friction: 8,
-    }).start();
+    Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 50, friction: 8 }).start();
   }, []);
 
   return (
@@ -589,15 +637,10 @@ export default function MissionMapScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       {/* ── HEADER ── */}
-      <Animated.View style={[
-        styles.header,
-        {
-          opacity: headerAnim,
-          transform: [{
-            translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }),
-          }],
-        },
-      ]}>
+      <Animated.View style={[styles.header, {
+        opacity: headerAnim,
+        transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) }],
+      }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={20} color={COLORS.primary} />
         </TouchableOpacity>
@@ -605,11 +648,11 @@ export default function MissionMapScreen() {
           <Text style={styles.projectTitle} numberOfLines={1}>{eventTitle ?? "Missions"}</Text>
           <ProgressBar progress={progress} />
           <Text style={styles.progressLabel}>
-            {doneCount}/{missions.length} missions · {totalXP} XP gagnés
+            {doneCount}/{missions.length} missions · {totalXPDisplay} XP total
           </Text>
         </View>
         <View style={styles.xpBadge}>
-          <Text style={styles.xpBadgeText}>🏆 {totalXP}</Text>
+          <Text style={styles.xpBadgeText}>🏆 {totalXPDisplay}</Text>
         </View>
       </Animated.View>
 
@@ -620,26 +663,14 @@ export default function MissionMapScreen() {
           <Text style={styles.loaderText}>Chargement de la carte...</Text>
         </View>
       ) : (
-        <ScrollView
-          style={styles.mapScroll}
-          contentContainerStyle={{ height: mapH + 140, paddingBottom: 140 }}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.mapScroll} contentContainerStyle={{ height: mapH + 140, paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
           <View style={{ height: mapH, width }}>
             <Svg width={width} height={mapH} style={StyleSheet.absoluteFillObject} pointerEvents="none">
               {Array.from({ length: 20 }, (_, i) => (
-                <Circle
-                  key={i}
-                  cx={10 + ((i * 73) % (width - 20))}
-                  cy={10 + ((i * 137) % (mapH - 20))}
-                  r={1 + (i % 3)}
-                  fill="#fff"
-                  opacity={0.4 + (i % 3) * 0.1}
-                />
+                <Circle key={i} cx={10 + ((i * 73) % (width - 20))} cy={10 + ((i * 137) % (mapH - 20))} r={1 + (i % 3)} fill="#fff" opacity={0.4 + (i % 3) * 0.1} />
               ))}
             </Svg>
 
-            {/* Treasure chest */}
             <View style={styles.chestWrapper}>
               <View style={styles.chest}>
                 <Svg width={48} height={42} viewBox="0 0 52 46">
@@ -691,13 +722,7 @@ export default function MissionMapScreen() {
 
       {/* ── CTA ── */}
       <View style={styles.ctaBar}>
-        <TouchableOpacity
-          style={styles.ctaBtn}
-          onPress={() => {
-            setEditData({ id_boss: Number(eventId) });
-            setCreateModalVisible(true);
-          }}
-        >
+        <TouchableOpacity style={styles.ctaBtn} onPress={() => { setEditData({ id_boss: Number(eventId) }); setCreateModalVisible(true); }}>
           <Ionicons name="add" size={22} color="#fff" />
           <Text style={styles.ctaBtnText}>Créer une mission</Text>
         </TouchableOpacity>
@@ -705,18 +730,22 @@ export default function MissionMapScreen() {
 
       {/* ── Modals ── */}
       <MissionDetailModal
-        mission={selectedMission}
-        visible={detailVisible}
+        mission={selectedMission} visible={detailVisible}
         onClose={() => setDetailVisible(false)}
-        onStart={handleStart}
-        onPause={handlePause}
-        onComplete={handleComplete}
+        onStart={handleStart} onPause={handlePause} onComplete={handleComplete}
       />
       <CreateMissionModal
         visible={createModalVisible}
         onClose={() => { setCreateModalVisible(false); setEditData(null); }}
         onSave={() => { fetchMissions(); setCreateModalVisible(false); setEditData(null); }}
         initialData={editData}
+      />
+      <EventRewardModal
+        visible={rewardModal.visible}
+        eventTitle={eventTitle ?? ""}
+        totalXP={rewardModal.totalXP}
+        totalGold={rewardModal.totalGold}
+        onClose={() => setRewardModal(prev => ({ ...prev, visible: false }))}
       />
     </View>
   );
@@ -793,7 +822,25 @@ const detailStyles = StyleSheet.create({
   infoEmoji:      { fontSize: 22, marginBottom: 4 },
   infoLabel:      { fontSize: 10, color: "#9CA3AF", fontWeight: "600" },
   infoVal:        { fontSize: 13, fontWeight: "800", color: "#2D1A5E", marginTop: 2 },
-  ctaGroup:       { gap: 10, marginTop: 20 },
+  rewardNote:     { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#EDE9FE", borderRadius: 12, padding: 12, marginBottom: 16 },
+  rewardNoteText: { fontSize: 12, color: "#7C3AED", fontWeight: "600", flex: 1 },
+  ctaGroup:       { gap: 10, marginTop: 4 },
   ctaBtn:         { flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 50, paddingVertical: 15, gap: 8 },
   ctaBtnText:     { color: "#fff", fontSize: 16, fontWeight: "800" },
-}); 
+});
+
+const rewardStyles = StyleSheet.create({
+  overlay:      { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center" },
+  container:    { backgroundColor: "#F5F3FF", borderRadius: 28, padding: 28, width: "85%", alignItems: "center", ...SHADOWS.medium },
+  emoji:        { fontSize: 64, marginBottom: 12 },
+  title:        { fontSize: 24, fontWeight: "800", color: "#2D1A5E", marginBottom: 4, textAlign: "center" },
+  subtitle:     { fontSize: 15, color: "#7C3AED", fontWeight: "600", marginBottom: 24, textAlign: "center" },
+  rewardsRow:   { flexDirection: "row", gap: 16, marginBottom: 20 },
+  rewardCard:   { backgroundColor: "#fff", borderRadius: 20, padding: 20, alignItems: "center", flex: 1, borderWidth: 2, borderColor: "#E9D5FF", ...SHADOWS.light },
+  rewardEmoji:  { fontSize: 32, marginBottom: 8 },
+  rewardVal:    { fontSize: 26, fontWeight: "800", color: "#2D1A5E" },
+  rewardLabel:  { fontSize: 13, color: "#9CA3AF", fontWeight: "600", marginTop: 2 },
+  congrats:     { fontSize: 14, color: "#4C1D95", textAlign: "center", marginBottom: 24, lineHeight: 20 },
+  closeBtn:     { backgroundColor: "#7C3AED", borderRadius: 50, paddingVertical: 14, paddingHorizontal: 40 },
+  closeBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+});

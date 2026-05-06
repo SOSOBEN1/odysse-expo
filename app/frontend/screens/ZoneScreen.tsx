@@ -4,6 +4,7 @@
  * - Dialog "Pause ou Continue" quand on quitte avec un timer actif
  * - Mission échouée → bouton "Recommencer"
  * - Bouton "Modifier" sur chaque mission (titre + description)
+ * ✅ FIX : userId null guard → TypeScript happy
  */
 
 import { Ionicons } from "@expo/vector-icons";
@@ -108,7 +109,7 @@ function EditMissionModal({ visible, mission, onSave, onCancel }: {
   onSave: (id: number, titre: string, description: string) => void;
   onCancel: () => void;
 }) {
-  const [titre, setTitre]           = useState("");
+  const [titre, setTitre]             = useState("");
   const [description, setDescription] = useState("");
 
   useEffect(() => {
@@ -375,9 +376,13 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
 // ─── Écran principal ──────────────────────────────────────────────────────────
 
 export default function ZoneScreen() {
-  const router     = useRouter();
-  const { userId } = useUser();
-  const { zoneId, zoneSlug } = useLocalSearchParams<{ zoneId: string; zoneSlug: string }>();
+  const router              = useRouter();
+  const { userId: rawUserId } = useUser();
+  const { zoneId, zoneSlug }  = useLocalSearchParams<{ zoneId: string; zoneSlug: string }>();
+
+  // ✅ Guard — si pas connecté, rien à afficher
+  if (!rawUserId) return null;
+  const userId = rawUserId; // TypeScript sait maintenant que userId est non-null
 
   const [zoneInfo,  setZoneInfo]  = useState<ZoneInfo | null>(null);
   const [missions,  setMissions]  = useState<Mission[]>([]);
@@ -387,7 +392,7 @@ export default function ZoneScreen() {
   const [timers,    setTimers]    = useState<Record<number, TimerData>>({});
 
   const intervalsRef  = useRef<Record<number, ReturnType<typeof setInterval>>>({});
-  const startedAtRef  = useRef<Record<number, number>>({}); // missionId → timestamp ms
+  const startedAtRef  = useRef<Record<number, number>>({});
 
   const [showSuccess,    setShowSuccess]    = useState(false);
   const [showUnlocked,   setShowUnlocked]   = useState(false);
@@ -395,10 +400,7 @@ export default function ZoneScreen() {
   const [nextZoneName,   setNextZoneName]   = useState("");
   const pendingUnlock = useRef(false);
 
-  // ✅ Exit confirm modal
-  const [showExitModal, setShowExitModal] = useState(false);
-
-  // ✅ Edit mission modal
+  const [showExitModal,  setShowExitModal]  = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
 
   const bgFade    = useRef(new Animated.Value(0)).current;
@@ -454,7 +456,6 @@ export default function ZoneScreen() {
           return failed;
         }
 
-        // On garde state "running" avec elapsed recalculé — loadAll redémarrera l'interval
         const resumed: TimerData = { state: "running", elapsed: newElapsed, startedAt: Date.now() };
         await AsyncStorage.setItem(timerKey(userId, zoneId, missionId), JSON.stringify(resumed));
         return resumed;
@@ -509,7 +510,6 @@ export default function ZoneScreen() {
       }
       setTimers(initTimers);
 
-      // ── Auto-redémarrer les timers qui étaient "running" quand on est parti ──
       for (const m of loaded) {
         const t = initTimers[m.id_mission];
         if (t?.state === "running") {
@@ -685,7 +685,6 @@ export default function ZoneScreen() {
   // ✅ Exit modal actions ─────────────────────────────────────────────────────
 
   const handlePauseAndLeave = useCallback(() => {
-    // Mettre en pause tous les timers running
     Object.keys(timers).forEach(idStr => {
       const id = Number(idStr);
       if (timers[id]?.state === "running") {
@@ -698,8 +697,6 @@ export default function ZoneScreen() {
   }, [timers, updateTimer, router]);
 
   const handleContinueAndLeave = useCallback(async () => {
-    // Pour chaque timer "running", on sauvegarde avec startedAt fiable (depuis le ref)
-    // Au retour, loadTimer recalculera le temps écoulé depuis startedAt
     const saves: Promise<void>[] = [];
     Object.keys(timers).forEach(idStr => {
       const id = Number(idStr);
@@ -708,7 +705,6 @@ export default function ZoneScreen() {
         const timerToSave: TimerData = {
           ...t,
           state:     "running",
-          // On utilise le ref qui est toujours à jour, jamais affecté par les closures
           startedAt: startedAtRef.current[id] ?? t.startedAt ?? Date.now(),
         };
         saves.push(
@@ -770,7 +766,6 @@ export default function ZoneScreen() {
       </Animated.View>
 
       <View style={styles.header}>
-        {/* ✅ BackButton custom avec interception */}
         <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -842,7 +837,6 @@ export default function ZoneScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ✅ Modal sortie */}
       <ExitConfirmModal
         visible={showExitModal}
         accent={accent}
@@ -851,7 +845,6 @@ export default function ZoneScreen() {
         onCancel={() => setShowExitModal(false)}
       />
 
-      {/* ✅ Modal édition mission */}
       <EditMissionModal
         visible={!!editingMission}
         mission={editingMission}

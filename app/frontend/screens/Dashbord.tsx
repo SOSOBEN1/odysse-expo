@@ -813,7 +813,8 @@ function useDashboardUser(): DashboardUser {
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
 const DashboardHeader = () => {
-  const { selectedModel }                  = useAvatar();
+ const { selectedModel }                  = useAvatar();
+
   const { icon: timeIcon, text: timeText } = getTimeGreeting();
   const router                             = useRouter();
   const USER                               = useDashboardUser();

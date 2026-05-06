@@ -131,30 +131,50 @@ async verifyOtp(email: string, token: string) {
   if (error || !data) return { success: false, error: "Code incorrect ou expiré" };
   if (data.expires_at < now) return { success: false, error: "Code expiré" };
 
-  // Marque comme utilisé
   await supabase.from("otp_codes").update({ used: true }).eq("email", email);
 
   const { data: userData } = await supabase
-    .from("users")
-    .select("id_user")
-    .eq("email", email)
-    .single();
+  .from("users")
+  .select("auth_id")   // ← auth_id au lieu de id_user
+  .eq("email", email)
+  .single();
 
-  return { success: true, userId: userData?.id_user };
+return { success: true, userId: userData?.auth_id };
 },
 
   /**
    * Étape 3 — update password (optionnel)
    */
  async updatePassword(userId: string, newPassword: string) {
-  const { error } = await supabase
-    .from("users")
-    .update({ password: newPassword })
-    .eq("id_user", Number(userId)); // ← ajoute Number()
+  try {
+    console.log("🚀 Appel update-password avec authId:", userId);
 
-  if (error) {
-    return { success: false, error: "Erreur lors de la mise à jour" };
+    const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqeXFlY2tzcWhoc21reXd0cmd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3NDIxMzgsImV4cCI6MjA4ODMxODEzOH0.JbXLTHZMqkL9TlEK1fGKSkTSpIqSznDgrv5Ii2bq90A";
+
+    const res = await fetch(
+      "https://yjyqecksqhhsmkywtrgt.supabase.co/functions/v1/update-password",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": ANON_KEY,
+          "Authorization": `Bearer ${ANON_KEY}`,
+        },
+        body: JSON.stringify({ authId: userId, newPassword }),
+      }
+    );
+
+    console.log("📡 res.status:", res.status);
+    const data = await res.json();
+    console.log("📦 data:", data);
+
+    if (!res.ok) {
+      return { success: false, error: data?.error ?? "Erreur inconnue" };
+    }
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: "Problème de connexion" };
   }
-  return { success: true };
 },
 };

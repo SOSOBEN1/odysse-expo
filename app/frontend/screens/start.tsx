@@ -1,24 +1,24 @@
-import React, { useEffect, useRef } from "react";
+import { useRouter } from "expo-router";
+import { useEffect, useRef } from "react";
 import {
-  View,
+  Animated,
+  Dimensions,
+  Easing,
+  StatusBar,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  StatusBar,
-  Animated,
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import Svg, { Circle, Path, Ellipse, G, Rect } from "react-native-svg";
+import Svg, { Circle, G, Path } from "react-native-svg";
 import Logo from "../assets/images/logo.svg";
-import { COLORS, SIZES, SHADOWS } from "../styles/theme";
+import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 
-// FIX 1 : "screen" au lieu de "window" pour couvrir toute la hauteur physique
 const { width, height } = Dimensions.get("screen");
 
 const C = {
-  primary:   COLORS.primary,    // "#6949a8"
-  secondary: COLORS.secondary,  // "#9574e0"
+  primary:   COLORS.primary,
+  secondary: COLORS.secondary,
   light:     "#C4B5E8",
   bg:        "#EDE8F8",
 };
@@ -26,12 +26,7 @@ const C = {
 // ─── Wave Top ─────────────────────────────────────────────────────────────────
 const WaveTop = () => (
   <>
-    {/* Couche arrière – claire */}
-    <Svg
-      width={width} height={145}
-      style={[styles.absolute]}
-      pointerEvents="none"
-    >
+    <Svg width={width} height={145} style={[styles.absolute]} pointerEvents="none">
       <Path
         d={`M0,0 L${width},0 L${width},58
             Q${width * 0.76},112 ${width * 0.5},74
@@ -40,12 +35,7 @@ const WaveTop = () => (
         opacity={0.55}
       />
     </Svg>
-    {/* Couche avant – foncée */}
-    <Svg
-      width={width} height={115}
-      style={[styles.absolute, { top: 0 }]}
-      pointerEvents="none"
-    >
+    <Svg width={width} height={115} style={[styles.absolute, { top: 0 }]} pointerEvents="none">
       <Path
         d={`M0,0 L${width},0 L${width},50
             Q${width * 0.75},94 ${width * 0.5},64
@@ -57,18 +47,10 @@ const WaveTop = () => (
 );
 
 // ─── Wave Bottom ──────────────────────────────────────────────────────────────
-// FIX 2 : icônes intégrées dans la vague CLAIRE (couche arrière)
-// FIX 3 : bottom: 0 sur les deux couches pour couvrir tout le bas
-const WaveBottom = () => (
+const WaveBottom = ({ y2, y3, y4 }: { y2: any; y3: any; y4: any }) => (
   <>
-    {/* ── Couche claire (derrière) — contient les icônes ── */}
-    <Svg
-      width={width}
-      height={210}
-      style={[styles.absolute, { bottom: 0 }]}
-      pointerEvents="none"
-    >
-      {/* Vague claire */}
+    {/* Vague claire */}
+    <Svg width={width} height={210} style={[styles.absolute, { bottom: 0 }]} pointerEvents="none">
       <Path
         d={`M0,210 L${width},210 L${width},65
             Q${width * 0.72},5 ${width * 0.5},50
@@ -76,65 +58,54 @@ const WaveBottom = () => (
         fill={C.secondary}
         opacity={0.55}
       />
-
-      {/* ══ ICÔNE 1 — Manette de jeu (gauche) ══ */}
-      <G transform={`translate(${width * 0.13 - 24}, 100)`}>
-        {/* Corps */}
-        <Path
-          d="M6,10 Q6,2 16,2 L32,2 Q42,2 42,10 L42,26 Q42,34 32,34 L16,34 Q6,34 6,26 Z"
-          fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}
-        />
-        {/* Croix directionnelle */}
-        <Path d="M14,18 H20 M17,15 V21" stroke="#fff" strokeWidth={2} strokeLinecap="round" opacity={0.75}/>
-        {/* Boutons ABXY */}
-        <Circle cx={32} cy={15} r={3} fill="#fff" opacity={0.6}/>
-        <Circle cx={36} cy={20} r={3} fill="#fff" opacity={0.6}/>
-        {/* Poignées gauche */}
-        <Path d="M10,32 Q8,42 13,46" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" fill="none" opacity={0.75}/>
-        {/* Poignées droite */}
-        <Path d="M38,32 Q40,42 35,46" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" fill="none" opacity={0.75}/>
-        {/* Bouton start */}
-        <Rect x={19} y={14} width={10} height={5} rx={2.5} fill="none" stroke="#fff" strokeWidth={1.5} opacity={0.6}/>
-      </G>
-
-      {/* ══ ICÔNE 2 — Hexagone / médaille (centre) ══ */}
-      <G transform={`translate(${width * 0.5 - 22}, 82)`}>
-        {/* Hexagone */}
-        <Path
-          d="M22,0 L42,12 L42,36 L22,48 L2,36 L2,12 Z"
-          fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}
-        />
-        {/* Étoile intérieure */}
-        <Path
-          d="M22,14 L25,21 L32,21 L27,26 L29,33 L22,29 L15,33 L17,26 L12,21 L19,21 Z"
-          fill="#fff" opacity={0.55}
-        />
-      </G>
-
-      {/* ══ ICÔNE 3 — Cloche de notification (droite) ══ */}
-      <G transform={`translate(${width * 0.85 - 20}, 88)`}>
-        {/* Anneau supérieur */}
-        <Circle cx={20} cy={3} r={3.5} fill="none" stroke="#fff" strokeWidth={2} opacity={0.75}/>
-        {/* Corps de la cloche */}
-        <Path
-          d="M6,36 L34,36 L32,16 Q30,4 20,6 Q10,4 8,16 Z"
-          fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}
-        />
-        {/* Battant */}
-        <Path
-          d="M13,36 Q13,44 20,44 Q27,44 27,36"
-          fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" opacity={0.75}
-        />
-      </G>
     </Svg>
 
-    {/* ── Couche foncée (devant) ── */}
-    <Svg
-      width={width}
-      height={150}
-      style={[styles.absolute, { bottom: 0 }]}
+    {/* Icône manette */}
+    <Animated.View
+      style={{ position: "absolute", bottom: 130, left: width * 0.13 - 24, transform: [{ translateY: y2 }] }}
       pointerEvents="none"
     >
+      <Svg width={48} height={50}>
+        <G>
+          <Path d="M6,10 Q6,2 16,2 L32,2 Q42,2 42,10 L42,26 Q42,34 32,34 L16,34 Q6,34 6,26 Z" fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}/>
+          <Path d="M14,18 H20 M17,15 V21" stroke="#fff" strokeWidth={2} strokeLinecap="round" opacity={0.75}/>
+          <Circle cx={32} cy={15} r={3} fill="#fff" opacity={0.6}/>
+          <Circle cx={36} cy={20} r={3} fill="#fff" opacity={0.6}/>
+          <Path d="M10,32 Q8,42 13,46" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" fill="none" opacity={0.75}/>
+          <Path d="M38,32 Q40,42 35,46" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" fill="none" opacity={0.75}/>
+        </G>
+      </Svg>
+    </Animated.View>
+
+    {/* Icône médaille */}
+    <Animated.View
+      style={{ position: "absolute", bottom: 118, left: width * 0.5 - 22, transform: [{ translateY: y4 }] }}
+      pointerEvents="none"
+    >
+      <Svg width={44} height={50}>
+        <G>
+          <Path d="M22,0 L42,12 L42,36 L22,48 L2,36 L2,12 Z" fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}/>
+          <Path d="M22,14 L25,21 L32,21 L27,26 L29,33 L22,29 L15,33 L17,26 L12,21 L19,21 Z" fill="#fff" opacity={0.55}/>
+        </G>
+      </Svg>
+    </Animated.View>
+
+    {/* Icône cloche */}
+    <Animated.View
+      style={{ position: "absolute", bottom: 122, right: width * 0.15 - 20, transform: [{ translateY: y3 }] }}
+      pointerEvents="none"
+    >
+      <Svg width={40} height={50}>
+        <G>
+          <Circle cx={20} cy={3} r={3.5} fill="none" stroke="#fff" strokeWidth={2} opacity={0.75}/>
+          <Path d="M6,36 L34,36 L32,16 Q30,4 20,6 Q10,4 8,16 Z" fill="none" stroke="#fff" strokeWidth={2.2} opacity={0.75}/>
+          <Path d="M13,36 Q13,44 20,44 Q27,44 27,36" fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" opacity={0.75}/>
+        </G>
+      </Svg>
+    </Animated.View>
+
+    {/* Vague foncée */}
+    <Svg width={width} height={150} style={[styles.absolute, { bottom: 0 }]} pointerEvents="none">
       <Path
         d={`M0,150 L${width},150 L${width},50
             Q${width * 0.75},0 ${width * 0.5},36
@@ -145,49 +116,60 @@ const WaveBottom = () => (
   </>
 );
 
-// ─── Decorations (points, +, blobs, étincelles) ───────────────────────────────
-// FIX 4 : icônes fantômes retirées d'ici (elles sont maintenant dans WaveBottom)
-const Decorations = () => (
-  <Svg
-    width={width} height={height}
-    style={StyleSheet.absoluteFillObject}
-    pointerEvents="none"
-  >
-    {/* ── Haut gauche : croix + ── */}
-    <Path
-      d="M38 196 H52 M45 189 V203"
-      stroke={C.secondary} strokeWidth={2.5} strokeLinecap="round"
-    />
+// ─── Decorations ──────────────────────────────────────────────────────────────
+const Decorations = ({ y1, y2, y3, y4, y5 }: { y1: any; y2: any; y3: any; y4: any; y5: any }) => (
+  <>
+    {/* Croix haut gauche */}
+    <Animated.View style={{ position: "absolute", left: 38, top: 196, transform: [{ translateY: y1 }] }}>
+      <Svg width={16} height={16}>
+        <Path d="M0 8 H16 M8 0 V16" stroke={C.secondary} strokeWidth={2.5} strokeLinecap="round"/>
+      </Svg>
+    </Animated.View>
 
-    {/* ── Haut droit : petit cercle vide ── */}
-    <Circle cx={width - 46} cy={228} r={7} stroke={C.secondary} strokeWidth={2} fill="none" />
+    {/* Cercle haut droit */}
+    <Animated.View style={{ position: "absolute", right: 46, top: 228, transform: [{ translateY: y2 }] }}>
+      <Svg width={16} height={16}>
+        <Circle cx={8} cy={8} r={6} stroke={C.secondary} strokeWidth={2} fill="none"/>
+      </Svg>
+    </Animated.View>
 
-    {/* ── Haut droit : tout petit point plein ── */}
-    <Circle cx={width - 42} cy={314} r={4} fill={C.light} />
+    {/* Point haut droit */}
+    <Animated.View style={{ position: "absolute", right: 42, top: 314, transform: [{ translateY: y3 }] }}>
+      <View style={{ width: 8, height: 8, backgroundColor: C.light, borderRadius: 4 }}/>
+    </Animated.View>
 
-    {/* ── Milieu gauche : blob ellipse ── */}
-    <Ellipse cx={20} cy={height * 0.535} rx={15} ry={15} fill={C.light} opacity={0.6} />
+    {/* Blob milieu gauche */}
+    <Animated.View style={{ position: "absolute", left: 5, top: "53.5%", transform: [{ translateY: y4 }] }}>
+      <View style={{ width: 30, height: 30, backgroundColor: C.light, borderRadius: 15, opacity: 0.6 }}/>
+    </Animated.View>
 
-    {/* ── Bas gauche : croix + ── */}
-    <Path
-      d="M34 676 H48 M41 669 V683"
-      stroke={C.secondary} strokeWidth={2} strokeLinecap="round"
-    />
+    {/* Croix bas gauche */}
+    <Animated.View style={{ position: "absolute", left: 34, bottom: 210, transform: [{ translateY: y5 }] }}>
+      <Svg width={14} height={14}>
+        <Path d="M0 7 H14 M7 0 V14" stroke={C.secondary} strokeWidth={2} strokeLinecap="round"/>
+      </Svg>
+    </Animated.View>
 
-    {/* ── Bas gauche : deux points ── */}
-    <Circle cx={57} cy={682} r={3.5} fill={C.light} />
-    <Circle cx={68} cy={682} r={3.5} fill={C.light} />
+    {/* Deux points bas gauche */}
+    <Animated.View style={{ position: "absolute", left: 57, bottom: 200, flexDirection: "row", gap: 10, transform: [{ translateY: y1 }] }}>
+      <View style={{ width: 7, height: 7, backgroundColor: C.light, borderRadius: 3.5 }}/>
+      <View style={{ width: 7, height: 7, backgroundColor: C.light, borderRadius: 3.5 }}/>
+    </Animated.View>
 
-    {/* ── Étincelles autour du bouton CTA ── */}
-    <Path
-      d="M52 556 L57 544 L62 556"
-      stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none"
-    />
-    <Path
-      d={`M${width - 62} 566 L${width - 57} 554 L${width - 52} 566`}
-      stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none"
-    />
-  </Svg>
+    {/* Étincelle gauche */}
+    <Animated.View style={{ position: "absolute", left: 52, bottom: 290, transform: [{ translateY: y3 }] }}>
+      <Svg width={14} height={14} fill="none">
+        <Path d="M52 556 L57 544 L62 556" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    </Animated.View>
+
+    {/* Étincelle droite */}
+    <Animated.View style={{ position: "absolute", right: 52, bottom: 280, transform: [{ translateY: y2 }] }}>
+      <Svg width={14} height={14} fill="none">
+        <Path d="M0 10 L5 0 L10 10" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    </Animated.View>
+  </>
 );
 
 // ─── Arrow Icon ───────────────────────────────────────────────────────────────
@@ -209,12 +191,8 @@ const CTAButton = ({ onPress }: { onPress: () => void }) => {
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onPressIn={() =>
-        Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start()
-      }
-      onPressOut={() =>
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()
-      }
+      onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start()}
+      onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()}
       onPress={onPress}
     >
       <Animated.View style={[styles.ctaButton, { transform: [{ scale }] }]}>
@@ -231,17 +209,56 @@ const CTAButton = ({ onPress }: { onPress: () => void }) => {
 const StartScreen = () => {
   const router = useRouter();
 
+  // Animations d'entrée
   const logoAnim = useRef(new Animated.Value(0)).current;
   const textAnim = useRef(new Animated.Value(0)).current;
   const btnAnim  = useRef(new Animated.Value(0)).current;
 
+  // Animations flottantes pour décos et icônes
+  const deco1 = useRef(new Animated.Value(0)).current;
+  const deco2 = useRef(new Animated.Value(0)).current;
+  const deco3 = useRef(new Animated.Value(0)).current;
+  const deco4 = useRef(new Animated.Value(0)).current;
+  const deco5 = useRef(new Animated.Value(0)).current;
+
+  const floating = (anim: Animated.Value, duration: number, delay: number) => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, {
+          toValue: 1, duration, delay,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.sin),
+        }),
+        Animated.timing(anim, {
+          toValue: 0, duration,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.sin),
+        }),
+      ])
+    ).start();
+  };
+
   useEffect(() => {
+    // Animations d'entrée
     Animated.stagger(150, [
       Animated.spring(logoAnim, { toValue: 1, useNativeDriver: true, tension: 55, friction: 9 }),
       Animated.spring(textAnim, { toValue: 1, useNativeDriver: true, tension: 55, friction: 9 }),
       Animated.spring(btnAnim,  { toValue: 1, useNativeDriver: true, tension: 55, friction: 9 }),
     ]).start();
+
+    // Animations flottantes
+    floating(deco1, 2200, 0);
+    floating(deco2, 2800, 400);
+    floating(deco3, 1900, 200);
+    floating(deco4, 2500, 600);
+    floating(deco5, 2100, 300);
   }, []);
+
+  const y1 = deco1.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
+  const y2 = deco2.interpolate({ inputRange: [0, 1], outputRange: [0, -7]  });
+  const y3 = deco3.interpolate({ inputRange: [0, 1], outputRange: [0, -12] });
+  const y4 = deco4.interpolate({ inputRange: [0, 1], outputRange: [0, -8]  });
+  const y5 = deco5.interpolate({ inputRange: [0, 1], outputRange: [0, -6]  });
 
   const slidePop = (anim: Animated.Value) => ({
     opacity: anim,
@@ -255,16 +272,14 @@ const StartScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* 1 — Fond */}
+      {/* Fond */}
       <View style={styles.bg} />
 
-      {/* 2 — Vague haut (derrière le contenu) */}
+      {/* Vague haut */}
       <WaveTop />
 
-      {/* 3 — Décorations flottantes */}
-      <Decorations />
-
-      {/* 4 — Contenu principal */}
+      {/* Décorations flottantes */}
+      <Decorations y1={y1} y2={y2} y3={y3} y4={y4} y5={y5} />
 
       {/* Logo + Nom */}
       <Animated.View style={[styles.logoContainer, slidePop(logoAnim)]}>
@@ -293,8 +308,8 @@ const StartScreen = () => {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* 5 — Vague bas (par-dessus le contenu) */}
-      <WaveBottom />
+      {/* Vague bas avec icônes flottantes */}
+      <WaveBottom y2={y2} y3={y3} y4={y4} />
     </View>
   );
 };
@@ -303,7 +318,7 @@ const StartScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    minHeight: height,      // FIX : garantit la hauteur physique complète
+    minHeight: height,
     alignItems: "center",
     backgroundColor: C.bg,
     overflow: "hidden",

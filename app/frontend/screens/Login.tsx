@@ -2,13 +2,13 @@ import { Feather, FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-ico
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
-import { Text, TouchableOpacity, View, Alert } from "react-native";
+import { Alert, Text, TouchableOpacity, View } from "react-native";
 import UsernameInput from "../components/UsernameInput";
 import WaveBackground from "../components/waveBackground";
-import styles from "../styles/LoginStyle";
+import { useAvatar } from "../constants/AvatarContext";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
-import { useAvatar } from "../constants/AvatarContext";
+import styles from "../styles/LoginStyle";
 
 const AVATAR_MAP: Record<string, any> = {
   avatar_1: require("../assets/Avatar3D/fille1.glb"),
@@ -41,47 +41,59 @@ export default function LoginScreen() {
   ];
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Erreur", "Remplis tous les champs");
-      return;
+  if (!email || !password) {
+    Alert.alert("Erreur", "Remplis tous les champs");
+    return;
+  }
+  setLoading(true);
+  try {
+    // 1. Connexion via Supabase Auth (mot de passe haché)
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError || !authData.user) {
+  Alert.alert("Erreur Auth", authError?.message ?? "user null");  // ← message exact
+  return;
+}
+
+// 2. Récupérer le profil via auth_id
+const { data, error } = await supabase
+  .from("users")
+  .select("id_user, avatar_url, username, prenom, nom")
+  .eq("auth_id", authData.user.id)
+  .single();
+
+if (error || !data) {
+  Alert.alert("Erreur Profil", error?.message ?? "data null");  // ← message exact
+  return;
+}
+
+    // 3. Mettre à jour dernier_login
+    await supabase
+      .from("users")
+      .update({ dernier_login: new Date().toISOString() })
+      .eq("auth_id", authData.user.id);
+
+    // 4. Sync avatar
+    const avatarKey = data.avatar_url ?? "avatar_1";
+    if (AVATAR_MAP[avatarKey]) {
+      setSelectedModel(AVATAR_MAP[avatarKey]);
     }
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("id_user, avatar_url, username, prenom, nom")
-        .eq("email", email)
-        .eq("password", password)
-        .single();
 
-      if (error || !data) {
-        Alert.alert("Erreur", "Email ou mot de passe incorrect");
-        return;
-      }
+    // 5. Sync contexte
+    setUserId(data.id_user);
+    setUsername(data.username ?? data.prenom ?? data.nom ?? "Joueur");
 
-      await supabase
-        .from("users")
-        .update({ dernier_login: new Date().toISOString() })
-        .eq("id_user", data.id_user);
+    router.push("/frontend/screens/QuestionPeriodicScreen");
 
-      // ✅ Sync avatar
-      const avatarKey = data.avatar_url ?? "avatar_1";
-      if (AVATAR_MAP[avatarKey]) {
-        setSelectedModel(AVATAR_MAP[avatarKey]);
-      }
-
-      // ✅ Sync userId + username dans contexte + AsyncStorage
-      setUserId(data.id_user);
-      setUsername(data.username ?? data.prenom ?? data.nom ?? "Joueur");
-
-      router.push("/frontend/screens/QuestionPeriodicScreen");
-    } catch (err) {
-      Alert.alert("Erreur", "Une erreur est survenue");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  } catch (err) {
+    Alert.alert("Erreur", "Une erreur est survenue");
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
       <WaveBackground />

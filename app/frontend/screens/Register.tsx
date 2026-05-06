@@ -32,81 +32,81 @@ export default function RegisterScreen() {
   ];
 
   const handleRegister = async () => {
-    if (!fullName || !email || !password) {
-      Alert.alert("Erreur", "Veuillez remplir tous les champs");
+  if (!fullName || !email || !password) {
+    Alert.alert("Erreur", "Veuillez remplir tous les champs");
+    return;
+  }
+
+  const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+  if (!gmailRegex.test(email)) {
+    Alert.alert("Erreur", "L'e-mail doit être une adresse Gmail valide (@gmail.com)");
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    Alert.alert("Erreur", "Les mots de passe ne correspondent pas");
+    return;
+  }
+
+  if (password.length < 6) {
+    Alert.alert("Erreur", "Le mot de passe doit contenir au moins 6 caractères");
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const parts  = fullName.trim().split(" ");
+    const nom    = parts[0];
+    const prenom = parts.slice(1).join(" ") || "";
+
+    // ✅ ETAPE 1 : Créer le compte dans Supabase Auth (mot de passe haché)
+    const { data: authData, error: authError } =
+      await supabase.auth.signUp({ email, password });
+
+    if (authError || !authData.user) {
+      Alert.alert("Erreur", authError?.message ?? "Inscription échouée");
       return;
     }
 
-    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
-    if (!gmailRegex.test(email)) {
-      Alert.alert("Erreur", "L'e-mail doit être une adresse Gmail valide (@gmail.com)");
+    // ✅ ETAPE 2 : Insérer dans la table users SANS password + avec auth_id
+    const { data: dbUser, error: dbError } = await supabase
+      .from("users")
+      .insert([{
+        auth_id:       authData.user.id,  // ← UUID Supabase Auth
+        nom,
+        prenom,
+        email,
+        // ⚠️ plus de password ici
+        progression:   0,
+        gold:          0,
+        date_inscr:    new Date().toISOString().split("T")[0],
+        dernier_login: new Date().toISOString(),
+      }])
+      .select("id_user")
+      .single();
+
+    if (dbError) {
+      Alert.alert("Erreur", dbError.message);
       return;
     }
 
-    if (password !== confirmPassword) {
-      Alert.alert("Erreur", "Les mots de passe ne correspondent pas");
-      return;
-    }
+    // ✅ ETAPE 3 : Sauvegarder l'id dans le contexte
+    setUserId(dbUser.id_user);
 
-    if (password.length < 6) {
-      Alert.alert("Erreur", "Le mot de passe doit contenir au moins 6 caractères");
-      return;
-    }
+    setFullName("");
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
 
-    setLoading(true);
+    router.push("/frontend/screens/SetUpProfile");
 
-    try {
-      const parts  = fullName.trim().split(" ");
-      const nom    = parts[0];
-      const prenom = parts.slice(1).join(" ") || "";
-
-      // ✅ ETAPE 1 : Créer le compte dans Supabase Auth
-      const { data: authData, error: authError } =
-        await supabase.auth.signUp({ email, password });
-
-      if (authError) {
-        Alert.alert("Erreur", authError.message);
-        return;
-      }
-
-      // ✅ ETAPE 2 : Insérer dans la table users
-      const { data: dbUser, error: dbError } = await supabase
-        .from("users")
-        .insert([{
-          nom,
-          prenom,
-          email,
-          password,
-          progression:   0,
-          gold:          0,
-          date_inscr:    new Date().toISOString().split("T")[0],
-          dernier_login: new Date().toISOString(),
-        }])
-        .select("id_user")
-        .single();
-
-      if (dbError) {
-        Alert.alert("Erreur", dbError.message);
-        return;
-      }
-
-      // ✅ ETAPE 3 : Sauvegarder l'id dans le contexte
-      setUserId(dbUser.id_user);
-
-      setFullName("");
-      setEmail("");
-      setPassword("");
-      setConfirmPassword("");
-
-      router.push("/frontend/screens/SetUpProfile");
-
-    } catch (err) {
-      Alert.alert("Erreur", "Une erreur inattendue est survenue");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  } catch (err) {
+    Alert.alert("Erreur", "Une erreur inattendue est survenue");
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
       <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>

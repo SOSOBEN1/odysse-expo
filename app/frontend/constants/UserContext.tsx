@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 
 type UserContextType = {
   userId: number | null;
@@ -25,8 +25,8 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const load = async () => {
       try {
-        const savedId       = await AsyncStorage.getItem("userId");
-        const savedUsername = await AsyncStorage.getItem("username");
+        const savedId       = await SecureStore.getItemAsync("userId");
+        const savedUsername = await SecureStore.getItemAsync("username");
         if (savedId)       setUserIdState(Number(savedId));
         if (savedUsername) setUsernameState(savedUsername);
       } catch (e) {
@@ -39,12 +39,12 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const setUserId = async (id: number) => {
-    try { await AsyncStorage.setItem("userId", String(id)); } catch {}
+    try { await SecureStore.setItemAsync("userId", String(id)); } catch {}
     setUserIdState(id);
   };
 
   const setUsername = async (name: string) => {
-    try { await AsyncStorage.setItem("username", name); } catch {}
+    try { await SecureStore.setItemAsync("username", name); } catch {}
     setUsernameState(name);
   };
 

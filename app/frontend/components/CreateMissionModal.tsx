@@ -87,6 +87,7 @@ export default function CreateMissionModal({ visible, onClose, onSave, initialDa
     }
   }, [visible, initialData]);
 
+<<<<<<< HEAD
   const handleSave = () => {
     onSave({
       ...initialData,
@@ -98,6 +99,109 @@ export default function CreateMissionModal({ visible, onClose, onSave, initialDa
       urgent: priority === "Urgente",
     });
     onClose();
+=======
+  const computeGains = (diff: number, prio: number) => {
+    const base      = diff * 10;
+    const prioBonus = prio * 5;
+    return {
+      xp_gain:            base + prioBonus,
+      energie_cout:       diff * 8,
+      stress_gain:        diff * 5,
+      connaissance_gain:  base,
+      organisation_gain:  prioBonus,
+    };
+  };
+
+  // ── Gestion du DateTimePicker ──
+  const handleDateChange = (_: any, selected?: Date) => {
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+      setShowTimePicker(false);
+    }
+    if (!selected) return;
+
+    if (pickerMode === "date") {
+      // On garde l'heure actuelle ou celle déjà choisie
+      const base = dateLimite ?? new Date();
+      const merged = new Date(selected);
+      merged.setHours(base.getHours(), base.getMinutes(), 0, 0);
+      setDateLimite(merged);
+
+      // Sur Android on enchaîne avec l'heure
+      if (Platform.OS === "android") {
+        setPickerMode("time");
+        setShowTimePicker(true);
+      }
+    } else {
+      // Fusion heure dans la date déjà choisie
+      const merged = dateLimite ? new Date(dateLimite) : new Date();
+      merged.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
+      setDateLimite(merged);
+    }
+  };
+
+  const openDatePicker = () => {
+    setPickerMode("date");
+    setShowDatePicker(true);
+  };
+
+  const openTimePicker = () => {
+    setPickerMode("time");
+    setShowTimePicker(true);
+  };
+
+  const handleSave = async () => {
+    if (!title.trim()) { Alert.alert("Erreur", "Le titre est obligatoire"); return; }
+    if (difficulty === "") { Alert.alert("Erreur", "La difficulté est obligatoire"); return; }
+    if (priority === "") { Alert.alert("Erreur", "La priorité est obligatoire"); return; }
+
+    setSaving(true);
+    try {
+      const gains = computeGains(difficulty as number, priority as number);
+const missionData = {
+  titre:       title.trim(),
+  description: description.trim() || null,
+  duree_min:   dureeMin ? parseInt(dureeMin) : null,
+  difficulte:  difficulty,
+  priorite:    priority,
+  date_limite: dateLimite ? dateLimite.toISOString() : null,
+  ...gains,
+  id_boss: initialData?.id_boss ?? null,
+};
+
+let result;
+
+if (initialData?.id_mission) {
+  const { data, error } = await supabase
+    .from("mission")
+    .update(missionData)
+    .eq("id_mission", initialData.id_mission)
+    .select()
+    .single();
+  if (error) throw error;
+  result = data;
+} else {
+  const { data, error } = await supabase
+    .from("mission")
+    .insert({
+      ...missionData,
+      id_user: userId, 
+      id_defi: initialData?.id_defi ?? null, // ✅ ajouter ici
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  result = data;
+}
+
+      onSave(result);
+      onClose();
+    } catch (err: any) {
+      Alert.alert("Erreur", `Impossible d'enregistrer : ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+>>>>>>> sonia
   };
 
   return (

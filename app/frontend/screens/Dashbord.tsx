@@ -1,3 +1,684 @@
+// import { MaterialIcons } from "@expo/vector-icons";
+// import { LinearGradient } from "expo-linear-gradient";
+// import { useRouter } from "expo-router";
+// import { useEffect, useRef, useState } from "react";
+// import {
+//   Animated, ScrollView, StatusBar, StyleSheet, Text,
+//   TouchableOpacity, View,
+// } from "react-native";
+// import Svg, { Circle, Text as SvgText } from "react-native-svg";
+// import AvatarCrd from "../components/AvatarCrd";
+// import Navbar from "../components/Navbar";
+// import NotifIcone from "../components/NotifIcone";
+// import PuzzleIcone from "../components/PuzzleIcone";
+// import SettingIcone from "../components/SettingIcone";
+// import WaveBackground from "../components/waveBackground";
+// import { useAvatar } from "../constants/AvatarContext";
+// import { useUser } from "../constants/UserContext";
+// import { supabase } from "../constants/supabase";
+// import { COLORS, SHADOWS, SIZES } from "../styles/theme";
+// import { usePeriodicQuestionnaire } from "../hooks/usePeriodicQuestionnaire";
+
+// // ── FIX 3: import the shared stats context instead of a local hook ────────────
+// import { useStats } from "../constants/StatsContext";
+
+// // ── New hooks & service ───────────────────────────────────────────────────────
+// import { useUserMissions, UserMission } from "../hooks/useUserMissions";
+// import { completeMission, applyInactivityPenalty } from "../../../backend/services/Userstatsservice";
+
+// // ─── Derived stats (unchanged) ────────────────────────────────────────────────
+
+// function computeDerivedStats(base: { energie: number; stress: number; connaissance: number; organisation: number }) {
+//   const clamp = (v: number) => Math.min(100, Math.max(0, v));
+//   return {
+//     concentration: clamp(base.energie * 0.5 + base.connaissance * 0.5),
+//     serenite:      clamp(100 - base.stress),
+//     discipline:    clamp(base.organisation * 0.7 + base.connaissance * 0.3),
+//   };
+// }
+
+// // ─── XP reward toast ─────────────────────────────────────────────────────────
+
+// // FIX 2: animated XP/coins feedback shown after mission completion
+// interface RewardToastProps { xp: number; gold: number; visible: boolean; }
+// const RewardToast = ({ xp, gold, visible }: RewardToastProps) => {
+//   const opacity   = useRef(new Animated.Value(0)).current;
+//   const translateY = useRef(new Animated.Value(0)).current;
+
+//   useEffect(() => {
+//     if (!visible) return;
+//     opacity.setValue(1);
+//     translateY.setValue(0);
+//     Animated.parallel([
+//       Animated.timing(translateY, { toValue: -40, duration: 900, useNativeDriver: true }),
+//       Animated.sequence([
+//         Animated.delay(600),
+//         Animated.timing(opacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+//       ]),
+//     ]).start();
+//   }, [visible]);
+
+//   if (!visible) return null;
+//   return (
+//     <Animated.View style={[toastStyles.container, { opacity, transform: [{ translateY }] }]}>
+//       <Text style={toastStyles.text}>+{xp} XP  🪙 +{gold}</Text>
+//     </Animated.View>
+//   );
+// };
+
+// const toastStyles = StyleSheet.create({
+//   container: {
+//     position: "absolute", alignSelf: "center", bottom: 120,
+//     backgroundColor: COLORS.primary, borderRadius: 20,
+//     paddingHorizontal: 18, paddingVertical: 8, zIndex: 999,
+//   },
+//   text: { color: "#fff", fontWeight: "800", fontSize: 14 },
+// });
+
+// // ─── Helper functions (unchanged) ────────────────────────────────────────────
+
+// const stars = [
+//   { top: 10, left: 10, size: 20, opacity: 0.6 },
+//   { top: 10, right: 10, size: 12, opacity: 0.4 },
+//   { bottom: 10, left: 10, size: 15, opacity: 0.5 },
+//   { bottom: 10, right: 10, size: 10, opacity: 0.35 },
+//   { top: 30, left: 50, size: 8, opacity: 0.25 },
+//   { bottom: 40, right: 60, size: 22, opacity: 0.7 },
+//   { top: 40, right: 50, size: 22, opacity: 0.7 },
+//   { top: 60, left: 150, size: 14, opacity: 0.45 },
+//   { bottom: 80, left: 16, size: 18, opacity: 0.55 },
+// ];
+
+// function getTimeGreeting() {
+//   const hour = new Date().getHours();
+//   if (hour >= 6  && hour < 12) return { icon: "☀️",  text: "Bonjour" };
+//   if (hour >= 12 && hour < 18) return { icon: "🌤️", text: "Bon après-midi" };
+//   if (hour >= 18 && hour < 21) return { icon: "🌅",  text: "Bonsoir" };
+//   return { icon: "🌙", text: "Bonne nuit" };
+// }
+
+// function getLevelTitle(niveau: number): string {
+//   if (niveau <= 2)  return "Débutant curieux";
+//   if (niveau <= 5)  return "Explorateur de savoir";
+//   if (niveau <= 10) return "Apprenti maître";
+//   if (niveau <= 20) return "Expert confirmé";
+//   return "Maître légendaire";
+// }
+
+// // ─── useDashboardUser (added coins/xp live refresh via props) ─────────────────
+
+// interface DashboardUser { userName: string; level: number; xp: number; maxXp: number; coins: number; }
+
+// function useDashboardUser(forceRefresh?: number): DashboardUser {
+//   const { userId, username: ctxUsername } = useUser();
+//   const [user, setUser] = useState<DashboardUser>({
+//     userName: ctxUsername || "Joueur",
+//     level: 1, xp: 0, maxXp: 500, coins: 0,
+//   });
+
+//   useEffect(() => {
+//     if (!userId) return;
+//     const fetchUser = async () => {
+//       const { data, error } = await supabase
+//         .from("users")
+//         .select("prenom, nom, username, xp, gold, id_level")
+//         .eq("id_user", userId)
+//         .single();
+//       if (error || !data) return;
+//       const niveau = data.id_level ?? 1;
+//       const xp     = data.xp ?? 0;
+//       const maxXp  = niveau * 500;
+//       setUser({
+//         userName: data.username ?? data.prenom ?? data.nom ?? ctxUsername ?? "Joueur",
+//         level:    niveau,
+//         xp:       xp % maxXp,
+//         maxXp,
+//         coins:    data.gold ?? 0,
+//       });
+//     };
+//     fetchUser();
+//   }, [userId, ctxUsername, forceRefresh]); // FIX 3: re-fetch when forceRefresh changes
+
+//   return user;
+// }
+
+// // ─── HEADER ───────────────────────────────────────────────────────────────────
+
+// interface DashboardHeaderProps { forceRefresh: number; }
+// const DashboardHeader = ({ forceRefresh }: DashboardHeaderProps) => {
+//   const { selectedModel }                  = useAvatar();
+//   const { icon: timeIcon, text: timeText } = getTimeGreeting();
+//   const router                             = useRouter();
+//   const USER                               = useDashboardUser(forceRefresh); // FIX 3
+//   const xpPercent = USER.maxXp > 0 ? (USER.xp / USER.maxXp) * 100 : 0;
+
+//   return (
+//     <View style={headerStyles.container}>
+//       <View style={headerStyles.topRow}>
+//         <View style={headerStyles.coinsBadge}>
+//           <Text style={headerStyles.coinIcon}>🪙</Text>
+//           <Text style={headerStyles.coinsText}>{USER.coins.toLocaleString()}</Text>
+//         </View>
+//         <View style={headerStyles.headerIcons}>
+//           <PuzzleIcone onPress={() => router.push("/frontend/screens/WorldsScreen")} />
+//           <NotifIcone />
+//           <SettingIcone />
+//         </View>
+//       </View>
+
+//       <View style={headerStyles.profileRow}>
+//         <View style={headerStyles.avatarWrapper}>
+//           {selectedModel ? (
+//             <AvatarCrd model={selectedModel} />
+//           ) : (
+//             <View style={headerStyles.avatarPlaceholder}>
+//               <Text style={headerStyles.avatarEmoji}>🧑</Text>
+//             </View>
+//           )}
+//           <View style={headerStyles.levelBadge}>
+//             <Text style={headerStyles.levelText}>Niv. {USER.level}</Text>
+//           </View>
+//         </View>
+
+//         <View style={headerStyles.infoBlock}>
+//           <View style={headerStyles.greetingRow}>
+//             <Text style={headerStyles.greeting}>
+//               {timeText},{" "}
+//               <Text style={headerStyles.greetingName}>{USER.userName}!</Text>
+//             </Text>
+//             <Text style={headerStyles.timeIcon}>{timeIcon}</Text>
+//           </View>
+//           <Text style={headerStyles.levelTitle}>{getLevelTitle(USER.level)}</Text>
+//           <View style={headerStyles.xpBarBg}>
+//             <LinearGradient
+//               colors={[COLORS.secondary, COLORS.primary]}
+//               start={{ x: 0, y: 0 }}
+//               end={{ x: 1, y: 0 }}
+//               style={[headerStyles.xpBarFill, { width: `${xpPercent}%` }]}
+//             />
+//           </View>
+//           <Text style={headerStyles.xpText}>
+//             {USER.xp.toLocaleString()} XP / {USER.maxXp.toLocaleString()} XP
+//           </Text>
+//         </View>
+//       </View>
+//     </View>
+//   );
+// };
+
+// const headerStyles = StyleSheet.create({
+//   container:         { paddingTop: 30, paddingHorizontal: SIZES.padding, paddingBottom: 20 },
+//   topRow:            { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
+//   coinsBadge:        { flexDirection: "row", alignItems: "center", backgroundColor: "#ede9fe", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, gap: 6, ...SHADOWS.light },
+//   coinIcon:          { fontSize: 16 },
+//   coinsText:         { color: COLORS.primary, fontWeight: "700" },
+//   headerIcons:       { flexDirection: "row", gap: 8 },
+//   profileRow:        { flexDirection: "row", gap: 16 },
+//   avatarWrapper:     { width: 80, height: 100, borderRadius: 20, overflow: "hidden", backgroundColor: "#ede9fe", position: "relative", ...SHADOWS.medium },
+//   avatarPlaceholder: { flex: 1, justifyContent: "center", alignItems: "center" },
+//   avatarEmoji:       { fontSize: 40 },
+//   levelBadge:        { position: "absolute", bottom: 4, alignSelf: "center", backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
+//   levelText:         { color: "#fff", fontSize: 10, fontWeight: "700" },
+//   infoBlock:         { flex: 1 },
+//   greetingRow:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+//   greeting:          { fontSize: 14, color: "#6b7280", flex: 1 },
+//   greetingName:      { color: COLORS.primary, fontWeight: "800", fontSize: 15 },
+//   timeIcon:          { fontSize: 20 },
+//   levelTitle:        { fontSize: 11, color: "#9b87c9", fontWeight: "600", marginTop: 2 },
+//   xpBarBg:           { height: 8, backgroundColor: "#ddd6fe", borderRadius: 10, marginTop: 8, overflow: "hidden" },
+//   xpBarFill:         { height: "100%", borderRadius: 10 },
+//   xpText:            { fontSize: 11, color: "#9ca3af", marginTop: 4 },
+// });
+
+// // ─── CircularProgress (unchanged) ─────────────────────────────────────────────
+
+// const CircularProgress = ({ percent, color, size = 70, strokeWidth = 7 }: { percent: number; color: string; size?: number; strokeWidth?: number }) => {
+//   const radius        = (size - strokeWidth) / 2;
+//   const circumference = 2 * Math.PI * radius;
+//   const progress      = circumference * (1 - percent / 100);
+//   return (
+//     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+//       <Circle cx={size/2} cy={size/2} r={radius} stroke="#EEE8F8" strokeWidth={strokeWidth} fill="none" />
+//       <Circle cx={size/2} cy={size/2} r={radius} stroke={color} strokeWidth={strokeWidth} fill="none"
+//         strokeDasharray={`${circumference}`} strokeDashoffset={`${progress}`}
+//         strokeLinecap="round" rotation="-90" origin={`${size/2}, ${size/2}`} />
+//       <SvgText x={size/2} y={size/2+5} textAnchor="middle" fontSize={13} fontWeight="700" fill={COLORS.text}>
+//         {percent}%
+//       </SvgText>
+//     </Svg>
+//   );
+// };
+
+// // ─── StatsCard — FIX 3: uses shared StatsContext ──────────────────────────────
+
+// const StatsCard = () => {
+//   const { stats } = useStats(); // ← shared context, updates after mission completion
+
+//   const STATS = [
+//     { label: "Énergie",      percent: stats.energie,      color: "#F5A623", emoji: "⚡" },
+//     { label: "Stress",       percent: stats.stress,       color: "#E84040", emoji: "😰" },
+//     { label: "Connaissance", percent: stats.connaissance, color: "#4A90E2", emoji: "📚" },
+//     { label: "Organisation", percent: stats.organisation, color: "#4CAF50", emoji: "🗂️" },
+//   ];
+
+//   return (
+//     <View style={[statsStyles.card, SHADOWS.light]}>
+//       <View style={statsStyles.row}>
+//         {STATS.map((s) => (
+//           <View key={s.label} style={statsStyles.item}>
+//             <CircularProgress percent={Math.round(s.percent)} color={s.color} />
+//             <View style={statsStyles.labelRow}>
+//               <Text style={{ fontSize: 11 }}>{s.emoji}</Text>
+//               <Text style={statsStyles.label}>{s.label}</Text>
+//             </View>
+//             <Text style={statsStyles.sub}>Niveau actuel</Text>
+//           </View>
+//         ))}
+//       </View>
+//     </View>
+//   );
+// };
+
+// const statsStyles = StyleSheet.create({
+//   card:     { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: 15, marginBottom: 20 },
+//   row:      { flexDirection: "row", justifyContent: "space-between" },
+//   item:     { alignItems: "center", gap: 4 },
+//   labelRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+//   label:    { fontSize: 11, fontWeight: "700", color: COLORS.text },
+//   sub:      { fontSize: 9, color: "#AAA" },
+// });
+
+// // ─── MissionCard — FIX 1 + FIX 2: real data + completion action ───────────────
+
+// interface MissionCardProps {
+//   mission: UserMission;
+//   onComplete: (mission: UserMission) => void;
+//   completing: boolean;
+// }
+
+// const MissionCard = ({ mission, onComplete, completing }: MissionCardProps) => {
+//   const isContinue  = mission.status === "continue";
+//   const isSuggested = mission.status === "suggested";
+//   const isCompleted = mission.status === "completed";
+
+//   return (
+//     <View style={[
+//       missionStyles.card,
+//       isSuggested && missionStyles.suggestedCard,
+//       isCompleted && missionStyles.completedCard,
+//     ]}>
+//       <View style={missionStyles.iconBox}>
+//         <Text style={{ fontSize: 20 }}>{mission.emoji}</Text>
+//       </View>
+//       <View style={missionStyles.textBox}>
+//         <Text style={missionStyles.title}>{mission.title}</Text>
+//         {isSuggested && <Text style={missionStyles.suggestedTag}>Suggérée</Text>}
+//         <Text style={missionStyles.sub}>{mission.subtitle}</Text>
+//         {/* XP preview */}
+//         <Text style={missionStyles.xpPreview}>+{mission.xp_gain} XP</Text>
+//       </View>
+
+//       {isCompleted ? (
+//         <View style={missionStyles.doneChip}>
+//           <Text style={missionStyles.doneText}>✓ Fait</Text>
+//         </View>
+//       ) : (
+//         <TouchableOpacity
+//           style={[missionStyles.btn, isContinue ? missionStyles.btnContinue : missionStyles.btnStart]}
+//           onPress={() => onComplete(mission)}
+//           disabled={completing}
+//         >
+//           <Text style={missionStyles.btnText}>
+//             {completing ? "..." : isContinue ? "Continuer ▶" : "Démarrer ▶"}
+//           </Text>
+//         </TouchableOpacity>
+//       )}
+//     </View>
+//   );
+// };
+
+// const missionStyles = StyleSheet.create({
+//   card:         { flexDirection: "row", alignItems: "center", backgroundColor: "#F8F4FF", borderRadius: SIZES.radius, padding: 12, marginBottom: 10, gap: 10 },
+//   suggestedCard:{ backgroundColor: "#F0EBF9", borderWidth: 1, borderColor: "#DDD5F5" },
+//   completedCard:{ opacity: 0.6 },
+//   iconBox:      { width: 40, height: 40, borderRadius: 12, backgroundColor: "#EDE8F8", alignItems: "center", justifyContent: "center" },
+//   textBox:      { flex: 1 },
+//   title:        { fontSize: 13, fontWeight: "700", color: COLORS.text },
+//   suggestedTag: { fontSize: 10, color: COLORS.secondary, fontStyle: "italic", fontWeight: "600" },
+//   sub:          { fontSize: 11, color: "#888", marginTop: 1 },
+//   xpPreview:    { fontSize: 10, color: "#9b87c9", fontWeight: "600", marginTop: 2 },
+//   btn:          { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
+//   btnContinue:  { backgroundColor: COLORS.primary },
+//   btnStart:     { backgroundColor: "#DDD5F5" },
+//   btnText:      { fontSize: 11, fontWeight: "700", color: "#FFF" },
+//   doneChip:     { backgroundColor: "#E8F5E9", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 },
+//   doneText:     { fontSize: 11, fontWeight: "700", color: "#4CAF50" },
+// });
+
+// // ─── MissionsSection — FIX 1: real missions from DB ──────────────────────────
+
+// interface MissionsSectionProps {
+//   onMissionComplete: (xp: number, gold: number) => void;
+// }
+
+// const MissionsSection = ({ onMissionComplete }: MissionsSectionProps) => {
+//   const { userId }                             = useUser();
+//   const { missions, loading, refreshMissions } = useUserMissions();
+//   const { refreshStats }                       = useStats();
+//   const [completingId, setCompletingId]        = useState<string | null>(null);
+
+//   const handleComplete = async (mission: UserMission) => {
+//     if (!userId || completingId) return;
+//     setCompletingId(mission.id);
+//     try {
+//       const missionData = {
+//         id_mission:        mission.id_mission,
+//         titre:             mission.title,
+//         description:       mission.subtitle,
+//         duree_min:         0,
+//         difficulte:        mission.difficulte,
+//         priorite:          mission.priorite,
+//         energie_cout:      mission.energie_cout,
+//         stress_gain:       mission.stress_gain,
+//         connaissance_gain: mission.connaissance_gain,
+//         organisation_gain: mission.organisation_gain,
+//         xp_gain:           mission.xp_gain,
+//       };
+
+//       const result = await completeMission(String(userId), missionData);
+
+//       if (result) {
+//         // ✅ Mise à jour dans mission_validation (ta vraie table)
+//         await supabase
+//           .from("mission_validation")
+//           .update({
+//             statut:     "done",
+//             date_fin:   new Date().toISOString(),
+//             xp_obtenu:  mission.xp_gain,
+//           })
+//           .eq("id_validation", mission.id); // id = id_validation
+
+//         await refreshStats();
+//         onMissionComplete(result.xpEarned, result.goldEarned);
+//         await refreshMissions();
+//       }
+//     } finally {
+//       setCompletingId(null);
+//     }
+//   };
+
+//   return (
+//     <View style={[missionsStyles.card, SHADOWS.light]}>
+//       <Text style={missionsStyles.title}>Missions du jour</Text>
+
+//       {loading ? (
+//         <Text style={missionsStyles.loadingText}>Chargement…</Text>
+//       ) : missions.length === 0 ? (
+//         <Text style={missionsStyles.emptyText}>Aucune mission pour aujourd'hui 🎉</Text>
+//       ) : (
+//         missions.map((m: UserMission) => (
+//           <MissionCard
+//             key={m.id}
+//             mission={m}
+//             onComplete={handleComplete}
+//             completing={completingId === m.id}
+//           />
+//         ))
+//       )}
+
+//       <TouchableOpacity style={missionsStyles.addBtn}>
+//         <Text style={missionsStyles.addText}>＋ Ajouter une mission</Text>
+//       </TouchableOpacity>
+//     </View>
+//   );
+// };
+
+// const missionsStyles = StyleSheet.create({
+//   card:        { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 14, ...SHADOWS.light },
+//   title:       { fontSize: 18, fontWeight: "800", color: COLORS.text, marginBottom: 14 },
+//   addBtn:      { borderWidth: 1.5, borderColor: COLORS.secondary, borderStyle: "dashed", borderRadius: 30, paddingVertical: 11, alignItems: "center", marginTop: 4 },
+//   addText:     { color: COLORS.secondary, fontWeight: "700", fontSize: 14 },
+//   loadingText: { color: "#aaa", fontSize: 13, textAlign: "center", marginBottom: 10 },
+//   emptyText:   { color: "#888", fontSize: 13, textAlign: "center", marginBottom: 10 },
+// });
+
+// // ─── BossEventBanner — FIX 5: compute real progression from missions ──────────
+
+// const BossEventBanner = () => {
+//   const { missions } = useUserMissions();
+
+//   // Count missions linked to a boss (id_boss not null) — if you track this
+//   // in user_mission. For now we compute from the loaded missions list.
+//   const bossMissions    = missions.filter((m: UserMission) => m.status !== "suggested");
+//   const completedBoss   = bossMissions.filter((m: UserMission) => m.status === "completed").length;
+//   const totalBoss       = bossMissions.length;
+//   const progression     = totalBoss > 0 ? Math.round((completedBoss / totalBoss) * 100) : 0;
+//   const activeCount     = bossMissions.filter((m: UserMission) => m.status !== "completed").length;
+
+//   return (
+//     <View style={bossStyles.outer}>
+//       <View style={bossStyles.topBanner}>
+//         <Text style={{ fontSize: 30 }}>🏆</Text>
+//         <View style={{ flex: 1 }}>
+//           <Text style={bossStyles.bossTitle}>Boss Event</Text>
+//           <Text style={bossStyles.bossSub}>{activeCount} actif{activeCount > 1 ? "s" : ""} 🔥</Text>
+//         </View>
+//         <View style={bossStyles.xpChip}><Text style={bossStyles.xpText}>+75 XP</Text></View>
+//         <TouchableOpacity style={bossStyles.voirBtn}><Text style={bossStyles.voirText}>Voir ▶</Text></TouchableOpacity>
+//       </View>
+//       <View style={bossStyles.progressRow}>
+//         <Text style={bossStyles.progLabel}>Progression globale</Text>
+//         <View style={bossStyles.progTrack}>
+//           <View style={[bossStyles.progFill, { width: `${progression}%` }]} />
+//         </View>
+//         <Text style={bossStyles.progPct}>{progression}%</Text>
+//       </View>
+//       <View style={bossStyles.bottomCard}>
+//         <View style={bossStyles.circleGauge}><Text style={bossStyles.circleText}>{progression}%</Text></View>
+//         <View style={{ flex: 1, marginLeft: 14 }}>
+//           <View style={bossStyles.bottomRow}>
+//             <Text style={{ fontSize: 22 }}>🏆</Text>
+//             <Text style={bossStyles.bottomTitle}>Boss Event</Text>
+//             <Text style={bossStyles.stars}>⭐⭐⭐ XP</Text>
+//           </View>
+//           <View style={bossStyles.bottomRow2}>
+//             <Text style={bossStyles.bottomSub}>{activeCount} actif{activeCount > 1 ? "s" : ""}</Text>
+//             <View style={bossStyles.xpChipSmall}><Text style={bossStyles.xpTextSmall}>+75 XP</Text></View>
+//           </View>
+//         </View>
+//       </View>
+//     </View>
+//   );
+// };
+
+// const bossStyles = StyleSheet.create({
+//   outer:       { marginHorizontal: SIZES.padding, borderRadius: SIZES.radiusLarge, overflow: "hidden", marginBottom: 14, backgroundColor: "#8A5AD8" },
+//   topBanner:   { flexDirection: "row", alignItems: "center", padding: 14, gap: 10, backgroundColor: "#7B4FC8" },
+//   bossTitle:   { color: "#FFF", fontWeight: "800", fontSize: 16 },
+//   bossSub:     { color: "#EDD9FF", fontSize: 12 },
+//   xpChip:      { backgroundColor: "#5A2EA0", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+//   xpText:      { color: "#FFD700", fontWeight: "800", fontSize: 12 },
+//   voirBtn:     { backgroundColor: "#FF6B9D", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
+//   voirText:    { color: "#FFF", fontWeight: "700", fontSize: 12 },
+//   progressRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10, gap: 8, backgroundColor: "#9B6DE0" },
+//   progLabel:   { color: "#FFF", fontWeight: "600", fontSize: 12, flex: 1 },
+//   progTrack:   { flex: 2, height: 8, backgroundColor: "rgba(255,255,255,0.3)", borderRadius: 10, overflow: "hidden" },
+//   progFill:    { height: "100%", backgroundColor: "#FFD700", borderRadius: 10 },
+//   progPct:     { color: "#FFF", fontWeight: "800", fontSize: 13 },
+//   bottomCard:  { flexDirection: "row", alignItems: "center", backgroundColor: "#6A3DB8", padding: 14, gap: 10 },
+//   circleGauge: { width: 64, height: 64, borderRadius: 32, borderWidth: 4, borderColor: "#FFD700", alignItems: "center", justifyContent: "center", backgroundColor: "#5A2EA0" },
+//   circleText:  { color: "#FFD700", fontWeight: "800", fontSize: 14 },
+//   bottomRow:   { flexDirection: "row", alignItems: "center", gap: 6 },
+//   bottomTitle: { color: "#FFF", fontWeight: "800", fontSize: 15 },
+//   stars:       { color: "#FFD700", fontSize: 12 },
+//   bottomRow2:  { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+//   bottomSub:   { color: "#EDD9FF", fontSize: 12 },
+//   xpChipSmall: { backgroundColor: "#FF6B9D", borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
+//   xpTextSmall: { color: "#FFF", fontWeight: "800", fontSize: 11 },
+// });
+
+// // ─── GlobalProgressSection — FIX 4: master bar computed from derived stats ────
+
+// interface ProgressStat { label: string; emoji: string; percent: number; xpReward: number; xpBonus: number; }
+
+// const GlobalProgressSection = () => {
+//   const { stats }   = useStats(); // FIX 3
+//   const derived     = computeDerivedStats(stats);
+
+//   const PROGRESS_STATS: ProgressStat[] = [
+//     { label: "Concentration", emoji: "🔥", percent: derived.concentration, xpReward: 15, xpBonus: 10 },
+//     { label: "Sérénité",      emoji: "🌿", percent: derived.serenite,      xpReward: 15, xpBonus: 10 },
+//     { label: "Discipline",    emoji: "💪", percent: derived.discipline,    xpReward: 10, xpBonus: 10 },
+//   ];
+
+//   // FIX 4: master bar = average of the 3 derived stats (was hardcoded 55%)
+//   const masterPercent = Math.round(
+//     (derived.concentration + derived.serenite + derived.discipline) / 3
+//   );
+
+//   return (
+//     <View style={[gpStyles.card, SHADOWS.light]}>
+//       <View style={gpStyles.titleRow}>
+//         <Text style={gpStyles.title}>Progression globale</Text>
+//         <Text style={gpStyles.masterPct}>{masterPercent}%</Text>
+//       </View>
+//       <View style={gpStyles.masterTrack}>
+//         <View style={[gpStyles.masterFill, { width: `${masterPercent}%` }]} />
+//       </View>
+
+//       {PROGRESS_STATS.map((s) => (
+//         <View key={s.label} style={gpStyles.row}>
+//           <Text style={gpStyles.rowLabel}>{s.label} {s.emoji}</Text>
+//           <View style={gpStyles.rowTrack}>
+//             <View style={[gpStyles.rowFill, { width: `${Math.round(s.percent)}%` }]} />
+//           </View>
+//           <Text style={gpStyles.rowPct}>{Math.round(s.percent)}%</Text>
+//           <View style={gpStyles.chip}>
+//             <Text style={gpStyles.chipText}>⭐{s.xpReward} XP</Text>
+//           </View>
+//           <View style={[gpStyles.chip, gpStyles.chipBonus]}>
+//             <Text style={gpStyles.chipBonusText}>+{s.xpBonus} XP</Text>
+//           </View>
+//         </View>
+//       ))}
+//     </View>
+//   );
+// };
+
+// const gpStyles = StyleSheet.create({
+//   card:          { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 100 },
+//   titleRow:      { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+//   title:         { fontSize: 17, fontWeight: "800", color: COLORS.text },
+//   masterPct:     { fontSize: 15, fontWeight: "800", color: COLORS.primary },
+//   masterTrack:   { height: 10, backgroundColor: "#DDD5F5", borderRadius: 10, overflow: "hidden", marginBottom: 16 },
+//   masterFill:    { height: "100%", backgroundColor: "#FFD700", borderRadius: 10 },
+//   row:           { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 6 },
+//   rowLabel:      { fontSize: 12, fontWeight: "600", color: COLORS.text, width: 110 },
+//   rowTrack:      { flex: 1, height: 7, backgroundColor: "#EEE8F8", borderRadius: 10, overflow: "hidden" },
+//   rowFill:       { height: "100%", backgroundColor: COLORS.secondary, borderRadius: 10 },
+//   rowPct:        { fontSize: 11, fontWeight: "700", color: COLORS.text, width: 32, textAlign: "right" },
+//   chip:          { backgroundColor: "#EEE8F8", borderRadius: 12, paddingHorizontal: 7, paddingVertical: 3 },
+//   chipText:      { fontSize: 10, color: COLORS.primary, fontWeight: "700" },
+//   chipBonus:     { backgroundColor: "#E8F5E9" },
+//   chipBonusText: { fontSize: 10, color: "#4CAF50", fontWeight: "700" },
+// });
+
+// // ─── SCREEN ───────────────────────────────────────────────────────────────────
+
+// export default function DashboardScreen() {
+//   usePeriodicQuestionnaire();
+
+//   const { userId }                              = useUser();
+//   const [refreshTick, setRefreshTick]           = useState(0);
+//   const [toastVisible, setToastVisible]         = useState(false);
+//   const [toastXp, setToastXp]                   = useState(0);
+//   const [toastGold, setToastGold]               = useState(0);
+
+//   // FIX 5: check inactivity on mount — if last mission was > 24h ago, apply penalty
+// useEffect(() => {
+//   if (!userId) return;
+//   const checkInactivity = async () => {
+//     const { data } = await supabase
+//       .from("mission_validation")
+//       .select("date_fin")
+//       .eq("id_user", userId)
+//       .eq("statut", "done")          // ← "done" au lieu de "completed"
+//       .order("date_fin", { ascending: false })
+//       .limit(1)
+//       .maybeSingle();
+
+//     if (!data || !data.date_fin) {
+//       // Aucune mission jamais terminée → pénalité
+//       await applyInactivityPenalty(String(userId));
+//       return;
+//     }
+
+//     const lastCompleted = new Date(data.date_fin).getTime();
+//     const hours         = (Date.now() - lastCompleted) / (1000 * 60 * 60);
+
+//     if (hours >= 24) {
+//       await applyInactivityPenalty(String(userId));
+//     }
+//   };
+//   checkInactivity();
+// }, [userId]);
+
+//   // FIX 2: called by MissionsSection after a mission is completed
+//   const handleMissionComplete = (xp: number, gold: number) => {
+//     setToastXp(xp);
+//     setToastGold(gold);
+//     setToastVisible(false);
+//     setTimeout(() => setToastVisible(true), 50); // re-trigger animation
+//     setRefreshTick((t) => t + 1); // FIX 3: causes header to refetch XP/coins
+//   };
+
+//   return (
+//     <View style={styles.container}>
+//       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+//       <WaveBackground height={290} />
+
+//       <View style={styles.stars} pointerEvents="none">
+//         {stars.map((s, i) => (
+//           <MaterialIcons
+//             key={i} name="auto-awesome" size={s.size} color="#fff"
+//             style={{
+//               position: "absolute",
+//               ...(s.top    !== undefined ? { top: s.top }       : {}),
+//               ...(s.bottom !== undefined ? { bottom: s.bottom } : {}),
+//               ...(s.left   !== undefined ? { left: s.left }     : {}),
+//               ...(s.right  !== undefined ? { right: s.right }   : {}),
+//               opacity: s.opacity,
+//             }}
+//           />
+//         ))}
+//       </View>
+
+//       {/* FIX 2: XP/coins reward toast */}
+//       <RewardToast xp={toastXp} gold={toastGold} visible={toastVisible} />
+
+//       <ScrollView showsVerticalScrollIndicator={false}>
+//         {/* FIX 3: pass refreshTick so header re-fetches after mission completion */}
+//         <DashboardHeader forceRefresh={refreshTick} />
+
+//         <View style={{ marginTop: 23 }}>
+//           <StatsCard />
+//           {/* FIX 1 + 2: real missions + completion callback */}
+//           <MissionsSection onMissionComplete={handleMissionComplete} />
+//           <BossEventBanner />
+//           <GlobalProgressSection />
+//         </View>
+//       </ScrollView>
+
+//       <Navbar active="home" onChange={(key) => console.log(key)} />
+//     </View>
+//   );
+// }
+
+// const styles = StyleSheet.create({
+//   container: { flex: 1, backgroundColor: "#f5f3ff" },
+//   stars:     { position: "absolute", top: 0, left: 0, right: 0, height: 290, overflow: "hidden" },
+// });
+
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -13,78 +694,52 @@ import NotifIcone from "../components/NotifIcone";
 import PuzzleIcone from "../components/PuzzleIcone";
 import SettingIcone from "../components/SettingIcone";
 import WaveBackground from "../components/waveBackground";
+import SuggestedMissionsSection from "../components/Suggestedmissionssection"
 import { useAvatar } from "../constants/AvatarContext";
 import { useUser } from "../constants/UserContext";
 import { supabase } from "../constants/supabase";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
+import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
+import { useDerivedStats } from "../hooks/useDerivedStats";
 
-// 🔥 AJOUT en haut (après imports)
+// ✅ Import du hook périodique
+import { usePeriodicQuestionnaire } from "../hooks/usePeriodicQuestionnaire";
+
+import { useTodayMissions, TodayMission } from "../hooks/useTodayMissions";
+
 function computeDerivedStats(base: any) {
   const clamp = (v: number) => Math.min(100, Math.max(0, v));
-
   return {
-    concentration: clamp((base.energie * 0.5 + base.connaissance * 0.5)),
-    serenite: clamp(100 - base.stress),
-    discipline: clamp((base.organisation * 0.7 + base.connaissance * 0.3)),
+    concentration: clamp(base.energie * 0.5 + base.connaissance * 0.5),
+    serenite:      clamp(100 - base.stress),
+    discipline:    clamp(base.organisation * 0.7 + base.connaissance * 0.3),
   };
 }
 
-// 🔥 REMPLACE ton hook useProgressStats
 function useAllStats() {
   const { userId } = useUser();
-
   const [stats, setStats] = useState({
-    energie: 50,
-    stress: 50,
-    connaissance: 50,
-    organisation: 50,
+    energie: 50, stress: 50, connaissance: 50, organisation: 50,
   });
 
   useEffect(() => {
     if (!userId) return;
-
     const load = async () => {
       const { data, error } = await supabase
         .from("player_stats")
         .select("energie, stress, connaissance, organisation")
         .eq("id_user", userId)
         .maybeSingle();
-
       if (!error && data) {
         setStats({
-          energie: data.energie ?? 0,
-          stress: data.stress ?? 0,
+          energie:      data.energie      ?? 0,
+          stress:       data.stress       ?? 0,
           connaissance: data.connaissance ?? 0,
           organisation: data.organisation ?? 0,
         });
       }
     };
-
     load();
-  }, [userId]);
-
-  return stats;
-}
-
-// ─── Hook : lire concentration, sérénité, discipline depuis Supabase ──────────
-function useProgressStats() {
-  const { userId } = useUser();
-  const [stats, setStats] = useState({
-    concentration: 0,
-    serenite:      0,
-    discipline:    0,
-  });
-
-  useEffect(() => {
-    if (!userId) return;
-    supabase
-      .from("player_stats")
-      .select("concentration, serenite, discipline")
-      .eq("id_user", userId)   // ← "id_user" selon ton schéma
-      .single()
-      .then(({ data }) => {
-        if (data) setStats(data);
-      });
   }, [userId]);
 
   return stats;
@@ -123,16 +778,12 @@ function getLevelTitle(niveau: number): string {
   return "Maître légendaire";
 }
 
-// ─── Hook données dashboard ───────────────────────────────────────────────────
+
 function useDashboardUser(): DashboardUser {
   const { userId, username: ctxUsername } = useUser();
-
   const [user, setUser] = useState<DashboardUser>({
     userName: ctxUsername || "Joueur",
-    level:    1,
-    xp:       0,
-    maxXp:    500,
-    coins:    0,
+    level: 1, xp: 0, maxXp: 500, coins: 0,
   });
 
   useEffect(() => {
@@ -140,22 +791,19 @@ function useDashboardUser(): DashboardUser {
     const fetchUser = async () => {
       const { data, error } = await supabase
         .from("users")
-        .select("prenom, nom, username, xp, coins, niveau")
+        .select("prenom, nom, username, xp, gold, id_level")
         .eq("id_user", userId)
         .single();
-
       if (error || !data) return;
-
-      const niveau = data.niveau ?? 1;
+      const niveau = data.id_level ?? 1;
       const xp     = data.xp    ?? 0;
       const maxXp  = niveau * 500;
-
       setUser({
         userName: data.username ?? data.prenom ?? data.nom ?? ctxUsername ?? "Joueur",
         level:    niveau,
         xp:       xp % maxXp,
         maxXp,
-        coins:    data.coins ?? 0,
+        coins:    data.gold ?? 0,
       });
     };
     fetchUser();
@@ -166,7 +814,8 @@ function useDashboardUser(): DashboardUser {
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
 const DashboardHeader = () => {
-  const { selectedModel }                  = useAvatar();
+ const { selectedModel }                  = useAvatar();
+
   const { icon: timeIcon, text: timeText } = getTimeGreeting();
   const router                             = useRouter();
   const USER                               = useDashboardUser();
@@ -181,7 +830,9 @@ const DashboardHeader = () => {
         </View>
         <View style={headerStyles.headerIcons}>
           <PuzzleIcone onPress={() => router.push("/frontend/screens/WorldsScreen")} />
-          <NotifIcone />
+          <NotifIcone onPress={() => {
+  router.push("/frontend/screens/NotificationsScreen");
+}} /> 
           <SettingIcone />
         </View>
       </View>
@@ -227,37 +878,37 @@ const DashboardHeader = () => {
 };
 
 const headerStyles = StyleSheet.create({
-  container:    { paddingTop: 30, paddingHorizontal: SIZES.padding, paddingBottom: 20 },
-  topRow:       { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
-  coinsBadge:   { flexDirection: "row", alignItems: "center", backgroundColor: "#ede9fe", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, gap: 6, ...SHADOWS.light },
-  coinIcon:     { fontSize: 16 },
-  coinsText:    { color: COLORS.primary, fontWeight: "700" },
-  headerIcons:  { flexDirection: "row", gap: 8 },
-  profileRow:   { flexDirection: "row", gap: 16 },
-  avatarWrapper:{ width: 80, height: 100, borderRadius: 20, overflow: "hidden", backgroundColor: "#ede9fe", position: "relative", ...SHADOWS.medium },
+  container:         { paddingTop: 30, paddingHorizontal: SIZES.padding, paddingBottom: 20 },
+  topRow:            { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
+  coinsBadge:        { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.coinsBadgeBg, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, gap: 6, ...SHADOWS.light },
+  coinIcon:          { fontSize: 16 },
+  coinsText:         { color: COLORS.primary, fontWeight: "700" },
+  headerIcons:       { flexDirection: "row", gap: 8 },
+  profileRow:        { flexDirection: "row", gap: 16 },
+  avatarWrapper:     { width: 80, height: 100, borderRadius: 20, overflow: "hidden", backgroundColor: COLORS.coinsBadgeBg, position: "relative", ...SHADOWS.medium },
   avatarPlaceholder: { flex: 1, justifyContent: "center", alignItems: "center" },
-  avatarEmoji:  { fontSize: 40 },
-  levelBadge:   { position: "absolute", bottom: 4, alignSelf: "center", backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
-  levelText:    { color: "#fff", fontSize: 10, fontWeight: "700" },
-  infoBlock:    { flex: 1 },
-  greetingRow:  { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  greeting:     { fontSize: 14, color: "#6b7280", flex: 1 },
-  greetingName: { color: COLORS.primary, fontWeight: "800", fontSize: 15 },
-  timeIcon:     { fontSize: 20 },
-  levelTitle:   { fontSize: 11, color: "#9b87c9", fontWeight: "600", marginTop: 2 },
-  xpBarBg:      { height: 8, backgroundColor: "#ddd6fe", borderRadius: 10, marginTop: 8, overflow: "hidden" },
-  xpBarFill:    { height: "100%", borderRadius: 10 },
-  xpText:       { fontSize: 11, color: "#9ca3af", marginTop: 4 },
+  avatarEmoji:       { fontSize: 40 },
+  levelBadge:        { position: "absolute", bottom: 4, alignSelf: "center", backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
+  levelText:         { color: COLORS.modalTitle, fontSize: 10, fontWeight: "700" },
+  infoBlock:         { flex: 1 },
+  greetingRow:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  greeting:          { fontSize: 14, color: COLORS.greetingColor, flex: 1 },
+  greetingName:      { color: COLORS.primary, fontWeight: "800", fontSize: 15 },
+  timeIcon:          { fontSize: 20 },
+  levelTitle:        { fontSize: 11, color: COLORS.levelTitleColor, fontWeight: "600", marginTop: 2 },
+  xpBarBg:           { height: 8, backgroundColor: COLORS.xpBarBg, borderRadius: 10, marginTop: 8, overflow: "hidden" },
+  xpBarFill:         { height: "100%", borderRadius: 10 },
+  xpText:            { fontSize: 11, color: COLORS.xpTextColor, marginTop: 4 },
 });
 
 // ─── CircularProgress ─────────────────────────────────────────────────────────
 const CircularProgress = ({ percent, color, size = 70, strokeWidth = 7 }: { percent: number; color: string; size?: number; strokeWidth?: number }) => {
-  const radius      = (size - strokeWidth) / 2;
+  const radius       = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress    = circumference * (1 - percent / 100);
+  const progress     = circumference * (1 - percent / 100);
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <Circle cx={size/2} cy={size/2} r={radius} stroke="#EEE8F8" strokeWidth={strokeWidth} fill="none" />
+      <Circle cx={size/2} cy={size/2} r={radius} stroke={COLORS.circleTrack} strokeWidth={strokeWidth} fill="none" />
       <Circle cx={size/2} cy={size/2} r={radius} stroke={color} strokeWidth={strokeWidth} fill="none"
         strokeDasharray={`${circumference}`} strokeDashoffset={`${progress}`}
         strokeLinecap="round" rotation="-90" origin={`${size/2}, ${size/2}`} />
@@ -269,21 +920,14 @@ const CircularProgress = ({ percent, color, size = 70, strokeWidth = 7 }: { perc
 };
 
 // ─── StatsCard ────────────────────────────────────────────────────────────────
-const STATS: Stat[] = [
-  { label: "Énergie",      percent: 65, color: "#F5A623", emoji: "⚡" },
-  { label: "Stress",       percent: 45, color: "#E84040", emoji: "😰" },
-  { label: "Connaissance", percent: 65, color: "#4A90E2", emoji: "📚" },
-  { label: "Organisation", percent: 65, color: "#4CAF50", emoji: "🗂️" },
-];
-
 const StatsCard = () => {
   const stats = useAllStats();
 
   const STATS: Stat[] = [
-    { label: "Énergie", percent: stats.energie ?? 0, color: "#F5A623", emoji: "⚡" },
-    { label: "Stress", percent: stats.stress ?? 0, color: "#E84040", emoji: "😰" },
-    { label: "Connaissance", percent: stats.connaissance ?? 0, color: "#4A90E2", emoji: "📚" },
-    { label: "Organisation", percent: stats.organisation ?? 0, color: "#4CAF50", emoji: "🗂️" },
+    { label: "Énergie",      percent: stats.energie      ?? 0, color: COLORS.statEnergie,      emoji: "⚡" },
+    { label: "Stress",       percent: stats.stress       ?? 0, color: COLORS.statStress,       emoji: "😰" },
+    { label: "Connaissance", percent: stats.connaissance ?? 0, color: COLORS.statConnaissance, emoji: "📚" },
+    { label: "Organisation", percent: stats.organisation ?? 0, color: COLORS.statOrganisation, emoji: "🗂️" },
   ];
 
   return (
@@ -291,10 +935,7 @@ const StatsCard = () => {
       <View style={statsStyles.row}>
         {STATS.map((s) => (
           <View key={s.label} style={statsStyles.item}>
-            <CircularProgress
-              percent={Math.round(s.percent)}
-              color={s.color}
-            />
+            <CircularProgress percent={Math.round(s.percent)} color={s.color} />
             <View style={statsStyles.labelRow}>
               <Text style={{ fontSize: 11 }}>{s.emoji}</Text>
               <Text style={statsStyles.label}>{s.label}</Text>
@@ -313,45 +954,74 @@ const statsStyles = StyleSheet.create({
   item:     { alignItems: "center", gap: 4 },
   labelRow: { flexDirection: "row", alignItems: "center", gap: 3 },
   label:    { fontSize: 11, fontWeight: "700", color: COLORS.text },
-  sub:      { fontSize: 9, color: "#AAA" },
+  sub:      { fontSize: 9, color: COLORS.statSubColor },
 });
 
 // ─── MissionCard ──────────────────────────────────────────────────────────────
-const MissionCard = ({ mission }: { mission: Mission }) => {
-  const isContinue  = mission.status === "continue";
-  const isSuggested = mission.status === "suggested";
+const MissionCard = ({ mission }: { mission: TodayMission }) => {
+  const isContinue = mission.status === "continue";
+  const isDone     = mission.status === "done";
+  const isFail     = mission.status === "fail";
+
   return (
-    <View style={[missionStyles.card, isSuggested && missionStyles.suggestedCard]}>
+    <View style={[
+      missionStyles.card,
+      isDone && missionStyles.doneCard,
+      isFail && missionStyles.failCard,
+    ]}>
       <View style={missionStyles.iconBox}>
         <Text style={{ fontSize: 20 }}>{mission.emoji}</Text>
       </View>
+
       <View style={missionStyles.textBox}>
         <Text style={missionStyles.title}>{mission.title}</Text>
-        {isSuggested && <Text style={missionStyles.suggestedTag}>Suggerée</Text>}
         <Text style={missionStyles.sub}>{mission.subtitle}</Text>
+        <Text style={missionStyles.xpText}>+{mission.xp_gain} XP</Text>
       </View>
-      <TouchableOpacity style={[missionStyles.btn, isContinue ? missionStyles.btnContinue : missionStyles.btnStart]}>
-        <Text style={missionStyles.btnText}>{isContinue ? "Continuer" : "Démarrer"} ▶</Text>
-      </TouchableOpacity>
+
+      {isDone ? (
+        <View style={missionStyles.doneChip}>
+          <Text style={missionStyles.doneText}>✓ Fait</Text>
+        </View>
+      ) : isFail ? (
+        <View style={missionStyles.failChip}>
+          <Text style={missionStyles.failText}>✗ Raté</Text>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={[
+            missionStyles.btn,
+            isContinue ? missionStyles.btnContinue : missionStyles.btnStart,
+          ]}
+        >
+          <Text style={missionStyles.btnText}>
+            {isContinue ? "Continuer ▶" : "Démarrer ▶"}
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
 
 const missionStyles = StyleSheet.create({
-  card:         { flexDirection: "row", alignItems: "center", backgroundColor: "#F8F4FF", borderRadius: SIZES.radius, padding: 12, marginBottom: 10, gap: 10 },
-  suggestedCard:{ backgroundColor: "#F0EBF9", borderWidth: 1, borderColor: "#DDD5F5" },
-  iconBox:      { width: 40, height: 40, borderRadius: 12, backgroundColor: "#EDE8F8", alignItems: "center", justifyContent: "center" },
+  card:         { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.missionCardBg, borderRadius: SIZES.radius, padding: 12, marginBottom: 10, gap: 10 },
+  doneCard:     { opacity: 0.7 },
+  failCard:     { opacity: 0.5 },
+  iconBox:      { width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.missionIconBg, alignItems: "center", justifyContent: "center" },
   textBox:      { flex: 1 },
   title:        { fontSize: 13, fontWeight: "700", color: COLORS.text },
-  suggestedTag: { fontSize: 10, color: COLORS.secondary, fontStyle: "italic", fontWeight: "600" },
-  sub:          { fontSize: 11, color: "#888", marginTop: 1 },
+  sub:          { fontSize: 11, color: COLORS.missionSubColor, marginTop: 1 },
+  xpText:       { fontSize: 10, color: COLORS.levelTitleColor, fontWeight: "600", marginTop: 2 },
   btn:          { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
   btnContinue:  { backgroundColor: COLORS.primary },
-  btnStart:     { backgroundColor: "#DDD5F5" },
-  btnText:      { fontSize: 11, fontWeight: "700", color: "#FFF" },
+  btnStart:     { backgroundColor: COLORS.missionBtnStart },
+  btnText:      { fontSize: 11, fontWeight: "700", color: COLORS.modalTitle },
+  doneChip:     { backgroundColor: "#E8F5E9", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 },
+  doneText:     { fontSize: 11, fontWeight: "700", color: "#4CAF50" },
+  failChip:     { backgroundColor: "#FFEBEE", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 },
+  failText:     { fontSize: 11, fontWeight: "700", color: "#E84040" },
 });
 
-// ─── MissionsSection ──────────────────────────────────────────────────────────
 const MISSIONS: Mission[] = [
   { id: "m1", title: "Mission 1:", subtitle: "Faire des exercices",             status: "continue",  emoji: "📅" },
   { id: "m2", title: "Mission 2:", subtitle: "Compléter la séance de révision", status: "start",     emoji: "📦" },
@@ -359,22 +1029,38 @@ const MISSIONS: Mission[] = [
   { id: "m4", title: "Mission 4",  subtitle: "Compléter la séance de révision", status: "suggested", emoji: "📦" },
 ];
 
-const MissionsSection = () => (
-  <View style={[missionsStyles.card, SHADOWS.light]}>
-    <Text style={missionsStyles.title}>Missions du jour</Text>
-    {MISSIONS.map((m) => <MissionCard key={m.id} mission={m} />)}
-    <TouchableOpacity style={missionsStyles.addBtn}>
-      <Text style={missionsStyles.addText}>＋ Ajouter une mission</Text>
-    </TouchableOpacity>
-  </View>
-);
+export const MissionsSection = () => {
+  const { missions, loading, error } = useTodayMissions();
+
+  return (
+    <View style={[missionsStyles.card, SHADOWS.light]}>
+      <Text style={missionsStyles.title}>Missions du jour</Text>
+
+      {loading ? (
+        <Text style={missionsStyles.infoText}>Chargement…</Text>
+      ) : error ? (
+        <Text style={missionsStyles.infoText}>❌ {error}</Text>
+      ) : missions.length === 0 ? (
+        <Text style={missionsStyles.infoText}>Aucune mission pour aujourd'hui 🎉</Text>
+      ) : (
+        missions.map((m) => <MissionCard key={m.id_validation} mission={m} />)
+      )}
+
+      <TouchableOpacity style={missionsStyles.addBtn}>
+        <Text style={missionsStyles.addText}>＋ Ajouter une mission</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 const missionsStyles = StyleSheet.create({
-  card:   { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 14, ...SHADOWS.light },
-  title:  { fontSize: 18, fontWeight: "800", color: COLORS.text, marginBottom: 14 },
-  addBtn: { borderWidth: 1.5, borderColor: COLORS.secondary, borderStyle: "dashed", borderRadius: 30, paddingVertical: 11, alignItems: "center", marginTop: 4 },
-  addText:{ color: COLORS.secondary, fontWeight: "700", fontSize: 14 },
+  card:     { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 14, ...SHADOWS.light },
+  title:    { fontSize: 18, fontWeight: "800", color: COLORS.text, marginBottom: 14 },
+  infoText: { color: COLORS.missionSubColor, fontSize: 13, textAlign: "center", marginBottom: 10 },
+  addBtn:   { borderWidth: 1.5, borderColor: COLORS.secondary, borderStyle: "dashed", borderRadius: 30, paddingVertical: 11, alignItems: "center", marginTop: 4 },
+  addText:  { color: COLORS.secondary, fontWeight: "700", fontSize: 14 },
 });
+
 
 // ─── BossEventBanner ──────────────────────────────────────────────────────────
 const BossEventBanner = () => (
@@ -411,74 +1097,58 @@ const BossEventBanner = () => (
 );
 
 const bossStyles = StyleSheet.create({
-  outer:       { marginHorizontal: SIZES.padding, borderRadius: SIZES.radiusLarge, overflow: "hidden", marginBottom: 14, backgroundColor: "#8A5AD8" },
-  topBanner:   { flexDirection: "row", alignItems: "center", padding: 14, gap: 10, backgroundColor: "#7B4FC8" },
-  bossTitle:   { color: "#FFF", fontWeight: "800", fontSize: 16 },
-  bossSub:     { color: "#EDD9FF", fontSize: 12 },
-  xpChip:      { backgroundColor: "#5A2EA0", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  xpText:      { color: "#FFD700", fontWeight: "800", fontSize: 12 },
-  voirBtn:     { backgroundColor: "#FF6B9D", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
-  voirText:    { color: "#FFF", fontWeight: "700", fontSize: 12 },
-  progressRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10, gap: 8, backgroundColor: "#9B6DE0" },
-  progLabel:   { color: "#FFF", fontWeight: "600", fontSize: 12, flex: 1 },
-  progTrack:   { flex: 2, height: 8, backgroundColor: "rgba(255,255,255,0.3)", borderRadius: 10, overflow: "hidden" },
-  progFill:    { width: "45%", height: "100%", backgroundColor: "#FFD700", borderRadius: 10 },
-  progPct:     { color: "#FFF", fontWeight: "800", fontSize: 13 },
-  bottomCard:  { flexDirection: "row", alignItems: "center", backgroundColor: "#6A3DB8", padding: 14, gap: 10 },
-  circleGauge: { width: 64, height: 64, borderRadius: 32, borderWidth: 4, borderColor: "#FFD700", alignItems: "center", justifyContent: "center", backgroundColor: "#5A2EA0" },
-  circleText:  { color: "#FFD700", fontWeight: "800", fontSize: 14 },
+  outer:       { marginHorizontal: SIZES.padding, borderRadius: SIZES.radiusLarge, overflow: "hidden", marginBottom: 14, backgroundColor: COLORS.bossOuter },
+  topBanner:   { flexDirection: "row", alignItems: "center", padding: 14, gap: 10, backgroundColor: COLORS.bossTopBanner },
+  bossTitle:   { color: COLORS.modalTitle, fontWeight: "800", fontSize: 16 },
+  bossSub:     { color: COLORS.bossSubText, fontSize: 12 },
+  xpChip:      { backgroundColor: COLORS.bossXpChipBg, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  xpText:      { color: COLORS.bossXpText, fontWeight: "800", fontSize: 12 },
+  voirBtn:     { backgroundColor: COLORS.bossVoirBg, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
+  voirText:    { color: COLORS.modalTitle, fontWeight: "700", fontSize: 12 },
+  progressRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10, gap: 8, backgroundColor: COLORS.bossProgressBg },
+  progLabel:   { color: COLORS.modalTitle, fontWeight: "600", fontSize: 12, flex: 1 },
+  progTrack:   { flex: 2, height: 8, backgroundColor: COLORS.bossProgressTrack, borderRadius: 10, overflow: "hidden" },
+  progFill:    { width: "45%", height: "100%", backgroundColor: COLORS.bossProgressFill, borderRadius: 10 },
+  progPct:     { color: COLORS.modalTitle, fontWeight: "800", fontSize: 13 },
+  bottomCard:  { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.bossBottomCard, padding: 14, gap: 10 },
+  circleGauge: { width: 64, height: 64, borderRadius: 32, borderWidth: 4, borderColor: COLORS.bossCircleBorder, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.bossCircleBg },
+  circleText:  { color: COLORS.bossXpText, fontWeight: "800", fontSize: 14 },
   bottomRow:   { flexDirection: "row", alignItems: "center", gap: 6 },
-  bottomTitle: { color: "#FFF", fontWeight: "800", fontSize: 15 },
-  stars:       { color: "#FFD700", fontSize: 12 },
+  bottomTitle: { color: COLORS.modalTitle, fontWeight: "800", fontSize: 15 },
+  stars:       { color: COLORS.bossXpText, fontSize: 12 },
   bottomRow2:  { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
-  bottomSub:   { color: "#EDD9FF", fontSize: 12 },
-  xpChipSmall: { backgroundColor: "#FF6B9D", borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
-  xpTextSmall: { color: "#FFF", fontWeight: "800", fontSize: 11 },
+  bottomSub:   { color: COLORS.bossSubText, fontSize: 12 },
+  xpChipSmall: { backgroundColor: COLORS.bossXpChipSmallBg, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
+  xpTextSmall: { color: COLORS.modalTitle, fontWeight: "800", fontSize: 11 },
 });
 
 // ─── GlobalProgressSection ────────────────────────────────────────────────────
-const PROGRESS_STATS: ProgressStat[] = [
-  { label: "Concentration", emoji: "🔥", percent: 60, xpReward: 15, xpBonus: 10 },
-  { label: "Sérénité",      emoji: "🌿", percent: 40, xpReward: 15, xpBonus: 10 },
-  { label: "Discipline",    emoji: "💪", percent: 30, xpReward: 10, xpBonus: 10 },
-];
 const GlobalProgressSection = () => {
-  const stats = useAllStats();
-  const derived = computeDerivedStats(stats);
+const { derived } = useDerivedStats();
+
 
   const PROGRESS_STATS: ProgressStat[] = [
     { label: "Concentration", emoji: "🔥", percent: derived.concentration, xpReward: 15, xpBonus: 10 },
-    { label: "Sérénité", emoji: "🌿", percent: derived.serenite, xpReward: 15, xpBonus: 10 },
-    { label: "Discipline", emoji: "💪", percent: derived.discipline, xpReward: 10, xpBonus: 10 },
+    { label: "Sérénité",      emoji: "🌿", percent: derived.serenite,      xpReward: 15, xpBonus: 10 },
+    { label: "Discipline",    emoji: "💪", percent: derived.discipline,    xpReward: 10, xpBonus: 10 },
   ];
 
   return (
     <View style={[gpStyles.card, SHADOWS.light]}>
       <Text style={gpStyles.title}>Progression globale</Text>
-
       <View style={gpStyles.masterTrack}>
         <View style={gpStyles.masterFill} />
       </View>
-
       {PROGRESS_STATS.map((s) => (
         <View key={s.label} style={gpStyles.row}>
           <Text style={gpStyles.rowLabel}>{s.label} {s.emoji}</Text>
-
           <View style={gpStyles.rowTrack}>
-            <View
-              style={[
-                gpStyles.rowFill,
-                { width: `${Math.round(s.percent)}%` }
-              ]}
-            />
+            <View style={[gpStyles.rowFill, { width: `${Math.round(s.percent)}%` }]} />
           </View>
-
           <Text style={gpStyles.rowPct}>{Math.round(s.percent)}%</Text>
-
           <View style={gpStyles.chip}>
             <Text style={gpStyles.chipText}>⭐{s.xpReward} XP</Text>
           </View>
-
           <View style={[gpStyles.chip, gpStyles.chipBonus]}>
             <Text style={gpStyles.chipBonusText}>+{s.xpBonus} XP</Text>
           </View>
@@ -489,23 +1159,30 @@ const GlobalProgressSection = () => {
 };
 
 const gpStyles = StyleSheet.create({
-  card:        { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 100 },
-  title:       { fontSize: 17, fontWeight: "800", color: COLORS.text, marginBottom: 12 },
-  masterTrack: { height: 10, backgroundColor: "#DDD5F5", borderRadius: 10, overflow: "visible", marginBottom: 16, position: "relative" },
-  masterFill:  { width: "55%", height: "100%", backgroundColor: "#FFD700", borderRadius: 10 },
-  row:         { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 6 },
-  rowLabel:    { fontSize: 12, fontWeight: "600", color: COLORS.text, width: 110 },
-  rowTrack:    { flex: 1, height: 7, backgroundColor: "#EEE8F8", borderRadius: 10, overflow: "hidden" },
-  rowFill:     { height: "100%", backgroundColor: COLORS.secondary, borderRadius: 10 },
-  rowPct:      { fontSize: 11, fontWeight: "700", color: COLORS.text, width: 32, textAlign: "right" },
-  chip:        { backgroundColor: "#EEE8F8", borderRadius: 12, paddingHorizontal: 7, paddingVertical: 3 },
-  chipText:    { fontSize: 10, color: COLORS.primary, fontWeight: "700" },
-  chipBonus:   { backgroundColor: "#E8F5E9" },
-  chipBonusText: { fontSize: 10, color: "#4CAF50", fontWeight: "700" },
+  card:          { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 16 },
+  title:         { fontSize: 17, fontWeight: "800", color: COLORS.text, marginBottom: 12 },
+  masterTrack:   { height: 10, backgroundColor: COLORS.masterTrackBg, borderRadius: 10, overflow: "visible", marginBottom: 16 },
+  masterFill:    { width: "55%", height: "100%", backgroundColor: COLORS.masterFill, borderRadius: 10 },
+  row:           { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 6 },
+  rowLabel:      { fontSize: 12, fontWeight: "600", color: COLORS.text, width: 110 },
+  rowTrack:      { flex: 1, height: 7, backgroundColor: COLORS.progressTrackBg, borderRadius: 10, overflow: "hidden" },
+  rowFill:       { height: "100%", backgroundColor: COLORS.secondary, borderRadius: 10 },
+  rowPct:        { fontSize: 11, fontWeight: "700", color: COLORS.text, width: 32, textAlign: "right" },
+  chip:          { backgroundColor: COLORS.progressTrackBg, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 3 },
+  chipText:      { fontSize: 10, color: COLORS.primary, fontWeight: "700" },
+  chipBonus:     { backgroundColor: COLORS.chipBonusBg },
+  chipBonusText: { fontSize: 10, color: COLORS.chipBonusText, fontWeight: "700" },
 });
 
 // ─── SCREEN ───────────────────────────────────────────────────────────────────
 export default function DashboardScreen() {
+  usePeriodicQuestionnaire();
+
+  // ── Handler mission suggérée démarrée ─────────────────────
+  const handleSuggestedMissionStart = (mission: MissionSuggestion) => {
+    console.log("Mission suggérée démarrée:", mission.title);
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
@@ -514,7 +1191,7 @@ export default function DashboardScreen() {
       <View style={styles.stars} pointerEvents="none">
         {stars.map((s, i) => (
           <MaterialIcons
-            key={i} name="auto-awesome" size={s.size} color="#fff"
+            key={i} name="auto-awesome" size={s.size} color={COLORS.modalTitle}
             style={{
               position: "absolute",
               ...(s.top    !== undefined ? { top: s.top }       : {}),
@@ -527,12 +1204,21 @@ export default function DashboardScreen() {
         ))}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <DashboardHeader />
         <View style={{ marginTop: 23 }}>
           <StatsCard />
+           
           <MissionsSection />
+          <SuggestedMissionsSection
+            maxSuggestions={4}
+            onMissionStart={handleSuggestedMissionStart}
+          />
           <BossEventBanner />
+
+          {/* ── Suggestions intelligentes basées sur les stats ── */}
+         
+
           <GlobalProgressSection />
         </View>
       </ScrollView>
@@ -543,6 +1229,7 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f3ff" },
-  stars:     { position: "absolute", top: 0, left: 0, right: 0, height: 290, overflow: "hidden" },
+  container:     { flex: 1, backgroundColor: COLORS.screenBg },
+  stars:         { position: "absolute", top: 0, left: 0, right: 0, height: 290, overflow: "hidden" },
+  scrollContent: { paddingBottom: 100 },
 });

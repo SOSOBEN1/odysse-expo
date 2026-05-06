@@ -321,4 +321,3 @@ const localStyles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
-

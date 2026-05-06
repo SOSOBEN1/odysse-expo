@@ -10,16 +10,15 @@ import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import type { Answer, Question } from "../utils/statsCalculator";
 import { computeStatsFromAnswers } from "../utils/statsCalculator";
-// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function QuestionInscriptionScreen() {
   const router = useRouter();
   const { userId } = useUser();
 
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questions,    setQuestions]    = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, Answer>>({});
-  const [saving, setSaving] = useState(false);
+  const [answers,      setAnswers]      = useState<Record<string, Answer>>({});
+  const [saving,       setSaving]       = useState(false);
 
   useEffect(() => {
     fetchQuestions();
@@ -29,44 +28,27 @@ export default function QuestionInscriptionScreen() {
     try {
       const { data, error } = await supabase
         .from("question")
-        .select(
-          `
-          id,
-          text,
-          type,
-          category,
-          min_value,
-          max_value,
-          question_option (
-            id,
-            label,
-            value,
-            impact,
-            order_index
-          )
-        `
-        )
+        .select(`
+          id, text, type, category, min_value, max_value,
+          question_option ( id, label, value, impact, order_index )
+        `)
         .eq("context", "onboarding")
         .order("created_at", { ascending: true });
 
       if (error) {
-        console.error("Erreur fetch questions:", error.message);
         Alert.alert("Erreur", "Impossible de charger les questions");
       } else {
         setQuestions(data ?? []);
       }
-    } catch (err) {
-      console.error("Erreur:", err);
+    } catch {
       Alert.alert("Erreur", "Une erreur est survenue");
     }
   };
 
   // ── Derived state ──────────────────────────────────────────────────────────
-
   const currentQuestion = questions[currentIndex];
-  const progress =
-    questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
-  const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
+  const progress        = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
+  const currentAnswer   = currentQuestion ? answers[currentQuestion.id] : undefined;
   const hasAnswer =
     currentAnswer !== undefined &&
     currentAnswer !== null &&
@@ -74,38 +56,26 @@ export default function QuestionInscriptionScreen() {
     currentAnswer.value !== undefined;
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-
   const handleOptionAnswer = (numericValue: number) => {
     if (!currentQuestion) return;
-    const opt = currentQuestion.question_option?.find(
-      (o) => o.value === numericValue
-    );
+    const opt = currentQuestion.question_option?.find((o) => o.value === numericValue);
     setAnswers((prev) => ({
       ...prev,
-      [currentQuestion.id]: {
-        option_id: opt?.id ?? null,
-        value: numericValue,
-      },
+      [currentQuestion.id]: { option_id: opt?.id ?? null, value: numericValue },
     }));
   };
 
   const handleBooleanAnswer = (bool: boolean) => {
     if (!currentQuestion) return;
     const targetValue = bool ? 1 : 0;
-    const opt = currentQuestion.question_option?.find(
-      (o) => o.value === targetValue
-    );
+    const opt = currentQuestion.question_option?.find((o) => o.value === targetValue);
     setAnswers((prev) => ({
       ...prev,
-      [currentQuestion.id]: {
-        option_id: opt?.id ?? null,
-        value: targetValue,
-      },
+      [currentQuestion.id]: { option_id: opt?.id ?? null, value: targetValue },
     }));
   };
 
   // ── Navigation ─────────────────────────────────────────────────────────────
-
   const handleNext = async () => {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex((prev) => prev + 1);
@@ -115,7 +85,6 @@ export default function QuestionInscriptionScreen() {
   };
 
   // ── Save Answers + Stats ───────────────────────────────────────────────────
-
   const saveAnswers = async () => {
     if (!userId) {
       Alert.alert("Erreur", "Utilisateur non connecté");
@@ -125,17 +94,16 @@ export default function QuestionInscriptionScreen() {
     setSaving(true);
 
     try {
-      // ── 1. Sauvegarde des réponses ──────────────────────────────
+      // 1. Sauvegarde des réponses
       const rows = questions
         .map((q) => {
           const ans = answers[q.id];
           if (!ans || ans.value === null) return null;
-
           return {
-            user_id: userId,
+            user_id:     userId,
             question_id: q.id,
-            option_id: ans.option_id,
-            value: ans.value,
+            option_id:   ans.option_id,
+            value:       ans.value,
           };
         })
         .filter(Boolean);
@@ -145,67 +113,53 @@ export default function QuestionInscriptionScreen() {
         return;
       }
 
-      const { error: insertError } = await supabase
-        .from("response")
-        .insert(rows);
-
-      if (insertError) {
-        console.error("❌ Erreur insertion réponses:", insertError);
-        throw new Error(insertError.message);
-      }
+      const { error: insertError } = await supabase.from("response").insert(rows);
+      if (insertError) throw new Error(insertError.message);
 
       console.log(`✅ ${rows.length} réponse(s) onboarding enregistrée(s)`);
 
-      // ── 2. Calcul des stats à partir des réponses ───────────────
+      // 2. Calcul des stats
       const stats = computeStatsFromAnswers(questions, answers);
+      const now   = new Date().toISOString();
 
       console.log("📊 Stats calculées pour onboarding:", stats);
 
-      // ── 3. Sauvegarde des stats dans player_stats ───────────────
+      // 3. Sauvegarde des stats
+      // ✅ last_periodic_questionnaire = now pour éviter la redirection du hook
       const { error: statsError } = await supabase
         .from("player_stats")
         .upsert(
           {
-            id_user: userId,
-            energie: stats.energie,
-            stress: stats.stress,
-            connaissance: stats.connaissance,
-            organisation: stats.organisation,
-            date_maj: new Date().toISOString(),
+            id_user:                     userId,
+            energie:                     stats.energie,
+            stress:                      stats.stress,
+            connaissance:                stats.connaissance,
+            organisation:                stats.organisation,
+            date_maj:                    now,
+            last_periodic_questionnaire: now, // ✅ empêche usePeriodicQuestionnaire de rediriger
           },
           { onConflict: "id_user" }
         );
-
-      if (statsError) {
-        console.error("❌ Erreur sauvegarde stats:", statsError);
-        throw new Error(statsError.message);
-      }
+      if (statsError) throw new Error(statsError.message);
 
       console.log("✅ Stats initiales sauvegardées");
 
-      // ── 4. Ajout dans l'historique des stats ────────────────────
-      const { error: historyError } = await supabase
-        .from("stat_history")
-        .insert({
-          id_user: userId,
-          energie: stats.energie,
-          stress: stats.stress,
-          connaissance: stats.connaissance,
-          organisation: stats.organisation,
-          cause: "Initialisation inscription",
-          date: new Date().toISOString(),
-        });
+      // 4. Historique (non bloquant)
+      const { error: historyError } = await supabase.from("stat_history").insert({
+        id_user:      userId,
+        energie:      stats.energie,
+        stress:       stats.stress,
+        connaissance: stats.connaissance,
+        organisation: stats.organisation,
+        cause:        "Initialisation inscription",
+        date:         now,
+      });
+      if (historyError) console.warn("⚠️ Erreur historique:", historyError);
+      else console.log("✅ Historique des stats enregistré");
 
-      if (historyError) {
-        console.warn("⚠️ Erreur historique (non bloquante):", historyError);
-      } else {
-        console.log("✅ Historique des stats enregistré");
-      }
+      // 5. ✅ Redirection directe vers le Dashboard
+      router.replace("/frontend/screens/Dashbord" as any);
 
-      // ── 5. Redirection vers le dashboard ────────────────────────
-      Alert.alert("Succès", "Profil créé avec succès !", [
-        { text: "OK", onPress: () => router.push("/frontend/screens/Dashbord") },
-      ]);
     } catch (err: any) {
       console.error("💥 Erreur saveAnswers:", err);
       Alert.alert("Erreur", err.message ?? "Une erreur est survenue");
@@ -215,7 +169,6 @@ export default function QuestionInscriptionScreen() {
   };
 
   // ── Loading ────────────────────────────────────────────────────────────────
-
   if (!questions.length || !currentQuestion) {
     return (
       <LinearGradient colors={["#ffffff", "#EDE7FF"]} style={{ flex: 1 }}>
@@ -225,8 +178,6 @@ export default function QuestionInscriptionScreen() {
       </LinearGradient>
     );
   }
-
-  // ── Main render ────────────────────────────────────────────────────────────
 
   return (
     <LinearGradient colors={["#ffffff", "#EDE7FF"]} style={{ flex: 1 }}>
@@ -274,10 +225,7 @@ export default function QuestionInscriptionScreen() {
         <TouchableOpacity
           onPress={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
           disabled={currentIndex === 0}
-          style={[
-            styles.backButton,
-            { opacity: currentIndex === 0 ? 0.4 : 1 },
-          ]}
+          style={[styles.backButton, { opacity: currentIndex === 0 ? 0.4 : 1 }]}
         >
           <Text style={styles.backText}>Retour</Text>
         </TouchableOpacity>
@@ -285,10 +233,7 @@ export default function QuestionInscriptionScreen() {
         <TouchableOpacity
           onPress={handleNext}
           disabled={!hasAnswer || saving}
-          style={[
-            styles.nextButton,
-            { opacity: hasAnswer && !saving ? 1 : 0.5 },
-          ]}
+          style={[styles.nextButton, { opacity: hasAnswer && !saving ? 1 : 0.5 }]}
         >
           <Text style={styles.nextText}>
             {saving
@@ -303,8 +248,6 @@ export default function QuestionInscriptionScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   header: {
     marginTop: 60,
@@ -312,57 +255,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  headerCenter: {
-    flex: 1,
-    alignItems: "center",
-  },
-  progressText: {
-    fontWeight: "600",
-    color: "#6949a8",
-    marginBottom: 8,
-  },
+  headerCenter:  { flex: 1, alignItems: "center" },
+  progressText:  { fontWeight: "600", color: "#6949a8", marginBottom: 8 },
   progressBar: {
-    height: 8,
-    width: "70%",
-    backgroundColor: "#E0D7F5",
-    borderRadius: 10,
-    overflow: "hidden",
+    height: 8, width: "70%",
+    backgroundColor: "#E0D7F5", borderRadius: 10, overflow: "hidden",
   },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#6949a8",
-    borderRadius: 10,
-  },
-  cardWrapper: {
-    flex: 1,
-    justifyContent: "flex-start",
-    marginTop: 80,
-  },
+  progressFill:  { height: "100%", backgroundColor: "#6949a8", borderRadius: 10 },
+  cardWrapper:   { flex: 1, justifyContent: "flex-start", marginTop: 80 },
   bottomButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginBottom: 90,
-    marginTop: 10,
+    flexDirection: "row", justifyContent: "space-between",
+    paddingHorizontal: 20, marginBottom: 90, marginTop: 10,
   },
   backButton: {
     backgroundColor: "#E0D7F5",
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 20,
+    paddingVertical: 12, paddingHorizontal: 25, borderRadius: 20,
   },
-  backText: {
-    color: "#6949a8",
-    fontWeight: "600",
-  },
+  backText:   { color: "#6949a8", fontWeight: "600" },
   nextButton: {
     backgroundColor: "#6949a8",
-    paddingVertical: 12,
-    paddingHorizontal: 35,
-    borderRadius: 20,
+    paddingVertical: 12, paddingHorizontal: 35, borderRadius: 20,
   },
-  nextText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
+  nextText: { color: "#fff", fontWeight: "700" },
 });

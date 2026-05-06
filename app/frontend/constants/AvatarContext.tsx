@@ -1,42 +1,36 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useState } from "react";
+import { AVATAR_MAP, resolveAvatarModel, DEFAULT_AVATAR_KEY } from "./avatarMap";
 
 type AvatarContextType = {
   selectedModel: any | null;
   setSelectedModel: (model: any) => void;
+  setSelectedKey: (key: string) => void;
 };
 
 const AvatarContext = createContext<AvatarContextType>({
   selectedModel: null,
   setSelectedModel: () => {},
+  setSelectedKey: () => {},
 });
 
 export function AvatarProvider({ children }: { children: React.ReactNode }) {
-  const [selectedModel, setSelectedModelState] = useState<any>(null);
+  // On stocke directement le modèle en mémoire — pas besoin de persister
+  // car ProfileScreen recharge depuis Supabase à chaque focus
+  const [selectedModel, setSelectedModelState] = useState<any>(
+    resolveAvatarModel(DEFAULT_AVATAR_KEY)
+  );
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const saved = await AsyncStorage.getItem("selectedAvatarModel");
-        if (saved) setSelectedModelState(JSON.parse(saved));
-      } catch (e) {
-        console.warn("Erreur chargement avatar:", e);
-      }
-    };
-    load();
-  }, []);
-
-  const setSelectedModel = async (model: any) => {
-    try {
-      await AsyncStorage.setItem("selectedAvatarModel", JSON.stringify(model));
-    } catch (e) {
-      console.warn("Erreur sauvegarde avatar:", e);
-    }
+  const setSelectedModel = (model: any) => {
     setSelectedModelState(model);
   };
 
+  // Utilitaire pratique si tu veux passer une clé directement
+  const setSelectedKey = (key: string) => {
+    setSelectedModelState(resolveAvatarModel(key));
+  };
+
   return (
-    <AvatarContext.Provider value={{ selectedModel, setSelectedModel }}>
+    <AvatarContext.Provider value={{ selectedModel, setSelectedModel, setSelectedKey }}>
       {children}
     </AvatarContext.Provider>
   );

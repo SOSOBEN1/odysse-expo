@@ -1,45 +1,70 @@
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator, Animated, Dimensions, Easing, Image,
-  ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, Animated, Easing, ScrollView, StyleSheet,
+  Text, TouchableOpacity, View, ViewStyle
 } from "react-native";
+
+import AvatarCrd from "../components/AvatarCrd";
 import BackButton from "../components/BackButton";
-import { supabase } from "../constants/supabase";
+import Navbar from "../components/Navbar";
+import WaveBackground from "../components/waveBackground";
+import { useAvatar } from "../constants/AvatarContext";
 import { useUser } from "../constants/UserContext";
+import { AVATAR_MAP, resolveAvatarModel } from "../constants/avatarMap";
+import { supabase } from "../constants/supabase";
 
-const { width: SW } = Dimensions.get("window");
-const GRID_COLS    = 3;
-const TOTAL_PIECES = 9;
-
-interface ZoneInfo {
-  nom: string;
-  image_url: string;
-  accent_color: string;
-  dark_color: string;
-  light_color: string;
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface StatCardProps  { emoji: string; value: number; label: string; }
+interface BadgeItemProps { emoji: string; label: string; color: string; }
+interface StarItem {
+  top?: number; bottom?: number; left?: number; right?: number;
+  size: number; opacity: number;
 }
+type AnimatedStarProps = { style: ViewStyle; size: number; delay?: number };
 
-interface PuzzleState {
-  id_puzzle: number;
-  total_pieces: number;
-  pieces_earned: number;
-  is_complete: boolean;
-}
+// ─── Données statiques ────────────────────────────────────────────────────────
+const BADGES: BadgeItemProps[] = [
+  { label: "Maître de la\nTo-Do",   emoji: "📋", color: "#f9c74f" },
+  { label: "Planificateur\nExpert", emoji: "⏰", color: "#90be6d" },
+  { label: "Organisateur\nPro",     emoji: "📊", color: "#4cc9f0" },
+  { label: "Journée\nProductive",   emoji: "☀️", color: "#f8961e" },
+];
 
-// ─── Étoile animée ────────────────────────────────────────────────────────────
+const STAR_POSITIONS = [
+  { top: 20,  left: 20,  size: 18, delay: 0   },
+  { top: 15,  right: 30, size: 12, delay: 200 },
+  { top: 55,  right: 12, size: 10, delay: 400 },
+  { top: 80,  left: 60,  size: 8,  delay: 600 },
+  { top: 38,  left: 180, size: 14, delay: 300 },
+];
 
-function AnimStar({ style, size = 14, delay = 0, color = "#c4b5fd" }: any) {
-  const a = useRef(new Animated.Value(0)).current;
+// ─── AnimatedStar (copié depuis EditProfileScreen) ────────────────────────────
+function AnimatedStar({ style, size, delay = 0 }: AnimatedStarProps) {
+  const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.loop(Animated.sequence([
-      Animated.delay(delay),
-      Animated.timing(a, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      Animated.timing(a, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      Animated.delay(400),
-    ])).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(anim, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    ).start();
   }, []);
+  const opacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.9] });
+  const scale   = anim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.2] });
+  return (
+    <Animated.View style={[style, { opacity, transform: [{ scale }] }]}>
+      <MaterialIcons name="auto-awesome" size={size} color="#fff" />
+    </Animated.View>
+  );
+}
+
+// ─── StatCard ─────────────────────────────────────────────────────────────────
+function StatCard({ emoji, value, label }: StatCardProps) {
   return (
     <Animated.View style={[style, {
       opacity:   a.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.9] }),
@@ -124,75 +149,149 @@ function ProgressBar({ value, total, accent }: { value: number; total: number; a
     </View>
   );
 }
+const statStyles = StyleSheet.create({
+  card:  { width: "48%", backgroundColor: "#f0edff", borderRadius: 18, padding: 14, marginBottom: 10, minHeight: 78, justifyContent: "space-between" },
+  row:   { flexDirection: "row", alignItems: "center", gap: 8 },
+  emoji: { fontSize: 22 },
+  value: { fontSize: 24, fontWeight: "900", color: "#2d1a6e" },
+  label: { fontSize: 12, color: "#7f5af0", fontWeight: "600", marginTop: 4 },
+});
 
-// ─── Écran ────────────────────────────────────────────────────────────────────
+// ─── BadgeItem ────────────────────────────────────────────────────────────────
+function BadgeItem({ emoji, label, color }: BadgeItemProps) {
+  return (
+    <View style={badgeStyles.container}>
+      <View style={[badgeStyles.iconBox, { backgroundColor: color + "33", borderColor: color + "55" }]}>
+        <Text style={badgeStyles.emoji}>{emoji}</Text>
+      </View>
+      <Text style={badgeStyles.label}>{label}</Text>
+    </View>
+  );
+}
+const badgeStyles = StyleSheet.create({
+  container: { alignItems: "center", width: 70 },
+  iconBox:   { width: 60, height: 60, borderRadius: 14, justifyContent: "center", alignItems: "center", marginBottom: 5, borderWidth: 1.5 },
+  emoji:     { fontSize: 26 },
+  label:     { fontSize: 9.5, color: "#5c3ca8", textAlign: "center", fontWeight: "600", lineHeight: 13 },
+});
 
-export default function PuzzleScreen() {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function getLevelTitle(niveau: number): string {
+  if (niveau <= 2)  return "Débutant curieux";
+  if (niveau <= 5)  return "Explorateur de savoir";
+  if (niveau <= 10) return "Apprenti maître";
+  if (niveau <= 20) return "Expert confirmé";
+  return "Maître légendaire";
+}
+
+// ─── SCREEN ───────────────────────────────────────────────────────────────────
+export default function ProfileScreen() {
   const router = useRouter();
-  const { userId } = useUser();
-  const { zoneId, zoneSlug } = useLocalSearchParams<{ zoneId: string; zoneSlug: string }>();
+  const { setSelectedModel } = useAvatar();
+  const { userId, username: ctxUsername, isLoading: ctxLoading } = useUser();
 
-  const [zoneInfo, setZoneInfo] = useState<ZoneInfo | null>(null);
-  const [puzzle,   setPuzzle]   = useState<PuzzleState | null>(null);
-  const [loading,  setLoading]  = useState(true);
+  // ✅ Exactement comme EditProfileScreen : avatarKey initialisé à "avatar_1", jamais null
+  const [avatarKey, setAvatarKey] = useState("avatar_1");
+  const [loading,   setLoading]   = useState(true);
+  const [userData,  setUserData]  = useState({
+    username: "", prenom: "", nom: "",
+    level: 1, levelTitle: "Explorateur de savoir",
+    xp: 0, xpMax: 500, coins: 0,
+    badges: 0, missions: 0, defis: 0,
+  });
 
-  const CELL_SIZE = Math.floor((SW - 32 - 16) / GRID_COLS) - 4;
-
-  const headerFade = useRef(new Animated.Value(0)).current;
-  const headerY    = useRef(new Animated.Value(-20)).current;
-  const cardFade   = useRef(new Animated.Value(0)).current;
-  const cardSlide  = useRef(new Animated.Value(40)).current;
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      // 1. Infos de la zone
-      const { data: zone } = await supabase
-        .from("zone")
-        .select("nom, image_url, accent_color, dark_color, light_color")
-        .eq("id_zone", Number(zoneId))
-        .single();
-      if (zone) setZoneInfo(zone);
-
-      // 2. Config puzzle
-      const { data: config } = await supabase
-        .from("puzzle_config")
-        .select("id_puzzle, total_pieces, image_url")
-        .eq("id_zone", Number(zoneId))
-        .single();
-
-      if (config) {
-        // 3. Progression user
-        const { data: prog } = await supabase
-          .from("puzzle_progress")
-          .select("pieces_earned, is_complete")
+  // ✅ useEffect comme EditProfileScreen (pas useFocusEffect pour le chargement initial)
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!userId) return;
+      setLoading(true);
+      try {
+        const { data: user, error } = await supabase
+          .from("users")
+          .select("username, prenom, nom, xp, gold, id_level, avatar_url")
           .eq("id_user", userId)
           .eq("id_puzzle", config.id_puzzle)
           .maybeSingle();
 
-        setPuzzle({
-          id_puzzle:     config.id_puzzle,
-          total_pieces:  config.total_pieces,
-          pieces_earned: prog?.pieces_earned ?? 0,
-          is_complete:   prog?.is_complete   ?? false,
+        if (error || !user) {
+          console.warn("Erreur fetch profil:", error?.message);
+          return;
+        }
+
+        const key = user.avatar_url && AVATAR_MAP[user.avatar_url]
+          ? user.avatar_url
+          : "avatar_1";
+
+        setAvatarKey(key);
+        setSelectedModel(resolveAvatarModel(key));
+
+        const [
+          { count: missionsCount },
+          { count: defisCount },
+          { count: badgesCount },
+        ] = await Promise.all([
+          supabase.from("mission_validation").select("id_validation", { count: "exact", head: true }).eq("id_user", userId),
+          supabase.from("defi_participants").select("id_defi",        { count: "exact", head: true }).eq("id_user", userId),
+          supabase.from("user_badges").select("id_badge",             { count: "exact", head: true }).eq("id_user", userId),
+        ]);
+
+        const niveau = user.id_level ?? 1;
+        const xp     = user.xp ?? 0;
+        const maxXp  = niveau * 500;
+
+        setUserData({
+          username:   user.username ?? "",
+          prenom:     user.prenom   ?? "",
+          nom:        user.nom      ?? "",
+          level:      niveau,
+          levelTitle: getLevelTitle(niveau),
+          xp:         xp % maxXp,
+          xpMax:      maxXp,
+          coins:      user.gold     ?? 0,
+          badges:     badgesCount   ?? 0,
+          missions:   missionsCount ?? 0,
+          defis:      defisCount    ?? 0,
         });
+      } catch (e) {
+        console.warn("Erreur loadProfile :", e);
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-      Animated.parallel([
-        Animated.timing(headerFade, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.spring(headerY,    { toValue: 0, friction: 7,   useNativeDriver: true }),
-        Animated.timing(cardFade,   { toValue: 1, duration: 500, delay: 200, useNativeDriver: true }),
-        Animated.spring(cardSlide,  { toValue: 0, friction: 7,   delay: 200, useNativeDriver: true }),
-      ]).start();
-    }
-  }, [zoneId, userId]);
+    };
+    loadProfile();
+  }, [userId]);
 
-  useEffect(() => { load(); }, [load]);
+  // Recharger quand on revient sur l'écran (useFocusEffect uniquement pour le refresh)
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId || ctxLoading) return;
+      const refresh = async () => {
+        const { data: user } = await supabase
+          .from("users")
+          .select("avatar_url")
+          .eq("id_user", userId)
+          .single();
+        if (user?.avatar_url && AVATAR_MAP[user.avatar_url]) {
+          setAvatarKey(user.avatar_url);
+          setSelectedModel(resolveAvatarModel(user.avatar_url));
+        }
+      };
+      refresh();
+    }, [userId, ctxLoading])
+  );
 
-  if (loading) {
+  const xpPct = Math.min((userData.xp / userData.xpMax) * 100, 100);
+  const displayName =
+    userData.username ||
+    [userData.prenom, userData.nom].filter(Boolean).join(" ") ||
+    ctxUsername ||
+    "Joueur";
+
+  // ✅ Loader identique à EditProfileScreen
+  if (loading || ctxLoading) {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={StyleSheet.absoluteFill} />
         <ActivityIndicator size="large" color="#7f5af0" />
       </View>
     );
@@ -215,72 +314,81 @@ export default function PuzzleScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+      <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={StyleSheet.absoluteFill} />
+      <WaveBackground />
 
-      <View style={StyleSheet.absoluteFill}>
-        <View style={[styles.bgTop, { backgroundColor: light }]} />
-      </View>
-
-      {STARS.map((s, i) => (
-        <AnimStar key={i} size={s.size} delay={s.delay} color={accent} style={{
-          position: "absolute", zIndex: 2,
-          ...(s.top   !== undefined ? { top:   s.top   } : {}),
-          ...(s.left  !== undefined ? { left:  s.left  } : {}),
-          ...(s.right !== undefined ? { right: s.right } : {}),
-        }} />
+      {/* Étoiles animées — identiques à EditProfileScreen */}
+      {STAR_POSITIONS.map((s, i) => (
+        <AnimatedStar
+          key={i}
+          size={s.size}
+          delay={s.delay}
+          style={{
+            position: "absolute", zIndex: 5,
+            ...(s.top   !== undefined ? { top: s.top }     : {}),
+            ...(s.left  !== undefined ? { left: s.left }   : {}),
+            ...(s.right !== undefined ? { right: s.right } : {}),
+          }}
+        />
       ))}
 
       {/* Header */}
-      <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerY }] }]}>
+      <View style={styles.header}>
         <BackButton />
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{zoneInfo?.nom ?? zoneSlug}</Text>
-          <Text style={[styles.headerSub, { color: accent }]}>Puzzle de zone</Text>
-        </View>
-        <View style={[styles.piecesBadge, { backgroundColor: accent }]}>
-          <Text style={styles.piecesBadgeText}>🧩 {piecesEarned}/{totalPieces}</Text>
-        </View>
-      </Animated.View>
+        <View style={{ width: 42 }} />
+      </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <Animated.View style={[styles.puzzleCard, { opacity: cardFade, transform: [{ translateY: cardSlide }] }]}>
-
-          {/* Image / grille */}
-          <View style={[styles.puzzleImageContainer, { borderColor: accent + "44" }]}>
-            <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" blurRadius={isComplete ? 0 : 8} />
-
-            {!isComplete && (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(20,10,50,0.35)" }]} />
-            )}
-
-            {isComplete ? (
-              <View style={styles.completeBanner}>
-                <Text style={styles.completeBannerText}>🎉 Zone révélée !</Text>
-              </View>
-            ) : (
-              <View style={styles.grid}>
-                {Array.from({ length: totalPieces }).map((_, i) => (
-                  <PuzzleCell
-                    key={i} index={i} revealed={i < piecesEarned}
-                    imageUri={imageUri} cellSize={CELL_SIZE} accent={accent}
-                  />
-                ))}
-              </View>
-            )}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+      >
+        {/* ── Avatar principal — COPIÉ PIXEL POUR PIXEL depuis EditProfileScreen ── */}
+        <View style={styles.mainAvatarWrapper}>
+          <View style={styles.mainAvatarCircle}>
+            <AvatarCrd model={resolveAvatarModel(avatarKey)} bgColor="#f0edff" />
           </View>
+        </View>
 
-          {/* Progression */}
-          <View style={styles.progressSection}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>{piecesEarned}/{totalPieces} pièces débloquées</Text>
-              <Text style={[styles.progressPct, { color: accent }]}>
-                {Math.round((piecesEarned / totalPieces) * 100)}%
-              </Text>
+        {/* Nom + niveau */}
+        <Text style={styles.userName}>{displayName.toUpperCase()}</Text>
+        <Text style={styles.userLevel}>Niveau {userData.level} – {userData.levelTitle}</Text>
+
+        {/* ── Card principale ── */}
+        <View style={styles.card}>
+
+          {/* Barre XP */}
+          <View style={styles.xpBox}>
+            <View style={styles.xpHeader}>
+              <Text style={styles.xpLabel}>XP : {userData.xp}/{userData.xpMax}</Text>
+              <MaterialIcons name="auto-awesome" size={18} color="#7f5af0" />
+            </View>
+            <View style={styles.xpTrack}>
+              <LinearGradient
+                colors={["#7f5af0", "#bbaaff"]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={[styles.xpFill, { width: `${xpPct}%` }]}
+              />
             </View>
             <ProgressBar value={piecesEarned} total={totalPieces} accent={accent} />
           </View>
 
-          {/* Bouton missions */}
+          {/* Stats */}
+          <View style={styles.statsGrid}>
+            <StatCard emoji="🪙" value={userData.coins}    label="Pièces d'or" />
+            <StatCard emoji="🏆" value={userData.badges}   label="Badges"      />
+            <StatCard emoji="📋" value={userData.missions} label="Missions"    />
+            <StatCard emoji="🎯" value={userData.defis}    label="Défis"       />
+          </View>
+
+          {/* Badges */}
+          <Text style={styles.badgesTitle}>Badges gagnés</Text>
+          <View style={styles.badgesRow}>
+            {BADGES.map((b, i) => (
+              <BadgeItem key={i} emoji={b.emoji} label={b.label} color={b.color} />
+            ))}
+          </View>
+
+          {/* Bouton modifier */}
           <TouchableOpacity
             style={[styles.missionsBtn, { backgroundColor: accent, borderColor: accent + "88" }]}
             onPress={() => router.push({ pathname: "/frontend/screens/ZoneScreen", params: { zoneId, zoneSlug } })}
@@ -292,70 +400,79 @@ export default function PuzzleScreen() {
             <Text style={styles.missionsBtnText}>Continuer les missions</Text>
           </TouchableOpacity>
 
-          {/* Info */}
-          <View style={[styles.infoCard, { backgroundColor: light, borderColor: accent + "33" }]}>
-            <Ionicons name="information-circle" size={18} color={accent} />
-            <Text style={[styles.infoText, { color: dark }]}>
-              Complète les missions de cette zone pour débloquer toutes les pièces et révéler la photo !
-            </Text>
-          </View>
-        </Animated.View>
-
-        {/* Stats */}
-        <Animated.View style={[styles.statsRow, { opacity: cardFade }]}>
-          <View style={[styles.statCard, { borderColor: accent + "33" }]}>
-            <Text style={[styles.statVal, { color: accent }]}>{piecesEarned}</Text>
-            <Text style={styles.statLabel}>Gagnées</Text>
-          </View>
-          <View style={[styles.statCard, { borderColor: accent + "33" }]}>
-            <Text style={[styles.statVal, { color: "#f59e0b" }]}>{totalPieces - piecesEarned}</Text>
-            <Text style={styles.statLabel}>Restantes</Text>
-          </View>
-          <View style={[styles.statCard, { borderColor: accent + "33" }]}>
-            <Text style={[styles.statVal, { color: "#22c55e" }]}>
-              {Math.round((piecesEarned / totalPieces) * 100)}%
-            </Text>
-            <Text style={styles.statLabel}>Complété</Text>
-          </View>
-        </Animated.View>
+        </View>
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      <Navbar active="profil" onChange={() => {}} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#f5f3ff" },
-  bgTop:       { height: 260, borderBottomLeftRadius: 40, borderBottomRightRadius: 40 },
-  header:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 54, paddingBottom: 10, zIndex: 5 },
-  headerCenter:{ flex: 1, alignItems: "center" },
-  headerTitle: { fontSize: 18, fontWeight: "900", color: "#2d1a6e", letterSpacing: 0.2 },
-  headerSub:   { fontSize: 11, fontWeight: "700", marginTop: 2 },
-  piecesBadge: { borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5 },
-  piecesBadgeText: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  scroll:      { paddingHorizontal: 16, paddingBottom: 120, paddingTop: 6 },
-  puzzleCard:  { backgroundColor: "#fff", borderRadius: 28, overflow: "hidden", marginBottom: 14, shadowColor: "#7f5af0", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 8, padding: 16 },
-  puzzleImageContainer: { width: "100%", aspectRatio: 1, borderRadius: 20, overflow: "hidden", marginBottom: 16, position: "relative", borderWidth: 2 },
-  completeBanner:     { position: "absolute", bottom: 14, left: 0, right: 0, alignItems: "center" },
-  completeBannerText: { fontSize: 20, fontWeight: "900", color: "#fff", backgroundColor: "rgba(0,0,0,0.5)", paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, overflow: "hidden" },
-  grid:        { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, flexDirection: "row", flexWrap: "wrap", padding: 6, gap: 4, alignContent: "flex-start" },
-  cell:        { borderRadius: 10, overflow: "hidden", borderWidth: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3, margin: 2 },
-  cellCheck:   { position: "absolute", bottom: 3, right: 3, width: 16, height: 16, borderRadius: 8, justifyContent: "center", alignItems: "center", borderWidth: 1.5, borderColor: "#fff" },
-  cellLocked:  { flex: 1, backgroundColor: "rgba(60,20,120,0.5)", justifyContent: "center", alignItems: "center" },
-  progressSection: { marginBottom: 14 },
-  progressHeader:  { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  progressLabel:   { fontSize: 13, fontWeight: "800", color: "#2d1a6e" },
-  progressPct:     { fontSize: 13, fontWeight: "900" },
-  progressTrack:   { height: 10, backgroundColor: "#e8e0ff", borderRadius: 10, overflow: "hidden" },
-  progressFill:    { height: "100%", borderRadius: 10 },
-  missionsBtn:     { borderRadius: 24, paddingVertical: 13, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 12, borderWidth: 2 },
-  missionsBtnIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#fff", justifyContent: "center", alignItems: "center" },
-  missionsBtnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
-  infoCard:    { flexDirection: "row", alignItems: "flex-start", gap: 8, borderRadius: 14, padding: 12, borderWidth: 1.5 },
-  infoText:    { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
-  statsRow:    { flexDirection: "row", gap: 10, marginBottom: 4 },
-  statCard:    { flex: 1, backgroundColor: "#fff", borderRadius: 18, padding: 14, alignItems: "center", gap: 4, shadowColor: "#7f5af0", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4, borderWidth: 1 },
-  statVal:     { fontSize: 22, fontWeight: "900" },
-  statLabel:   { fontSize: 10, color: "#9b87c9", fontWeight: "600", textAlign: "center" },
+  container: { flex: 1 },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 54,
+    paddingBottom: 10,
+    zIndex: 10,
+  },
+
+  scroll: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 120,
+    alignItems: "center",
+  },
+
+  // ✅ Identique à EditProfileScreen — c'est ce qui marche
+  mainAvatarWrapper: { alignItems: "center", marginBottom: 8 },
+  mainAvatarCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#fff",
+    borderWidth: 3,
+    borderColor: "#e0d9ff",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+
+  userName:  { fontSize: 22, fontWeight: "900", color: "#2d1a6e", letterSpacing: 1.5, marginBottom: 4, textAlign: "center" },
+  userLevel: { fontSize: 13, color: "#9b87c9", fontWeight: "600", marginBottom: 20, textAlign: "center" },
+
+  card: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 28,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+
+  xpBox:    { backgroundColor: "#f0edff", borderRadius: 18, padding: 14, marginBottom: 16 },
+  xpHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  xpLabel:  { fontSize: 14, fontWeight: "800", color: "#2d1a6e" },
+  xpTrack:  { height: 10, backgroundColor: "#d1c4e9", borderRadius: 10, overflow: "hidden" },
+  xpFill:   { height: "100%", borderRadius: 10 },
+
+  statsGrid:   { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 8 },
+  badgesTitle: { fontSize: 16, fontWeight: "800", color: "#2d1a6e", textAlign: "center", marginBottom: 14, marginTop: 6 },
+  badgesRow:   { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
+
+  editButton:   { width: "100%", borderRadius: 15, overflow: "hidden", elevation: 7, shadowColor: "#6949a8", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
+  editGradient: { flexDirection: "row", paddingVertical: 15, alignItems: "center", justifyContent: "center" },
+  editText:     { color: "#fff", fontWeight: "bold", fontSize: 16, letterSpacing: 0.4 },
 });

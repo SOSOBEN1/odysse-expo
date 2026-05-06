@@ -408,7 +408,6 @@ function MissionCard({ mission, index, onCocher, savingId, statsCibles }: {
                 <Text style={styles.metaBadgeText}>+{xp_preview} XP</Text>
               </View>
             )}
-          
             {!cocheeParMoi && statsCibles.length > 0 && (
               <View style={styles.metaBadge}>
                 <Text style={[styles.metaBadgeText, { color: "#f59e0b" }]}>

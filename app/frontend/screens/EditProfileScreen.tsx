@@ -13,22 +13,26 @@ import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
 import { useUser } from "../constants/UserContext";
 import { supabase } from "../constants/supabase";
+import { AVATAR_MAP, resolveAvatarModel } from "../constants/avatarMap";
 
-const AVATAR_MAP: Record<string, any> = {
-  avatar_1: require("../assets/Avatar3D/fille1.glb"),
-  avatar_2: require("../assets/Avatar3D/fille3Corrige.glb"),
-  avatar_3: require("../assets/Avatar3D/garcon1.glb"),
-  avatar_4: require("../assets/Avatar3D/garcon2.glb"),
-  avatar_5: require("../assets/Avatar3D/garcon4.glb"),
+// Tous les avatars disponibles dans le sélecteur
+const AVATAR_OPTIONS = Object.keys(AVATAR_MAP).map((key) => ({ key }));
+
+// Clés de base toujours visibles
+const BASE_AVATAR_KEYS = new Set(["avatar_1", "avatar_2", "avatar_3", "avatar_4", "avatar_5"]);
+
+// Mapping boutique avatarKey → itemId (doit correspondre à AVATARS_STATIC dans BoutiqueScreen)
+const BOUTIQUE_ITEM_MAP: Record<string, number> = {
+  avatar_boutique_1: 1,
+  avatar_boutique_2: 2,
+  avatar_boutique_3: 3,
+  avatar_boutique_4: 4,
+  avatar_boutique_5: 5,
+  avatar_boutique_6: 6,
+  avatar_boutique_7: 7,
+  avatar_boutique_8: 8,
+  avatar_boutique_9: 9,
 };
-
-const AVATAR_OPTIONS = [
-  { key: "avatar_1" },
-  { key: "avatar_2" },
-  { key: "avatar_3" },
-  { key: "avatar_4" },
-  { key: "avatar_5" },
-];
 
 const STAR_POSITIONS = [
   { top: 20,  left: 20,  size: 18, delay: 0   },
@@ -38,7 +42,7 @@ const STAR_POSITIONS = [
   { top: 38,  left: 180, size: 14, delay: 300 },
 ];
 
-type AnimatedStarProps  = { style: ViewStyle; size: number; delay?: number };
+type AnimatedStarProps   = { style: ViewStyle; size: number; delay?: number };
 type SuccessOverlayProps = { visible: boolean; onDone: () => void };
 
 function AnimatedStar({ style, size, delay = 0 }: AnimatedStarProps) {
@@ -109,24 +113,27 @@ const overlayStyles = StyleSheet.create({
 export default function EditProfileScreen() {
   const router = useRouter();
   const { setSelectedModel } = useAvatar();
-  const { userId } = useUser(); // ✅ userId depuis le contexte, pas depuis supabase.auth
+  const { userId } = useUser();
 
-  const [username,    setUsername]    = useState("");
-  const [email,       setEmail]       = useState("");
-  const [nom,         setNom]         = useState("");
-  const [prenom,      setPrenom]      = useState("");
-  const [avatarKey,   setAvatarKey]   = useState("avatar_1");
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [saving,      setSaving]      = useState(false);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState<string | null>(null);
+  const [username,           setUsername]           = useState("");
+  const [email,              setEmail]              = useState("");
+  const [nom,                setNom]                = useState("");
+  const [prenom,             setPrenom]             = useState("");
+  const [avatarKey,          setAvatarKey]          = useState("avatar_1");
+  const [showSuccess,        setShowSuccess]        = useState(false);
+  const [saving,             setSaving]             = useState(false);
+  const [loading,            setLoading]            = useState(true);
+  const [error,              setError]              = useState<string | null>(null);
+  // ← Avatars boutique débloqués par l'utilisateur
+  const [ownedBoutiqueKeys,  setOwnedBoutiqueKeys]  = useState<Set<string>>(new Set());
 
-  // ── Chargement du profil depuis la table users (pas supabase.auth) ──────────
+  // ── Chargement du profil + items possédés ────────────────────────────────
   useEffect(() => {
     const loadProfile = async () => {
       if (!userId) return;
       setLoading(true);
       try {
+        // Profil utilisateur
         const { data, error } = await supabase
           .from("users")
           .select("username, email, nom, prenom, avatar_url")
@@ -137,11 +144,29 @@ export default function EditProfileScreen() {
           console.warn("Erreur chargement profil :", error?.message);
           return;
         }
+
         setUsername(data.username ?? "");
-        setEmail(data.email ?? "");
-        setNom(data.nom ?? "");
-        setPrenom(data.prenom ?? "");
+        setEmail(data.email       ?? "");
+        setNom(data.nom           ?? "");
+        setPrenom(data.prenom     ?? "");
         setAvatarKey(data.avatar_url ?? "avatar_1");
+
+        // Items possédés (boutique)
+        const { data: ownedItems } = await supabase
+          .from("user_items")
+          .select("id_item")
+          .eq("id_user", userId);
+
+        const ownedItemIds = new Set((ownedItems ?? []).map((i: any) => i.id_item));
+
+        // Convertit les itemId en avatarKey boutique
+        const owned = new Set(
+          Object.entries(BOUTIQUE_ITEM_MAP)
+            .filter(([, itemId]) => ownedItemIds.has(itemId))
+            .map(([key]) => key)
+        );
+        setOwnedBoutiqueKeys(owned);
+
       } catch (e) {
         console.warn("Erreur chargement profil :", e);
       } finally {
@@ -151,7 +176,7 @@ export default function EditProfileScreen() {
     loadProfile();
   }, [userId]);
 
-  // ── Hibou flottant ───────────────────────────────────────────────────────────
+  // ── Hibou flottant ───────────────────────────────────────────────────────
   const hibouFloat = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.loop(
@@ -162,7 +187,7 @@ export default function EditProfileScreen() {
     ).start();
   }, []);
 
-  // ── Sauvegarde directe dans la table users ───────────────────────────────────
+  // ── Sauvegarde ───────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!userId) return;
 
@@ -194,7 +219,7 @@ export default function EditProfileScreen() {
         return;
       }
 
-      setSelectedModel(AVATAR_MAP[avatarKey]);
+      setSelectedModel(resolveAvatarModel(avatarKey));
       setShowSuccess(true);
 
     } catch (e: any) {
@@ -218,7 +243,7 @@ export default function EditProfileScreen() {
       <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={StyleSheet.absoluteFill} />
       <WaveBackground />
 
-      {/* Étoiles */}
+      {/* Étoiles animées */}
       {STAR_POSITIONS.map((s, i) => (
         <AnimatedStar
           key={i}
@@ -248,27 +273,40 @@ export default function EditProfileScreen() {
         {/* ── Avatar principal ── */}
         <View style={styles.mainAvatarWrapper}>
           <View style={styles.mainAvatarCircle}>
-            {AVATAR_MAP[avatarKey] ? (
-              <AvatarCrd model={AVATAR_MAP[avatarKey]} bgColor="#f0edff" />
-            ) : null}
+            <AvatarCrd model={resolveAvatarModel(avatarKey)} bgColor="#f0edff" />
           </View>
         </View>
 
         {/* ── Sélecteur d'avatar ── */}
         <View style={styles.avatarPickerCard}>
           <Text style={styles.sectionTitle}>Choisir un avatar</Text>
-          <View style={styles.avatarPickerRow}>
-            {AVATAR_OPTIONS.map((av) => (
-              <TouchableOpacity
-                key={av.key}
-                onPress={() => setAvatarKey(av.key)}
-                style={[styles.avatarThumb, avatarKey === av.key && styles.avatarThumbSelected]}
-                activeOpacity={0.8}
-              >
-                <AvatarCrd model={AVATAR_MAP[av.key]} bgColor="#e8e2ff" />
-              </TouchableOpacity>
-            ))}
-          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.avatarPickerRow}
+          >
+            {AVATAR_OPTIONS
+              .filter(av =>
+                // Toujours afficher les avatars de base
+                BASE_AVATAR_KEYS.has(av.key) ||
+                // Boutique : seulement si possédé
+                ownedBoutiqueKeys.has(av.key)
+              )
+              .map((av) => (
+                <TouchableOpacity
+                  key={av.key}
+                  onPress={() => setAvatarKey(av.key)}
+                  style={[
+                    styles.avatarThumb,
+                    avatarKey === av.key && styles.avatarThumbSelected,
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <AvatarCrd model={AVATAR_MAP[av.key]} bgColor="#e8e2ff" />
+                </TouchableOpacity>
+              ))
+            }
+          </ScrollView>
         </View>
 
         {/* ── Formulaire ── */}
@@ -362,25 +400,25 @@ export default function EditProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:     { flex: 1 },
-  header:        { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 54, paddingBottom: 10, zIndex: 10 },
-  headerTitle:   { fontSize: 22, fontWeight: "bold", color: "#5c3ca8", letterSpacing: 0.3 },
-  scroll:        { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 120, alignItems: "center" },
+  container:         { flex: 1 },
+  header:            { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 54, paddingBottom: 10, zIndex: 10 },
+  headerTitle:       { fontSize: 22, fontWeight: "bold", color: "#5c3ca8", letterSpacing: 0.3 },
+  scroll:            { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 120, alignItems: "center" },
   mainAvatarWrapper: { alignItems: "center", marginBottom: 16 },
   mainAvatarCircle:  { width: 120, height: 120, borderRadius: 60, backgroundColor: "#fff", borderWidth: 3, borderColor: "#e0d9ff", overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 6 },
   avatarPickerCard:  { width: "100%", backgroundColor: "#fff", borderRadius: 28, padding: 20, marginBottom: 16, alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 6 },
-  sectionTitle:  { fontSize: 15, fontWeight: "bold", color: "#5c3ca8", marginBottom: 14 },
-  avatarPickerRow:   { flexDirection: "row", gap: 10 },
+  sectionTitle:      { fontSize: 15, fontWeight: "bold", color: "#5c3ca8", marginBottom: 14 },
+  avatarPickerRow:   { flexDirection: "row", gap: 10, paddingHorizontal: 4 },
   avatarThumb:       { width: 52, height: 52, borderRadius: 26, overflow: "hidden", borderWidth: 2.5, borderColor: "transparent" },
   avatarThumbSelected: { borderColor: "#6949a8" },
-  formCard:      { width: "100%", backgroundColor: "#fff", borderRadius: 28, padding: 20, marginBottom: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 6 },
-  fieldLabel:    { fontSize: 16, color: "#000", fontWeight: "bold", marginBottom: 10 },
-  inputBox:      { backgroundColor: "#f8f7ff", borderRadius: 15, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: "#ece8ff" },
-  input:         { fontSize: 15, color: "#2d1a6e", fontWeight: "600" },
-  errorText:     { color: "#e05c5c", fontWeight: "bold", fontSize: 13, textAlign: "center", marginBottom: 10, paddingHorizontal: 10 },
-  saveBtn:       { width: "100%", borderRadius: 15, overflow: "hidden", marginBottom: 20, elevation: 7, shadowColor: "#6949a8", shadowOpacity: 0.3 },
-  saveBtnGradient: { flexDirection: "row", paddingVertical: 15, alignItems: "center", justifyContent: "center" },
-  saveBtnText:   { color: "#fff", fontWeight: "bold", fontSize: 16, letterSpacing: 0.4 },
-  hibouSection:  { width: "100%", alignItems: "flex-start", marginTop: 10 },
-  hibouImage:    { width: 180, height: 160 },
+  formCard:          { width: "100%", backgroundColor: "#fff", borderRadius: 28, padding: 20, marginBottom: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 6 },
+  fieldLabel:        { fontSize: 16, color: "#000", fontWeight: "bold", marginBottom: 10 },
+  inputBox:          { backgroundColor: "#f8f7ff", borderRadius: 15, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: "#ece8ff" },
+  input:             { fontSize: 15, color: "#2d1a6e", fontWeight: "600" },
+  errorText:         { color: "#e05c5c", fontWeight: "bold", fontSize: 13, textAlign: "center", marginBottom: 10, paddingHorizontal: 10 },
+  saveBtn:           { width: "100%", borderRadius: 15, overflow: "hidden", marginBottom: 20, elevation: 7, shadowColor: "#6949a8", shadowOpacity: 0.3 },
+  saveBtnGradient:   { flexDirection: "row", paddingVertical: 15, alignItems: "center", justifyContent: "center" },
+  saveBtnText:       { color: "#fff", fontWeight: "bold", fontSize: 16, letterSpacing: 0.4 },
+  hibouSection:      { width: "100%", alignItems: "flex-start", marginTop: 10 },
+  hibouImage:        { width: 180, height: 160 },
 });

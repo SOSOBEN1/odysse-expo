@@ -1,7 +1,8 @@
 import { Feather, FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
-import { useState } from "react";
+import * as SecureStore from "expo-secure-store";
+import { useEffect, useState } from "react";
 import { Alert, Text, TouchableOpacity, View } from "react-native";
 import UsernameInput from "../components/UsernameInput";
 import WaveBackground from "../components/waveBackground";
@@ -17,6 +18,11 @@ const AVATAR_MAP: Record<string, any> = {
   avatar_4: require("../assets/Avatar3D/garcon2.glb"),
   avatar_5: require("../assets/Avatar3D/garcon4.glb"),
 };
+
+const INTERVAL_MS         = 12 * 60 * 60 * 1000; // 12 heures
+const SECURE_EMAIL_KEY    = "remember_email";
+const SECURE_REMEMBER_KEY = "remember_me";
+const SECURE_PASSWORD_KEY = "remember_password";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -40,61 +46,128 @@ export default function LoginScreen() {
     { bottom: 80, left: 16,   size: 18, opacity: 0.55 },
   ];
 
+  // ── Au démarrage : recharger email/password si "remember me" était coché ──
+  useEffect(() => {
+    const loadSaved = async () => {
+      try {
+        const savedRemember = await SecureStore.getItemAsync(SECURE_REMEMBER_KEY);
+        if (savedRemember === "true") {
+          const savedEmail    = await SecureStore.getItemAsync(SECURE_EMAIL_KEY);
+          const savedPassword = await SecureStore.getItemAsync(SECURE_PASSWORD_KEY);
+          if (savedEmail)    setEmail(savedEmail);
+          if (savedPassword) setPassword(savedPassword);
+          setRemember(true);
+        }
+      } catch (e) {
+        console.warn("Erreur chargement remember me:", e);
+      }
+    };
+    loadSaved();
+  }, []);
+
+  // ── Sauvegarde ou suppression des credentials selon la checkbox ──
+  const handleRememberToggle = async () => {
+    const newValue = !remember;
+    setRemember(newValue);
+    if (!newValue) {
+      try {
+        await SecureStore.deleteItemAsync(SECURE_EMAIL_KEY);
+        await SecureStore.deleteItemAsync(SECURE_REMEMBER_KEY);
+        await SecureStore.deleteItemAsync(SECURE_PASSWORD_KEY);
+      } catch (e) {
+        console.warn("Erreur suppression remember me:", e);
+      }
+    }
+  };
+
   const handleLogin = async () => {
   if (!email || !password) {
     Alert.alert("Erreur", "Remplis tous les champs");
     return;
   }
-  setLoading(true);
+   setLoading(true);
   try {
-    // 1. Connexion via Supabase Auth (mot de passe haché)
+    // 1. Connexion via Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (authError || !authData.user) {
-  Alert.alert("Erreur Auth", authError?.message ?? "user null");  // ← message exact
-  return;
-}
+      Alert.alert("Erreur Auth", authError?.message ?? "user null");
+      return;
+    }
 
-// 2. Récupérer le profil via auth_id
-const { data, error } = await supabase
-  .from("users")
-  .select("id_user, avatar_url, username, prenom, nom")
-  .eq("auth_id", authData.user.id)
-  .single();
+    // 2. Récupérer le profil via auth_id
+    const { data, error } = await supabase
+      .from("users")
+      .select("id_user, avatar_url, username, prenom, nom")
+      .eq("auth_id", authData.user.id)
+      .single();
 
-if (error || !data) {
-  Alert.alert("Erreur Profil", error?.message ?? "data null");  // ← message exact
-  return;
-}
+    if (error || !data) {
+      Alert.alert("Erreur Profil", error?.message ?? "data null");
+      return;
+    }
 
-    // 3. Mettre à jour dernier_login
+    // 3. Sauvegarde/suppression credentials "remember me"
+    if (remember) {
+      try {
+        await SecureStore.setItemAsync(SECURE_EMAIL_KEY,    email);
+        await SecureStore.setItemAsync(SECURE_REMEMBER_KEY, "true");
+        await SecureStore.setItemAsync(SECURE_PASSWORD_KEY, password);
+      } catch (e) {
+        console.warn("Erreur sauvegarde remember me:", e);
+      }
+    } else {
+      try {
+        await SecureStore.deleteItemAsync(SECURE_EMAIL_KEY);
+        await SecureStore.deleteItemAsync(SECURE_REMEMBER_KEY);
+        await SecureStore.deleteItemAsync(SECURE_PASSWORD_KEY);
+      } catch (_) {}
+    }
+
+    // 4. Mettre à jour dernier_login
     await supabase
       .from("users")
       .update({ dernier_login: new Date().toISOString() })
       .eq("auth_id", authData.user.id);
 
-    // 4. Sync avatar
+    // 5. Sync avatar
     const avatarKey = data.avatar_url ?? "avatar_1";
     if (AVATAR_MAP[avatarKey]) {
       setSelectedModel(AVATAR_MAP[avatarKey]);
     }
 
-    // 5. Sync contexte
+    // 6. Sync userId + username dans contexte
     setUserId(data.id_user);
     setUsername(data.username ?? data.prenom ?? data.nom ?? "Joueur");
 
-    router.push("/frontend/screens/QuestionPeriodicScreen");
+    // 7. Vérifie la dernière fois que le questionnaire a été montré
+    const { data: statsData } = await supabase
+      .from("player_stats")
+      .select("last_periodic_questionnaire")
+      .eq("id_user", Number(data.id_user))
+      .maybeSingle();
+
+    const lastShown = statsData?.last_periodic_questionnaire;
+    const needsQuestionnaire =
+      !lastShown ||
+      Date.now() - new Date(lastShown).getTime() >= INTERVAL_MS;
+
+    // 8. Redirige selon le résultat
+    if (needsQuestionnaire) {
+      router.push("/frontend/screens/QuestionPeriodicScreen");
+    } else {
+      router.push("/frontend/screens/Dashbord");
+    }
 
   } catch (err) {
     Alert.alert("Erreur", "Une erreur est survenue");
   } finally {
     setLoading(false);
   }
-};
-  return (
+};  return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
       <WaveBackground />
 
@@ -123,7 +196,7 @@ if (error || !data) {
         />
 
         <View style={styles.optionsRow}>
-          <TouchableOpacity style={styles.remember} onPress={() => setRemember(!remember)}>
+          <TouchableOpacity style={styles.remember} onPress={handleRememberToggle}>
             <View style={[styles.checkbox, remember && styles.checkboxActive, { marginRight: 4 }]}>
               {remember && (
                 <Feather name="check" size={12} color="#fff" style={{ alignSelf: "center" }} />
@@ -131,9 +204,9 @@ if (error || !data) {
             </View>
             <Text style={styles.rememberText}>Se souvenir de moi</Text>
           </TouchableOpacity>
-         <TouchableOpacity onPress={() => router.push("/frontend/screens/forget-password")}>
-  <Text style={styles.forgot}>Mot de passe oublié?</Text>
-</TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/frontend/screens/forget-password")}>
+            <Text style={styles.forgot}>Mot de passe oublié?</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.buttonWrapper} onPress={handleLogin} disabled={loading}>

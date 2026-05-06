@@ -2,5 +2,8 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "jsx": "react-jsx"
-  }
+  },
+  "exclude": [
+    "app/supabase/functions"
+  ]
 }

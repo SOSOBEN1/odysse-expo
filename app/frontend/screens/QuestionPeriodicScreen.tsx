@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../constants/supabase";
 import { useRouter } from "expo-router";
 import { useUser } from "../constants/UserContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import QuestionChoix from "../components/QuestionChoix";
 import QuestionYesNo from "../components/QuestionYesNo";
@@ -12,7 +13,8 @@ import QuestionScale from "../components/Questionscale";
 import WaveBackground from "../components/waveBackground";
 import BackButton from "../components/BackButton";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ✅ Clé centralisée — doit correspondre exactement à celle dans usePeriodicQuestionnaire.ts
+const STORAGE_KEY = "last_periodic_questionnaire";
 
 type QuestionOption = {
   id: string;
@@ -36,8 +38,6 @@ type Answer = {
   option_id: string | null;
   value: number | null;
 };
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const CATEGORIES = ["stress", "energie", "organisation", "connaissance"] as const;
 
@@ -65,29 +65,10 @@ function clamp(val: number): number {
   return Math.min(100, Math.max(0, val));
 }
 
-// ─── Calcul des stats depuis les réponses ────────────────────────────────────
-function computeDerivedStats(base: {
-  energie: number;
-  stress: number;
-  connaissance: number;
-  organisation: number;
-}) {
-  return {
-    concentration: Math.min(100, Math.max(0, base.energie * 0.4 + base.connaissance * 0.6)),
-    serenite: Math.min(100, Math.max(0, 100 - base.stress)),
-    discipline: Math.min(100, Math.max(0, base.organisation * 0.7 + base.connaissance * 0.3)),
-  };
-}
-
 function computeStats(
   questions: Question[],
   answers: Record<string, Answer>
-): {
-  energie:      number;
-  stress:       number;
-  connaissance: number;
-  organisation: number;
-} {
+): { energie: number; stress: number; connaissance: number; organisation: number } {
   let energie = 50, stress = 50, connaissance = 50, organisation = 50;
 
   questions.forEach((q) => {
@@ -100,23 +81,21 @@ function computeStats(
       const note = ans.value ?? 1;
       const max  = q.max_value ?? 5;
       const min  = q.min_value ?? 1;
-      // note 1 → impact -4 | note 3 → impact 0 | note 5 → impact +4
+      // Normalise la note entre -4 et +4
       impact = ((note - min) / (max - min)) * 8 - 4;
     } else {
       const option = q.question_option.find((o) => o.value === ans.value);
       impact = option?.impact ?? 0;
     }
 
-    if (q.category === "stress")       stress        = clamp(stress        - impact);
-    if (q.category === "energie")      energie       = clamp(energie       + impact);
-    if (q.category === "connaissance") connaissance  = clamp(connaissance  + impact);
-    if (q.category === "organisation") organisation  = clamp(organisation  + impact);
+    if (q.category === "stress")       stress       = clamp(stress       - impact);
+    if (q.category === "energie")      energie      = clamp(energie      + impact);
+    if (q.category === "connaissance") connaissance = clamp(connaissance + impact);
+    if (q.category === "organisation") organisation = clamp(organisation + impact);
   });
 
   return { energie, stress, connaissance, organisation };
 }
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function QuestionPeriodicScreen() {
   const router     = useRouter();
@@ -132,6 +111,7 @@ export default function QuestionPeriodicScreen() {
     fetchAndPickQuestions();
   }, []);
 
+  // ─── Chargement des questions ──────────────────────────────────────────────
   const fetchAndPickQuestions = async () => {
     try {
       const { data, error } = await supabase
@@ -146,17 +126,17 @@ export default function QuestionPeriodicScreen() {
 
       const safeData: Question[] = (data ?? []).map((q: any) => ({
         id:              q.id,
-        text:            q.text ?? "Question inconnue",
-        type:            q.type ?? "multiple",
-        category:        q.category ?? "stress",
-        min_value:       q.min_value ?? 1,
-        max_value:       q.max_value ?? 5,
+        text:            q.text            ?? "Question inconnue",
+        type:            q.type            ?? "multiple",
+        category:        q.category        ?? "stress",
+        min_value:       q.min_value       ?? 1,
+        max_value:       q.max_value       ?? 5,
         question_option: (q.question_option ?? [])
           .map((opt: any) => ({
             id:          opt.id,
-            label:       opt.label ?? "Option",
-            value:       opt.value ?? 0,
-            impact:      opt.impact ?? 0,
+            label:       opt.label       ?? "Option",
+            value:       opt.value       ?? 0,
+            impact:      opt.impact      ?? 0,
             order_index: opt.order_index ?? 0,
           }))
           .sort((a: QuestionOption, b: QuestionOption) => a.order_index - b.order_index),
@@ -170,8 +150,7 @@ export default function QuestionPeriodicScreen() {
     }
   };
 
-  // ── Derived state ──────────────────────────────────────────────────────────
-
+  // ─── Dérivés de l'état ─────────────────────────────────────────────────────
   const currentQuestion = questions[currentIndex];
   const progress        = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
   const currentAnswer   = currentQuestion ? answers[currentQuestion.id] : undefined;
@@ -181,8 +160,7 @@ export default function QuestionPeriodicScreen() {
     currentAnswer.value !== null &&
     currentAnswer.value !== undefined;
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
+  // ─── Handlers de réponse ───────────────────────────────────────────────────
   const handleOptionAnswer = (numericValue: number) => {
     if (!currentQuestion) return;
     const opt = currentQuestion.question_option.find((o) => o.value === numericValue);
@@ -210,8 +188,7 @@ export default function QuestionPeriodicScreen() {
     }));
   };
 
-  // ── Navigation ─────────────────────────────────────────────────────────────
-
+  // ─── Navigation ────────────────────────────────────────────────────────────
   const handleNext = async () => {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex((prev) => prev + 1);
@@ -224,8 +201,7 @@ export default function QuestionPeriodicScreen() {
     if (currentIndex > 0) setCurrentIndex((prev) => prev - 1);
   };
 
-  // ── Save ───────────────────────────────────────────────────────────────────
-const saveAnswers = async () => {
+  const saveAnswers = async () => {
   if (!userId) {
     Alert.alert("Erreur", "Utilisateur non connecté");
     return;
@@ -234,61 +210,60 @@ const saveAnswers = async () => {
   setSaving(true);
 
   try {
-    // ── 1. réponses brutes ──────────────────────────────
+    // 1. Insérer les réponses
     const rows = questions
       .map((q) => {
         const ans = answers[q.id];
         if (!ans || ans.value === null) return null;
-
         return {
-          user_id: userId,
+          user_id:     userId,
           question_id: q.id,
-          option_id: ans.option_id,
-          value: ans.value,
+          option_id:   ans.option_id,
+          value:       ans.value,
         };
       })
       .filter(Boolean);
 
     if (rows.length === 0) {
       Alert.alert("Attention", "Aucune réponse à enregistrer");
+      setSaving(false);
       return;
     }
 
-    const { error: insertError } = await supabase
-      .from("response")
-      .insert(rows);
-
+    const { error: insertError } = await supabase.from("response").insert(rows);
     if (insertError) throw insertError;
 
-    // ── 2. stats de base uniquement ─────────────────────
+    // 2. Calculer les stats
     const stats = computeStats(questions, answers);
+    const now   = new Date().toISOString();
 
-    // ── 3. UPDATE DB SANS STATS DÉRIVÉES ────────────────
+    // 3. Upsert player_stats — timestamp inclus ici directement
     const { error: statsError } = await supabase
       .from("player_stats")
       .upsert(
         {
-          id_user: userId,
-          energie: stats.energie,
-          stress: stats.stress,
-          connaissance: stats.connaissance,
-          organisation: stats.organisation,
-          date_maj: new Date().toISOString(),
+          id_user:                      userId,
+          energie:                      stats.energie,
+          stress:                       stats.stress,
+          connaissance:                 stats.connaissance,
+          organisation:                 stats.organisation,
+          date_maj:                     now,
+          last_periodic_questionnaire:  now, // ✅ mis à jour seulement après succès
         },
         { onConflict: "id_user" }
       );
-
     if (statsError) throw statsError;
 
-    // ── 4. historique ───────────────────────────────────
-    await supabase.from("stat_history").insert({
-      id_user: userId,
-      energie: stats.energie,
-      stress: stats.stress,
+    // 4. Historique
+    const { error: historyError } = await supabase.from("stat_history").insert({
+      id_user:      userId,
+      energie:      stats.energie,
+      stress:       stats.stress,
       connaissance: stats.connaissance,
       organisation: stats.organisation,
-      cause: "Questionnaire périodique",
+      cause:        "Questionnaire périodique",
     });
+    if (historyError) throw historyError;
 
     router.push("/frontend/screens/Dashbord");
 
@@ -298,8 +273,8 @@ const saveAnswers = async () => {
     setSaving(false);
   }
 };
-  // ── Render question ────────────────────────────────────────────────────────
 
+  // ─── Rendu des questions ───────────────────────────────────────────────────
   const renderQuestion = () => {
     if (!currentQuestion) return <Text>Aucune question disponible</Text>;
 
@@ -349,8 +324,7 @@ const saveAnswers = async () => {
     }
   };
 
-  // ── Loading ────────────────────────────────────────────────────────────────
-
+  // ─── États de chargement ───────────────────────────────────────────────────
   if (loading) {
     return (
       <LinearGradient colors={["#ffffff", "#EDE7FF"]} style={{ flex: 1 }}>
@@ -373,8 +347,7 @@ const saveAnswers = async () => {
     );
   }
 
-  // ── Main render ────────────────────────────────────────────────────────────
-
+  // ─── Rendu principal ───────────────────────────────────────────────────────
   return (
     <LinearGradient colors={["#ffffff", "#EDE7FF"]} style={{ flex: 1 }}>
       <WaveBackground />
@@ -395,7 +368,9 @@ const saveAnswers = async () => {
         <View style={{ width: 26 }} />
       </View>
 
-      <View style={styles.cardWrapper}>{renderQuestion()}</View>
+      <View style={styles.cardWrapper}>
+        {renderQuestion()}
+      </View>
 
       <View style={styles.bottomButtons}>
         <TouchableOpacity
@@ -425,7 +400,6 @@ const saveAnswers = async () => {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   header: {
     marginTop: 60,
@@ -464,7 +438,7 @@ const styles = StyleSheet.create({
   cardWrapper: {
     flex: 1,
     justifyContent: "flex-start",
-    marginTop: 60,
+    marginTop: 80,
   },
   bottomButtons: {
     flexDirection: "row",

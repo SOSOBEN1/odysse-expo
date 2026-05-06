@@ -60,7 +60,7 @@ export default function RegisterScreen() {
     const nom    = parts[0];
     const prenom = parts.slice(1).join(" ") || "";
 
-    // ✅ ETAPE 1 : Créer le compte dans Supabase Auth (mot de passe haché)
+    // ETAPE 1 : Créer le compte dans Supabase Auth
     const { data: authData, error: authError } =
       await supabase.auth.signUp({ email, password });
 
@@ -69,15 +69,14 @@ export default function RegisterScreen() {
       return;
     }
 
-    // ✅ ETAPE 2 : Insérer dans la table users SANS password + avec auth_id
+    // ETAPE 2 : Insérer dans la table users avec auth_id
     const { data: dbUser, error: dbError } = await supabase
       .from("users")
       .insert([{
-        auth_id:       authData.user.id,  // ← UUID Supabase Auth
+        auth_id:       authData.user.id,
         nom,
         prenom,
         email,
-        // ⚠️ plus de password ici
         progression:   0,
         gold:          0,
         date_inscr:    new Date().toISOString().split("T")[0],
@@ -91,7 +90,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    // ✅ ETAPE 3 : Sauvegarder l'id dans le contexte
+    // ETAPE 3 : Sauvegarder l'id dans le contexte
     setUserId(dbUser.id_user);
 
     setFullName("");

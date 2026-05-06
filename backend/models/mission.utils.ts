@@ -97,15 +97,26 @@ export const isDeadlinePassed = (dateLimite: Date | null): boolean => {
 };
 
 // ── Calculer le % de progression du timer ────────────────────
-export const computeProgressPercent = (
+export function computeProgressPercent(
   elapsed: number,
-  durationStr: string,
+  duration: string,
   state: TimerState
-): number => {
-  if (state === "done" || state === "fail") return 100;
-  const estimatedSec = (parseDurationToMinutes(durationStr) ?? 30) * 60;
-  return Math.min(Math.round((elapsed / estimatedSec) * 100), 99);
-};
+): number {
+  if (state === "done") return 100;
+  if (state === "fail") return 100;
+
+  // Convertir "1h30" → secondes
+  const match = duration?.match(/(\d+)h(\d*)/);
+  if (!match) return 0;
+
+  const totalSeconds =
+    (parseInt(match[1]) || 0) * 3600 +
+    (parseInt(match[2]) || 0) * 60;
+
+  if (totalSeconds === 0) return 0;
+
+  return Math.min(100, Math.round((elapsed / totalSeconds) * 100));
+}
 
 // ── Début de journée (minuit) ─────────────────────────────────
 export const getTodayBounds = (): { start: Date; end: Date } => {

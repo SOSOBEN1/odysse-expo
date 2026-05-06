@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
+import { useEffect, useRef, useState } from "react";
 import {
   ScrollView, StatusBar, StyleSheet, Text,
   TouchableOpacity, View,
@@ -15,10 +16,12 @@ import { useMissions } from "../../../backend/viewmodels/useMissions";
 import AvatarCrd from "../components/AvatarCrd";
 import CreateEventModal from "../components/CreateEventModal";
 import CreateMissionModal from "../components/CreateMissionModal";
+import ExitMissionModal from "../components/ExitMissionModal";
 import MissionStatusModal from "../components/MissionStatusModals";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
+import { supabase } from "../constants/supabase"; // ✅ ajout
 import { useUser } from "../constants/UserContext";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 
@@ -37,14 +40,14 @@ type Tab = (typeof TABS)[number];
 
 const IconEdit = () => (
   <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-    <Path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke={COLORS.missionTabActive} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
-    <Path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z" stroke={COLORS.missionTabActive} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke={COLORS.missionTabActive} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z" stroke={COLORS.missionTabActive} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
 const IconDelete = () => (
   <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-    <Path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" stroke={COLORS.missionUrgentText} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" stroke={COLORS.missionUrgentText} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
@@ -53,9 +56,9 @@ const IconDelete = () => (
 // ─────────────────────────────────────────────────────────────
 
 const difficultyConfig: Record<Difficulty, any> = {
-  Difficile: { label: "🔥 Difficile", badgeBg: COLORS.diffHard,   eventBg: COLORS.diffHardEvent, progressColor: COLORS.diffHard,   iconBg: COLORS.diffHardEvent, flame: "🔥", cardBg: "rgba(255,255,255,0.93)", btnBg: COLORS.diffHardEvent },
-  Moyen:     { label: "🔥 Moyen",    badgeBg: COLORS.diffMedium,  eventBg: COLORS.diffMedium,    progressColor: COLORS.diffMedium, iconBg: COLORS.diffMedium,    flame: "🔥", cardBg: "rgba(255,245,225,0.95)", btnBg: COLORS.diffMedium },
-  Facile:    { label: "💧 Facile",   badgeBg: COLORS.diffEasy,    eventBg: COLORS.diffEasyEvent, progressColor: COLORS.diffEasy,   iconBg: COLORS.diffEasy,      flame: "💧", cardBg: "rgba(235,245,255,0.93)", btnBg: COLORS.diffEasyEvent },
+  Difficile: { label: "🔥 Difficile", badgeBg: COLORS.diffHard, eventBg: COLORS.diffHardEvent, progressColor: COLORS.diffHard, iconBg: COLORS.diffHardEvent, flame: "🔥", cardBg: "rgba(255,255,255,0.93)", btnBg: COLORS.diffHardEvent },
+  Moyen:     { label: "🔥 Moyen",    badgeBg: COLORS.diffMedium, eventBg: COLORS.diffMedium, progressColor: COLORS.diffMedium, iconBg: COLORS.diffMedium, flame: "🔥", cardBg: "rgba(255,245,225,0.95)", btnBg: COLORS.diffMedium },
+  Facile:    { label: "💧 Facile",   badgeBg: COLORS.diffEasy, eventBg: COLORS.diffEasyEvent, progressColor: COLORS.diffEasy, iconBg: COLORS.diffEasy, flame: "💧", cardBg: "rgba(235,245,255,0.93)", btnBg: COLORS.diffEasyEvent },
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -65,17 +68,17 @@ const difficultyConfig: Record<Difficulty, any> = {
 function MissionCard({
   mission, timer, onDelete, onEdit, onStart, onPause, onFinish,
 }: {
-  mission:  Mission;
-  timer:    MissionTimer;
+  mission: Mission;
+  timer: MissionTimer;
   onDelete: (id: number) => void;
-  onEdit:   (m: Mission) => void;
-  onStart:  (id: number) => void;
-  onPause:  (id: number) => void;
+  onEdit: (m: Mission) => void;
+  onStart: (id: number) => void;
+  onPause: (id: number) => void;
   onFinish: (id: number) => void;
 }) {
-  const cfg       = difficultyConfig[mission.difficulty];
-  const isDone    = timer.state === "done";
-  const isFail    = timer.state === "fail";
+  const cfg      = difficultyConfig[mission.difficulty];
+  const isDone   = timer.state === "done";
+  const isFail   = timer.state === "fail";
   const isRunning = timer.state === "running";
   const isPaused  = timer.state === "paused";
   const isActive  = isRunning || isPaused;
@@ -207,30 +210,81 @@ function MissionCard({
 // ─────────────────────────────────────────────────────────────
 
 export default function MissionsScreen() {
-  const [activeTab,             setActiveTab]             = useState<Tab>("Tout");
-  const [isMissionModalVisible, setMissionModalVisible]   = useState(false);
-  const [isEventModalVisible,   setEventModalVisible]     = useState(false);
-  const [selectedData,          setSelectedData]          = useState<any>(null);
+  const [activeTab, setActiveTab]               = useState<Tab>("Tout");
+  const [isMissionModalVisible, setMissionModalVisible] = useState(false);
+  const [isEventModalVisible, setEventModalVisible]     = useState(false);
+  const [selectedData, setSelectedData]         = useState<any>(null);
 
-  const { selectedModel }             = useAvatar();
-  const { userId, username: ctxUsername } = useUser();
+  const navigation            = useNavigation();
+  const { selectedModel, setSelectedModel } = useAvatar(); // ✅ ajout setSelectedModel
+  const { userId, username: ctxUsername }   = useUser();
+  const isFocused = useIsFocused();
 
-  // ✅ Toute la logique métier vient du hook
-const {
-  missions,
-  loading,
-  statusModal,
-  getTimer,
-  handleStart,
-  handlePause,
-  handleFinish,
-  handleDelete,
-  buildEditPayload,
-  loadMissions,
-  closeStatusModal,
-} = useMissions(userId !== null ? String(userId) : null);
+  // ✅ State pour le nom et l'avatar récupérés depuis la DB
+  const [displayName, setDisplayName] = useState<string>(ctxUsername || "...");
 
-  const filteredMissions = missions.filter(m => {
+  // ✅ Fetch username + avatar depuis Supabase (même logique que HomeScreen/Dashboard)
+  useEffect(() => {
+    if (!userId) return;
+    const fetchUserProfile = async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("username, prenom, nom, avatar_url")
+        .eq("id_user", userId)
+        .single();
+
+      if (error || !data) return;
+
+      // Nom affiché : username > prenom > nom > ctxUsername > fallback
+      const name =
+        data.username ??
+        data.prenom ??
+        data.nom ??
+        ctxUsername ??
+        "Joueur";
+      setDisplayName(name);
+
+      // Avatar depuis la DB
+      if (data.avatar_url) {
+        setSelectedModel(data.avatar_url);
+      }
+    };
+    fetchUserProfile();
+  }, [userId, ctxUsername]);
+
+  const {
+    missions,
+    loading,
+    statusModal,
+    exitModal,
+    getTimer,
+    handleStart,
+    handlePause,
+    handleFinish,
+    handleDelete,
+    buildEditPayload,
+    loadMissions,
+    closeStatusModal,
+    requestExit,
+    handlePauseAndLeave,
+    handleLeaveRunning,
+    handleCancelExit,
+  } = useMissions(userId !== null ? String(userId) : null);
+
+  // ── Intercepter la navigation si mission en cours ───────────
+  const wasFocused = useRef(false);
+  useEffect(() => {
+    if (wasFocused.current && !isFocused) {
+      const hasRunning = missions.some((m) => {
+        const t = getTimer(m.id);
+        return t.state === "running";
+      });
+      if (hasRunning) requestExit(() => {});
+    }
+    wasFocused.current = isFocused;
+  }, [isFocused, missions, getTimer, requestExit]);
+
+  const filteredMissions = missions.filter((m) => {
     if (activeTab === "Urgent")         return m.urgent;
     if (activeTab === "Aujourd'hui")    return m.today;
     if (activeTab === "Par Événements") return m.event !== null;
@@ -248,6 +302,7 @@ const {
       <WaveBackground />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* ── Header avec nom + avatar depuis la DB ── */}
         <View style={styles.header}>
           <View style={styles.avatarCircle}>
             {selectedModel ? (
@@ -258,7 +313,8 @@ const {
           </View>
           <View>
             <Text style={styles.greeting}>
-              Bonjour, <Text style={styles.greetingName}>{ctxUsername || "..."}!</Text>
+              {/* ✅ displayName au lieu de ctxUsername */}
+              Bonjour, <Text style={styles.greetingName}>{displayName}!</Text>
             </Text>
             <Text style={styles.subGreeting}>{filteredMissions.length} missions</Text>
           </View>
@@ -296,16 +352,22 @@ const {
           />
         ))}
 
-        <TouchableOpacity style={styles.createBtn} onPress={() => { setSelectedData(null); setMissionModalVisible(true); }}>
+        <TouchableOpacity
+          style={styles.createBtn}
+          onPress={() => { setSelectedData(null); setMissionModalVisible(true); }}
+        >
           <Text style={styles.createBtnText}>＋  Créer mission</Text>
         </TouchableOpacity>
       </ScrollView>
 
+      {/* Modals */}
       <MissionStatusModal
         visible={statusModal.visible}
         type={statusModal.type}
         missionTitle={statusModal.missionTitle}
         dateLimit={statusModal.dateLimit}
+        xp={statusModal.xp}
+        coins={statusModal.coins}
         onClose={closeStatusModal}
       />
 
@@ -323,306 +385,82 @@ const {
         initialData={selectedData}
       />
 
-      <Navbar active="missions" onChange={() => {}} />
+      <ExitMissionModal
+        visible={exitModal.visible}
+        onPauseAndLeave={handlePauseAndLeave}
+        onLeaveRunning={handleLeaveRunning}
+        onCancel={handleCancelExit}
+      />
+
+      <Navbar
+        active="missions"
+        onChange={() => {}}
+        onBeforeNavigate={requestExit}
+      />
     </View>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Styles (identiques à l'original)
+//  Styles
 // ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f3ff",
-  },
-  scrollContent: {
-    paddingTop: 60,
-    paddingHorizontal: SIZES.padding,
-    paddingBottom: 120,
-  },
-
-
-  // Header
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginBottom: 24,
- 
-  },
-  avatarCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: "#fff",
-    borderWidth: 3,
-    borderColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    ...SHADOWS.medium,
-  },
-  avatarEmoji: { fontSize: 36 },
-  greeting: { fontSize: 24, color: "#2d1a5e" },
-  greetingName: { fontWeight: "800", color: "#2d1a5e" },
-  subGreeting: { color: "#7a5bbf", fontWeight: "600", fontSize: 14 },
-
-
-  // Section row
-  sectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    fontWeight: "800",
-    fontSize: 20,
-    color: "#2d1a5e",
-  },
-  countBadge: {
-    backgroundColor: "#6c3fcb",
-    borderRadius: 12,
-    paddingHorizontal: 9,
-    paddingVertical: 2,
-  },
-  countText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 13,
-  },
-
-
-  // Tabs
-  tabsContainer: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 24,
-    paddingRight: 8,
-  },
-  tab: {
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: "#c0a8f0",
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  tabActive: {
-    backgroundColor: "#6c3fcb",
-    borderWidth: 0,
-    ...SHADOWS.light,
-  },
-  tabText: {
-    color: "#6c3fcb",
-    fontWeight: "700",
-    fontSize: 13,
-  },
-  tabTextActive: {
-    color: "#fff",
-  },
-  tabCount: {
-    backgroundColor: "#ede0ff",
-    borderRadius: 10,
-    minWidth: 20,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    alignItems: "center",
-  },
-  tabCountActive: {
-    backgroundColor: "rgba(255,255,255,0.3)",
-  },
-  tabCountText: {
-    color: "#6c3fcb",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  tabCountTextActive: {
-    color: "#fff",
-  },
-
-
-  // Card wrapper
-  cardWrapper: {
-    marginBottom: 24,
-  },
-
-
-  // Event badge
-  eventBadge: {
-    alignSelf: "flex-start",
-    borderRadius: 20,
-    paddingVertical: 6,
-    paddingHorizontal: 22,
-    marginLeft: 14,
-    marginBottom: -14,
-    zIndex: 2,
-    ...SHADOWS.light,
-  },
-  eventBadgeText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  // Spacer when no event badge (keeps card alignment consistent)
-  eventBadgeSpacer: {
-    height: 0,
-  },
-
-
-  // Urgent banner
-  urgentBanner: {
-    backgroundColor: "#fff0f7",
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    alignSelf: "flex-start",
-    marginBottom: 10,
-  },
-  urgentText: {
-    color: "#e84393",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-
-
-  // Card body
-  card: {
-    borderRadius: 20,
-    paddingTop: 24,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-    zIndex: 1,
-    ...SHADOWS.medium,
-  },
-
-
-  // Top row inside card
-  topRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  iconBox: {
-    width: 58,
-    height: 58,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    ...SHADOWS.light,
-  },
-  iconText: { fontSize: 26 },
-
-
-  infoBox: { flex: 1 },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 6,
-    flexWrap: "wrap",
-  },
-  missionTitle: {
-    fontWeight: "800",
-    fontSize: 17,
-    color: "#2d1a5e",
-    flexShrink: 1,
-  },
-  diffBadge: {
-    borderRadius: 20,
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-  },
-  diffBadgeText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  duration: {
-    color: "#9b8bbf",
-    fontWeight: "600",
-    fontSize: 13,
-    marginTop: 3,
-  },
-  description: {
-    color: "#5a5080",
-    fontSize: 13,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-
-
-  // Progress + button
-  bottomRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginTop: 14,
-  },
-  progressContainer: {
-    flex: 1,
-    gap: 4,
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: 8,
-    backgroundColor: "rgba(180,160,220,0.25)",
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 8,
-  },
-  progressLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  continueBtn: {
-    borderRadius: 14,
-    paddingVertical: 9,
-    paddingHorizontal: 18,
-    ...SHADOWS.light,
-  },
-  continueBtnText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 13,
-    letterSpacing: 0.4,
-  },
-
-
-  // Empty state
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 48,
-    gap: 12,
-  },
-  emptyEmoji: {
-    fontSize: 48,
-  },
-  emptyText: {
-    color: "#9b8bbf",
-    fontWeight: "600",
-    fontSize: 15,
-  },
-
-
-  // Create mission CTA
-  createBtn: {
-    backgroundColor: "#4b2fa0",
-    borderRadius: 30,
-    paddingVertical: 15,
-    alignItems: "center",
-    marginTop: 8,
-    ...SHADOWS.medium,
-  },
-  createBtnText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 17,
-    letterSpacing: 0.3,
-  },
+  container:        { flex: 1, backgroundColor: COLORS.missionBg },
+  scrollContent:    { paddingTop: 60, paddingHorizontal: SIZES.padding, paddingBottom: 150 },
+  header:           { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 24 },
+  avatarCircle:     { width: 70, height: 70, borderRadius: 35, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center", ...SHADOWS.medium },
+  avatarEmoji:      { fontSize: 36 },
+  greeting:         { fontSize: 24, color: COLORS.missionHeading },
+  greetingName:     { fontWeight: "800" },
+  subGreeting:      { color: COLORS.missionSub, fontWeight: "600" },
+  sectionRow:       { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  sectionTitle:     { fontWeight: "800", fontSize: 20, color: COLORS.missionHeading },
+  countBadge:       { backgroundColor: COLORS.missionTabActive, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 2 },
+  countText:        { color: COLORS.background, fontWeight: "800", fontSize: 13 },
+  tabsContainer:    { flexDirection: "row", gap: 8, marginBottom: 24 },
+  tab:              { borderRadius: 20, borderWidth: 2, borderColor: COLORS.missionTabBorder, paddingVertical: 7, paddingHorizontal: 14 },
+  tabActive:        { backgroundColor: COLORS.missionTabActive, borderWidth: 0 },
+  tabText:          { color: COLORS.missionTabActive, fontWeight: "700" },
+  tabTextActive:    { color: COLORS.background },
+  emptyText:        { textAlign: "center", color: COLORS.missionDuration, marginTop: 40 },
+  cardWrapper:      { marginBottom: 24 },
+  eventBadge:       { alignSelf: "flex-start", borderRadius: 20, paddingVertical: 6, paddingHorizontal: 22, marginLeft: 14, marginBottom: -14, zIndex: 2, ...SHADOWS.light },
+  eventBadgeText:   { color: COLORS.background, fontWeight: "700" },
+  eventBadgeSpacer: { height: 0 },
+  card:             { borderRadius: 20, paddingTop: 24, paddingBottom: 12, paddingHorizontal: 16, ...SHADOWS.medium },
+  cardActionsBottom:{ flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.cardDivider },
+  actionIconBtn:    { width: 32, height: 32, borderRadius: 8, backgroundColor: COLORS.cardActionBg, alignItems: "center", justifyContent: "center" },
+  urgentBanner:     { backgroundColor: COLORS.missionUrgentBg, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, alignSelf: "flex-start", marginBottom: 10 },
+  urgentText:       { color: COLORS.missionUrgentText, fontWeight: "700", fontSize: 12 },
+  topRow:           { flexDirection: "row", gap: 12 },
+  iconBox:          { width: 58, height: 58, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+  iconText:         { fontSize: 26 },
+  infoBox:          { flex: 1 },
+  titleRow:         { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  missionTitle:     { fontWeight: "800", fontSize: 17, color: COLORS.missionHeading, flex: 1 },
+  diffBadge:        { borderRadius: 20, paddingVertical: 4, paddingHorizontal: 12 },
+  diffBadgeText:    { color: COLORS.background, fontWeight: "700", fontSize: 12 },
+  duration:         { color: COLORS.missionDuration, marginTop: 3 },
+  description:      { color: COLORS.missionDesc, fontSize: 13, marginTop: 4 },
+  deadlineText:     { fontSize: 11, fontWeight: "700", marginTop: 4 },
+  chronoBox:        { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginTop: 12 },
+  chronoRunning:    { backgroundColor: "#fff8e1" },
+  chronoPaused:     { backgroundColor: "#f3f4f6" },
+  chronoDone:       { backgroundColor: "#e8f5e9" },
+  chronoFail:       { backgroundColor: "#fee2e2" },
+  chronoText:       { fontWeight: "700", fontSize: 14 },
+  chronoPulse:      { width: 8, height: 8, borderRadius: 4 },
+  bottomRow:        { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14 },
+  progressContainer:{ flex: 1 },
+  progressTrack:    { height: 8, borderRadius: 8, backgroundColor: COLORS.missionProgress },
+  progressFill:     { height: "100%", borderRadius: 8 },
+  progressLabel:    { fontSize: 11, fontWeight: "700", marginTop: 4 },
+  btnGroup:         { flexDirection: "row", alignItems: "center", gap: 8 },
+  finishBtn:        { width: 36, height: 36, borderRadius: 10, backgroundColor: "#e8f5e9", alignItems: "center", justifyContent: "center" },
+  finishBtnText:    { fontSize: 18 },
+  continueBtn:      { borderRadius: 14, paddingVertical: 9, paddingHorizontal: 14 },
+  continueBtnText:  { color: COLORS.background, fontWeight: "800", fontSize: 12 },
+  createBtn:        { backgroundColor: COLORS.missionCreateBtn, borderRadius: 30, paddingVertical: 15, alignItems: "center", marginTop: 8 },
+  createBtnText:    { color: COLORS.background, fontWeight: "800", fontSize: 17 },
 });

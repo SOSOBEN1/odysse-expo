@@ -66,14 +66,15 @@ export default function RegisterScreen() {
         return;
       }
 
-      // ✅ ETAPE 2 : Insérer dans la table users
+      // ✅ ETAPE 2 : Insérer dans la table users SANS password + avec auth_id
       const { data: dbUser, error: dbError } = await supabase
         .from("users")
         .insert([{
+          auth_id:       authData.user!.id,  // ← UUID Supabase Auth
           nom,
           prenom,
           email,
-          password,
+          // ⚠️ plus de password ici
           progression:   0,
           gold:          0,
           date_inscr:    new Date().toISOString().split("T")[0],

@@ -173,38 +173,40 @@ export default function CreateMissionModal({ visible, onClose, onSave, initialDa
     setSaving(true);
     try {
       const gains = computeGains(difficulty as number, priority as number);
+const missionData = {
+  titre:       title.trim(),
+  description: description.trim() || null,
+  duree_min:   dureeMin ? parseInt(dureeMin) : null,
+  difficulte:  difficulty,
+  priorite:    priority,
+  date_limite: dateLimite ? dateLimite.toISOString() : null,
+  ...gains,
+  id_boss: initialData?.id_boss ?? null,
+};
 
-      const missionData = {
-        titre:       title.trim(),
-        description: description.trim() || null,
-        duree_min:   dureeMin ? parseInt(dureeMin) : null,
-        difficulte:  difficulty,
-        priorite:    priority,
-        date_limite: dateLimite ? dateLimite.toISOString() : null,
-        ...gains,
-        id_boss: initialData?.id_boss ?? null,
-      };
+let result;
 
-      let result;
-
-      if (initialData?.id_mission) {
-        const { data, error } = await supabase
-          .from("mission")
-          .update(missionData)
-          .eq("id_mission", initialData.id_mission)
-          .select()
-          .single();
-        if (error) throw error;
-        result = data;
-      } else {
-        const { data, error } = await supabase
-          .from("mission")
-          .insert(missionData)
-          .select()
-          .single();
-        if (error) throw error;
-        result = data;
-      }
+if (initialData?.id_mission) {
+  const { data, error } = await supabase
+    .from("mission")
+    .update(missionData)
+    .eq("id_mission", initialData.id_mission)
+    .select()
+    .single();
+  if (error) throw error;
+  result = data;
+} else {
+  const { data, error } = await supabase
+    .from("mission")
+    .insert({
+      ...missionData,
+      id_user: userId,  // ✅ ajouter ici
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  result = data;
+}
 
       onSave(result);
       onClose();

@@ -291,7 +291,7 @@ export function useMissions(userId: string | null) {
   // ─────────────────────────────────────────────────────────
 
   const buildEditPayload = useCallback((mission: Mission) => ({
-    id:          mission.id,
+     id_mission:  mission.id, 
     titre:       mission.title,
     description: mission.description,
     duration:    mission.duration,

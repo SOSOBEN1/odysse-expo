@@ -3,7 +3,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Text, TouchableOpacity, View } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import UsernameInput from "../components/UsernameInput";
 import WaveBackground from "../components/waveBackground";
@@ -20,10 +19,10 @@ const AVATAR_MAP: Record<string, any> = {
   avatar_5: require("../assets/Avatar3D/garcon4.glb"),
 };
 
-const INTERVAL_MS          = 12 * 60 * 60 * 1000; // 12 heures
-const STORAGE_EMAIL_KEY    = "remember_email";
-const STORAGE_REMEMBER_KEY = "remember_me";
-const SECURE_PASSWORD_KEY  = "remember_password";
+const INTERVAL_MS         = 12 * 60 * 60 * 1000; // 12 heures
+const SECURE_EMAIL_KEY    = "remember_email";
+const SECURE_REMEMBER_KEY = "remember_me";
+const SECURE_PASSWORD_KEY = "remember_password";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -51,9 +50,9 @@ export default function LoginScreen() {
   useEffect(() => {
     const loadSaved = async () => {
       try {
-        const savedRemember = await AsyncStorage.getItem(STORAGE_REMEMBER_KEY);
+        const savedRemember = await SecureStore.getItemAsync(SECURE_REMEMBER_KEY);
         if (savedRemember === "true") {
-          const savedEmail    = await AsyncStorage.getItem(STORAGE_EMAIL_KEY);
+          const savedEmail    = await SecureStore.getItemAsync(SECURE_EMAIL_KEY);
           const savedPassword = await SecureStore.getItemAsync(SECURE_PASSWORD_KEY);
           if (savedEmail)    setEmail(savedEmail);
           if (savedPassword) setPassword(savedPassword);
@@ -71,10 +70,9 @@ export default function LoginScreen() {
     const newValue = !remember;
     setRemember(newValue);
     if (!newValue) {
-      // L'utilisateur décoche → on efface tout
       try {
-        await AsyncStorage.removeItem(STORAGE_EMAIL_KEY);
-        await AsyncStorage.removeItem(STORAGE_REMEMBER_KEY);
+        await SecureStore.deleteItemAsync(SECURE_EMAIL_KEY);
+        await SecureStore.deleteItemAsync(SECURE_REMEMBER_KEY);
         await SecureStore.deleteItemAsync(SECURE_PASSWORD_KEY);
       } catch (e) {
         console.warn("Erreur suppression remember me:", e);
@@ -89,52 +87,63 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
+      // 1. Connexion via Supabase Auth (mot de passe haché)
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError || !authData.user) {
+        Alert.alert("Erreur Auth", authError?.message ?? "user null");
+        return;
+      }
+
+      // 2. Récupérer le profil via auth_id
       const { data, error } = await supabase
         .from("users")
         .select("id_user, avatar_url, username, prenom, nom")
-        .eq("email", email)
-        .eq("password", password)
+        .eq("auth_id", authData.user.id)
         .single();
 
       if (error || !data) {
-        Alert.alert("Erreur", "Email ou mot de passe incorrect");
+        Alert.alert("Erreur Profil", error?.message ?? "data null");
         return;
       }
 
       // ── Sauvegarde credentials si "remember me" coché ──
       if (remember) {
         try {
-          await AsyncStorage.setItem(STORAGE_EMAIL_KEY,    email);
-          await AsyncStorage.setItem(STORAGE_REMEMBER_KEY, "true");
+          await SecureStore.setItemAsync(SECURE_EMAIL_KEY,    email);
+          await SecureStore.setItemAsync(SECURE_REMEMBER_KEY, "true");
           await SecureStore.setItemAsync(SECURE_PASSWORD_KEY, password);
         } catch (e) {
           console.warn("Erreur sauvegarde remember me:", e);
         }
       } else {
-        // Connexion réussie mais sans remember → on nettoie au cas où
         try {
-          await AsyncStorage.removeItem(STORAGE_EMAIL_KEY);
-          await AsyncStorage.removeItem(STORAGE_REMEMBER_KEY);
+          await SecureStore.deleteItemAsync(SECURE_EMAIL_KEY);
+          await SecureStore.deleteItemAsync(SECURE_REMEMBER_KEY);
           await SecureStore.deleteItemAsync(SECURE_PASSWORD_KEY);
         } catch (_) {}
       }
 
+      // 3. Mettre à jour dernier_login
       await supabase
         .from("users")
         .update({ dernier_login: new Date().toISOString() })
-        .eq("id_user", data.id_user);
+        .eq("auth_id", authData.user.id);
 
-      // ✅ Sync avatar
+      // 4. Sync avatar
       const avatarKey = data.avatar_url ?? "avatar_1";
       if (AVATAR_MAP[avatarKey]) {
         setSelectedModel(AVATAR_MAP[avatarKey]);
       }
 
-      // ✅ Sync userId + username dans contexte
+      // 5. Sync userId + username dans contexte
       setUserId(data.id_user);
       setUsername(data.username ?? data.prenom ?? data.nom ?? "Joueur");
 
-      // ✅ Vérifie la dernière fois que le questionnaire a été montré
+      // 6. Vérifie la dernière fois que le questionnaire a été montré
       const { data: statsData } = await supabase
         .from("player_stats")
         .select("last_periodic_questionnaire")
@@ -146,7 +155,7 @@ export default function LoginScreen() {
         !lastShown ||
         Date.now() - new Date(lastShown).getTime() >= INTERVAL_MS;
 
-      // ✅ Redirige selon le résultat
+      // 7. Redirige selon le résultat
       if (needsQuestionnaire) {
         router.push("/frontend/screens/QuestionPeriodicScreen");
       } else {
@@ -189,7 +198,6 @@ export default function LoginScreen() {
         />
 
         <View style={styles.optionsRow}>
-          {/* ✅ Checkbox "Se souvenir de moi" maintenant fonctionnelle */}
           <TouchableOpacity style={styles.remember} onPress={handleRememberToggle}>
             <View style={[styles.checkbox, remember && styles.checkboxActive, { marginRight: 4 }]}>
               {remember && (

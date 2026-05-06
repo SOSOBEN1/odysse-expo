@@ -23,6 +23,7 @@ export const fetchMissions = async (
   userId: string
 ): Promise<{ missions: Mission[]; timers: Record<number, MissionTimer> }> => {
 
+  // 1. Récupérer les validations de l'utilisateur
   const { data: validations, error: errV } = await supabase
     .from("mission_validation")
     .select("id_validation, id_mission, date_debut, date_fin, xp_obtenu, statut")
@@ -30,23 +31,33 @@ export const fetchMissions = async (
 
   if (errV) throw errV;
 
+  // Map id_mission → validation la plus récente
   const validationMap: Record<number, any> = {};
-  (validations ?? []).forEach(v => { validationMap[v.id_mission] = v; });
+  (validations ?? []).forEach(v => {
+    const existing = validationMap[v.id_mission];
+    if (!existing || new Date(v.date_debut) > new Date(existing.date_debut)) {
+      validationMap[v.id_mission] = v;
+    }
+  });
 
-  const { data: missionsData, error: errM } = await supabase
-    .from("mission")
-    .select(`
-      id_mission,
-      titre,
-      description,
-      duree_min,
-      difficulte,
-      priorite,
-      id_boss,
-      date_limite,
-      boss_events ( nom )
-    `)
-    .order("id_mission", { ascending: false });
+  // ✅ Récupérer TOUTES les missions — mais créées par l'utilisateur
+  // Si tes missions ont un id_user dans la table → filtre ici
+  // Sinon, récupère toutes + on affiche selon validation
+ const { data: missionsData, error: errM } = await supabase
+  .from("mission")
+  .select(`
+    id_mission,
+    titre,
+    description,
+    duree_min,
+    difficulte,
+    priorite,
+    id_boss,
+    date_limite,
+    boss_events ( nom )
+  `)
+  .eq("id_user", userId)  // ✅ filtre par utilisateur
+  .order("id_mission", { ascending: false });
 
   if (errM) throw errM;
 

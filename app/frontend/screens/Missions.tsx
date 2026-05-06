@@ -16,6 +16,7 @@ import ExitMissionModal from "../components/ExitMissionModal";
 import { useUser } from "../constants/UserContext";
 import { useAvatar } from "../constants/AvatarContext";
 import AvatarCrd from "../components/AvatarCrd";
+import { supabase } from "../constants/supabase"; // ✅ ajout
 import { useMissions } from "../../../backend/viewmodels/useMissions";
 import type { Mission } from "../../../backend/models/mission.types";
 import {
@@ -217,9 +218,41 @@ export default function MissionsScreen() {
   const [selectedData, setSelectedData]         = useState<any>(null);
 
   const navigation            = useNavigation();
-  const { selectedModel }     = useAvatar();
-  const { userId, username: ctxUsername } = useUser();
+  const { selectedModel, setSelectedModel } = useAvatar(); // ✅ ajout setSelectedModel
+  const { userId, username: ctxUsername }   = useUser();
   const isFocused = useIsFocused();
+
+  // ✅ State pour le nom et l'avatar récupérés depuis la DB
+  const [displayName, setDisplayName] = useState<string>(ctxUsername || "...");
+
+  // ✅ Fetch username + avatar depuis Supabase (même logique que HomeScreen/Dashboard)
+  useEffect(() => {
+    if (!userId) return;
+    const fetchUserProfile = async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("username, prenom, nom, avatar_url")
+        .eq("id_user", userId)
+        .single();
+
+      if (error || !data) return;
+
+      // Nom affiché : username > prenom > nom > ctxUsername > fallback
+      const name =
+        data.username ??
+        data.prenom ??
+        data.nom ??
+        ctxUsername ??
+        "Joueur";
+      setDisplayName(name);
+
+      // Avatar depuis la DB
+      if (data.avatar_url) {
+        setSelectedModel(data.avatar_url);
+      }
+    };
+    fetchUserProfile();
+  }, [userId, ctxUsername]);
 
   const {
     missions,
@@ -241,18 +274,17 @@ export default function MissionsScreen() {
   } = useMissions(userId !== null ? String(userId) : null);
 
   // ── Intercepter la navigation si mission en cours ───────────
-const wasFocused = useRef(false);
-useEffect(() => {
-  if (wasFocused.current && !isFocused) {
-    // Vérifier si une mission est en cours via les missions chargées
-    const hasRunning = missions.some((m) => {
-      const t = getTimer(m.id);
-      return t.state === "running";
-    });
-    if (hasRunning) requestExit(() => {});
-  }
-  wasFocused.current = isFocused;
-}, [isFocused, missions, getTimer, requestExit]);
+  const wasFocused = useRef(false);
+  useEffect(() => {
+    if (wasFocused.current && !isFocused) {
+      const hasRunning = missions.some((m) => {
+        const t = getTimer(m.id);
+        return t.state === "running";
+      });
+      if (hasRunning) requestExit(() => {});
+    }
+    wasFocused.current = isFocused;
+  }, [isFocused, missions, getTimer, requestExit]);
 
   const filteredMissions = missions.filter((m) => {
     if (activeTab === "Urgent")         return m.urgent;
@@ -272,6 +304,7 @@ useEffect(() => {
       <WaveBackground />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* ── Header avec nom + avatar depuis la DB ── */}
         <View style={styles.header}>
           <View style={styles.avatarCircle}>
             {selectedModel ? (
@@ -282,7 +315,8 @@ useEffect(() => {
           </View>
           <View>
             <Text style={styles.greeting}>
-              Bonjour, <Text style={styles.greetingName}>{ctxUsername || "..."}!</Text>
+              {/* ✅ displayName au lieu de ctxUsername */}
+              Bonjour, <Text style={styles.greetingName}>{displayName}!</Text>
             </Text>
             <Text style={styles.subGreeting}>{filteredMissions.length} missions</Text>
           </View>
@@ -360,11 +394,11 @@ useEffect(() => {
         onCancel={handleCancelExit}
       />
 
-     <Navbar
-  active="missions"
-  onChange={() => {}}
-  onBeforeNavigate={requestExit}  // ✅ requestExit vient déjà du hook
-/>
+      <Navbar
+        active="missions"
+        onChange={() => {}}
+        onBeforeNavigate={requestExit}
+      />
     </View>
   );
 }

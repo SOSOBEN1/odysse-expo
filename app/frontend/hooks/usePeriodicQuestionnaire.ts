@@ -3,10 +3,11 @@ import { useRouter } from "expo-router";
 import { useUser } from "../constants/UserContext";
 import { supabase } from "../constants/supabase";
 
-const INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 heures
+const INTERVAL_MS     = 12 * 60 * 60 * 1000; // 12 heures
+const ONBOARDING_GRACE = 5 * 60 * 1000;       // 5 minutes — délai post-inscription
 
 export function usePeriodicQuestionnaire() {
-  const router = useRouter();
+  const router     = useRouter();
   const { userId } = useUser();
 
   useEffect(() => {
@@ -18,8 +19,8 @@ export function usePeriodicQuestionnaire() {
 
         const { data, error } = await supabase
           .from("player_stats")
-          .select("last_periodic_questionnaire")
-          .eq("id_user", Number(userId)) // ✅ forcer en nombre
+          .select("last_periodic_questionnaire, date_maj")
+          .eq("id_user", Number(userId))
           .maybeSingle();
 
         console.log("📊 player_stats data:", data, "error:", error);
@@ -29,21 +30,33 @@ export function usePeriodicQuestionnaire() {
           return;
         }
 
-        // Pas de ligne ou colonne null → première fois
+        // ── Garde onboarding ──────────────────────────────────────
+        // Si player_stats vient d'être créé (< 5 min), c'est une
+        // inscription récente → on ne redirige pas vers le periodic
+        if (data?.date_maj) {
+          const age = Date.now() - new Date(data.date_maj).getTime();
+          if (age < ONBOARDING_GRACE) {
+            console.log("🟢 Inscription récente → pas de redirection périodique");
+            return;
+          }
+        }
+
+        // ── Pas de timestamp → première vraie connexion ───────────
         if (!data || !data.last_periodic_questionnaire) {
           console.log("⚠️ Pas de timestamp → redirection questionnaire");
-          router.push("/frontend/screens/QuestionPeriodic");
+          router.push("/frontend/screens/QuestionPeriodicScreen" as any);
           return;
         }
 
-        const elapsed = Date.now() - new Date(data.last_periodic_questionnaire).getTime();
-        const heuresRestantes = ((INTERVAL_MS - elapsed) / (1000 * 60 * 60)).toFixed(1);
+        // ── Vérification des 12h ──────────────────────────────────
+        const elapsed          = Date.now() - new Date(data.last_periodic_questionnaire).getTime();
+        const heuresRestantes  = ((INTERVAL_MS - elapsed) / (1000 * 60 * 60)).toFixed(1);
 
         console.log(`⏱️ Elapsed: ${(elapsed / 3600000).toFixed(1)}h — Restant: ${heuresRestantes}h`);
 
         if (elapsed >= INTERVAL_MS) {
           console.log("✅ 12h écoulées → redirection questionnaire");
-          router.push("/frontend/screens/QuestionPeriodic");
+          router.push("/frontend/screens/QuestionPeriodicScreen" as any);
         } else {
           console.log("🟢 Pas encore 12h → dashboard normal");
         }

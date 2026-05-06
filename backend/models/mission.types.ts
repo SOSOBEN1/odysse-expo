@@ -28,6 +28,7 @@ export interface Mission {
 // statut retiré : il est maintenant dans MissionValidationRow (par user)
 export interface MissionRow {
   id_mission: number;
+   id_user?:          number | null;
   titre: string | null;
   description: string | null;
   duree_min: number | null;
@@ -60,6 +61,7 @@ export interface MissionTimer {
 
 // ── Payload création / mise à jour ───────────────────────────
 export interface MissionCreatePayload {
+    id_user?:          number | null;
   titre: string;
   description: string | null;
   duree_min: number | null;

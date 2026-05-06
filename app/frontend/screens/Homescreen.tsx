@@ -383,13 +383,13 @@ export default function HomeScreen() {
     try {
       const { data, error } = await supabase
         .from("users")
-        .select("nom, prenom, username, xp, coins, gold, niveau, energie, avatar_url")
+.select("nom, prenom, username, xp, gold, id_level, energie, avatar_url")
         .eq("id_user", userId)
         .single();
 
       if (error || !data) return;
 
-      const niveau = data.niveau ?? 1;
+      const niveau = data.id_level ?? 1;
       const maxXp  = niveau * 500;
       const xp     = data.xp ?? 0;
       const xpInCurrentLevel = xp % maxXp;
@@ -408,7 +408,7 @@ export default function HomeScreen() {
         level:    niveau,
         xp:       xpInCurrentLevel,
         maxXp,
-        coins:    data.coins ?? data.gold ?? 0,
+     coins: data.gold ?? 0,
         energie:  data.energie ?? 100,
       });
     } catch (err: any) {
@@ -451,6 +451,7 @@ export default function HomeScreen() {
               <Text style={styles.coinIcon}>🪙</Text>
               <Text style={styles.coinsText}>{userStats.coins.toLocaleString()}</Text>
             </View>
+            
             <View style={styles.headerIcons}>
               <NotifIcone onPress={() => {
   router.push("/frontend/screens/NotificationsScreen");

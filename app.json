@@ -2,5 +2,8 @@
   "plugins": [
     "expo-asset",
     "expo-secure-store"
-  ]
+  ],
+  "android": {
+    "package": "com.anonymous.odysse"
+  }
 }

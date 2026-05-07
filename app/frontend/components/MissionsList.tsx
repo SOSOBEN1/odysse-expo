@@ -3,6 +3,8 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-nati
 import { COLORS, SHADOWS } from "../styles/theme";
 import CreateMissionModal from "./CreateMissionModal";
 import { useRouter } from "expo-router";
+import SuggestedMissionsSectionDB from "./SuggestedMissionsSectionDB";
+import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
 
 type Mission = {
   id: string;
@@ -177,6 +179,11 @@ const suggestedStyles = StyleSheet.create({
 export default function MissionsList({ missions, onAdd }: Props) {
   const router = useRouter(); // ✅
   const [showModal, setShowModal] = useState(false);
+  // ── Handler mission suggérée démarrée ─────────────────────
+  const handleSuggestedMissionStart = (mission: MissionSuggestion) => {
+    console.log("Mission suggérée démarrée:", mission.title);
+  };
+  
 
   return (
     <View style={styles.container}>
@@ -207,26 +214,10 @@ export default function MissionsList({ missions, onAdd }: Props) {
         <Text style={styles.addBtnText}>+ Créer une mission</Text>
       </TouchableOpacity>
 
-      {/* ── Missions suggérées ── */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Missions suggérées ✨</Text>
-        <TouchableOpacity>
-          <Text style={styles.seeAll}>Voir tout</Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.sectionSubtitle}>Basées sur ton profil et tes objectifs</Text>
+       {/* ── Suggestions intelligentes basées sur les stats ── */}
+               <SuggestedMissionsSectionDB maxSuggestions={5} onMissionStart={handleSuggestedMissionStart} />
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.suggestedScroll}
-      >
-        {SUGGESTED.map((m) => (
-          <View key={m.id} style={styles.suggestedCardWrapper}>
-            <SuggestedMissionCard mission={m} />
-          </View>
-        ))}
-      </ScrollView>
+   
 
       {/* ── Astuce ── */}
       <View style={styles.tipCard}>

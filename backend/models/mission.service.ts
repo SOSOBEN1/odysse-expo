@@ -58,7 +58,7 @@ export const fetchMissions = async (
     boss_events ( nom )
   `)
   
-    .or(`id_user.eq.${userId},id_defi.not.is.null`)
+    .eq("id_user", userId) 
   .order("id_mission", { ascending: false });
 
   if (errM) throw errM;

@@ -485,3 +485,58 @@ export const fetchRecentMissions = async (
       : "-",
   }));
 };
+// ─────────────────────────────────────────────────────────────
+//  fetchZoneMissions
+// ─────────────────────────────────────────────────────────────
+
+export const fetchZoneMissions = async (
+  userId: string,
+  zoneId: number
+): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from("mission")
+    .select("*")
+    .eq("id_user", userId)
+    .eq("id_zone", zoneId);
+
+  if (error) throw error;
+  return data ?? [];
+};
+
+// ─────────────────────────────────────────────────────────────
+//  fetchSuggestions — missions sans zone assignée
+// ─────────────────────────────────────────────────────────────
+
+export const fetchSuggestions = async (
+  userId: string
+): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from("mission")
+    .select("*")
+    .eq("id_user", userId)
+    .is("id_zone", null)
+    .order("priorite", { ascending: false })
+    .limit(10);
+
+  if (error) throw error;
+  return data ?? [];
+};
+
+// ─────────────────────────────────────────────────────────────
+//  assignMissionToZone
+// ─────────────────────────────────────────────────────────────
+
+export const assignMissionToZone = async (
+  missionId: number,
+  zoneId: number
+): Promise<any> => {
+  const { data, error } = await supabase
+    .from("mission")
+    .update({ id_zone: zoneId })
+    .eq("id_mission", missionId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};

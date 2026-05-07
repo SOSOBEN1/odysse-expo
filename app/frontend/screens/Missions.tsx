@@ -1,31 +1,29 @@
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useEffect, useState } from "react";
 import {
   ScrollView, StatusBar, StyleSheet, Text,
   TouchableOpacity, View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import { useNavigation } from "@react-navigation/native";
-import { useIsFocused } from "@react-navigation/native";
+import type { Mission, MissionTimer } from "../../../backend/models/mission.types";
+import {
+  computeProgressPercent,
+  formatDateLimite,
+  formatElapsed,
+  getDeadlineColor,
+} from "../../../backend/models/mission.utils";
+import { useMissions } from "../../../backend/viewmodels/useMissions";
+import AvatarCrd from "../components/AvatarCrd";
+import CreateEventModal from "../components/CreateEventModal";
+import CreateMissionModal from "../components/CreateMissionModal";
+import ExitMissionModal from "../components/ExitMissionModal";
+import MissionStatusModal from "../components/MissionStatusModals";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
-import { COLORS, SHADOWS, SIZES } from "../styles/theme";
-import CreateMissionModal from "../components/CreateMissionModal";
-import CreateEventModal from "../components/CreateEventModal";
-import MissionStatusModal from "../components/MissionStatusModals";
-import ExitMissionModal from "../components/ExitMissionModal";
-import { useUser } from "../constants/UserContext";
 import { useAvatar } from "../constants/AvatarContext";
-import AvatarCrd from "../components/AvatarCrd";
-import { supabase } from "../constants/supabase"; // ✅ ajout
-import { useMissions } from "../../../backend/viewmodels/useMissions";
-import type { Mission } from "../../../backend/models/mission.types";
-import {
-  formatElapsed,
-  formatDateLimite,
-  getDeadlineColor,
-  computeProgressPercent,
-} from "../../../backend/models/mission.utils";
-import type { MissionTimer } from "../../../backend/models/mission.types";
+import { supabase } from "../constants/supabase";
+import { useUser } from "../constants/UserContext";
+import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 
 // ─────────────────────────────────────────────────────────────
 //  Constants
@@ -217,15 +215,11 @@ export default function MissionsScreen() {
   const [isEventModalVisible, setEventModalVisible]     = useState(false);
   const [selectedData, setSelectedData]         = useState<any>(null);
 
-  const navigation            = useNavigation();
-  const { selectedModel, setSelectedModel } = useAvatar(); // ✅ ajout setSelectedModel
+  const { selectedModel, setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername }   = useUser();
-  const isFocused = useIsFocused();
 
-  // ✅ State pour le nom et l'avatar récupérés depuis la DB
   const [displayName, setDisplayName] = useState<string>(ctxUsername || "...");
 
-  // ✅ Fetch username + avatar depuis Supabase (même logique que HomeScreen/Dashboard)
   useEffect(() => {
     if (!userId) return;
     const fetchUserProfile = async () => {
@@ -237,7 +231,6 @@ export default function MissionsScreen() {
 
       if (error || !data) return;
 
-      // Nom affiché : username > prenom > nom > ctxUsername > fallback
       const name =
         data.username ??
         data.prenom ??
@@ -246,7 +239,6 @@ export default function MissionsScreen() {
         "Joueur";
       setDisplayName(name);
 
-      // Avatar depuis la DB
       if (data.avatar_url) {
         setSelectedModel(data.avatar_url);
       }
@@ -273,18 +265,12 @@ export default function MissionsScreen() {
     handleCancelExit,
   } = useMissions(userId !== null ? String(userId) : null);
 
-  // ── Intercepter la navigation si mission en cours ───────────
-  const wasFocused = useRef(false);
-  useEffect(() => {
-    if (wasFocused.current && !isFocused) {
-      const hasRunning = missions.some((m) => {
-        const t = getTimer(m.id);
-        return t.state === "running";
-      });
-      if (hasRunning) requestExit(() => {});
-    }
-    wasFocused.current = isFocused;
-  }, [isFocused, missions, getTimer, requestExit]);
+  // ── Recharger les timers persistés à chaque retour sur l'écran ──
+  useFocusEffect(
+    useCallback(() => {
+      loadMissions();
+    }, [loadMissions])
+  );
 
   const filteredMissions = missions.filter((m) => {
     if (activeTab === "Urgent")         return m.urgent;
@@ -304,7 +290,6 @@ export default function MissionsScreen() {
       <WaveBackground />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* ── Header avec nom + avatar depuis la DB ── */}
         <View style={styles.header}>
           <View style={styles.avatarCircle}>
             {selectedModel ? (
@@ -315,7 +300,6 @@ export default function MissionsScreen() {
           </View>
           <View>
             <Text style={styles.greeting}>
-              {/* ✅ displayName au lieu de ctxUsername */}
               Bonjour, <Text style={styles.greetingName}>{displayName}!</Text>
             </Text>
             <Text style={styles.subGreeting}>{filteredMissions.length} missions</Text>

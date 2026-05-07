@@ -1,7 +1,8 @@
 {
   "plugins": [
     "expo-asset",
-    "expo-secure-store"
+    "expo-secure-store",
+    "expo-web-browser"
   ],
   "android": {
     "package": "com.anonymous.odysse"

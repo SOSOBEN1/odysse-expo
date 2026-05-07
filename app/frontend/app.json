@@ -8,6 +8,9 @@
     "scheme": "odysse",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "name": "odysse",
+    "slug": "odysse",
+    "scheme": "odysse",
     "ios": {
       "supportsTablet": true
     },

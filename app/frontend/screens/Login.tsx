@@ -1,15 +1,19 @@
 import { Feather, FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import * as AuthSession from "expo-auth-session";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { Alert, Text, TouchableOpacity, View } from "react-native";
-import * as SecureStore from "expo-secure-store";
 import UsernameInput from "../components/UsernameInput";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import styles from "../styles/LoginStyle";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const AVATAR_MAP: Record<string, any> = {
   avatar_1: require("../assets/Avatar3D/fille1.glb"),
@@ -19,7 +23,7 @@ const AVATAR_MAP: Record<string, any> = {
   avatar_5: require("../assets/Avatar3D/garcon4.glb"),
 };
 
-const INTERVAL_MS         = 12 * 60 * 60 * 1000; // 12 heures
+const INTERVAL_MS         = 12 * 60 * 60 * 1000;
 const SECURE_EMAIL_KEY    = "remember_email";
 const SECURE_REMEMBER_KEY = "remember_me";
 const SECURE_PASSWORD_KEY = "remember_password";
@@ -46,7 +50,6 @@ export default function LoginScreen() {
     { bottom: 80, left: 16,   size: 18, opacity: 0.55 },
   ];
 
-  // ── Au démarrage : recharger email/password si "remember me" était coché ──
   useEffect(() => {
     const loadSaved = async () => {
       try {
@@ -65,7 +68,6 @@ export default function LoginScreen() {
     loadSaved();
   }, []);
 
-  // ── Sauvegarde ou suppression des credentials selon la checkbox ──
   const handleRememberToggle = async () => {
     const newValue = !remember;
     setRemember(newValue);
@@ -80,6 +82,47 @@ export default function LoginScreen() {
     }
   };
 
+  // ── Sync profil après OAuth ──
+  const syncProfileAndRedirect = async (authUserId: string) => {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id_user, avatar_url, username, prenom, nom")
+      .eq("auth_id", authUserId)
+      .single();
+
+    if (error || !data) {
+      Alert.alert("Erreur Profil", error?.message ?? "data null");
+      return;
+    }
+
+    await supabase
+      .from("users")
+      .update({ dernier_login: new Date().toISOString() })
+      .eq("auth_id", authUserId);
+
+    const avatarKey = data.avatar_url ?? "avatar_1";
+    if (AVATAR_MAP[avatarKey]) setSelectedModel(AVATAR_MAP[avatarKey]);
+
+    setUserId(data.id_user);
+    setUsername(data.username ?? data.prenom ?? data.nom ?? "Joueur");
+
+    const { data: statsData } = await supabase
+      .from("player_stats")
+      .select("last_periodic_questionnaire")
+      .eq("id_user", Number(data.id_user))
+      .maybeSingle();
+
+    const lastShown = statsData?.last_periodic_questionnaire;
+    const needsQuestionnaire =
+      !lastShown || Date.now() - new Date(lastShown).getTime() >= INTERVAL_MS;
+
+    if (needsQuestionnaire) {
+      router.push("/frontend/screens/QuestionPeriodicScreen");
+    } else {
+      router.push("/frontend/screens/Dashbord");
+    }
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Erreur", "Remplis tous les champs");
@@ -87,7 +130,6 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      // 1. Connexion via Supabase Auth (mot de passe haché)
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -98,19 +140,6 @@ export default function LoginScreen() {
         return;
       }
 
-      // 2. Récupérer le profil via auth_id
-      const { data, error } = await supabase
-        .from("users")
-        .select("id_user, avatar_url, username, prenom, nom")
-        .eq("auth_id", authData.user.id)
-        .single();
-
-      if (error || !data) {
-        Alert.alert("Erreur Profil", error?.message ?? "data null");
-        return;
-      }
-
-      // ── Sauvegarde credentials si "remember me" coché ──
       if (remember) {
         try {
           await SecureStore.setItemAsync(SECURE_EMAIL_KEY,    email);
@@ -127,40 +156,7 @@ export default function LoginScreen() {
         } catch (_) {}
       }
 
-      // 3. Mettre à jour dernier_login
-      await supabase
-        .from("users")
-        .update({ dernier_login: new Date().toISOString() })
-        .eq("auth_id", authData.user.id);
-
-      // 4. Sync avatar
-      const avatarKey = data.avatar_url ?? "avatar_1";
-      if (AVATAR_MAP[avatarKey]) {
-        setSelectedModel(AVATAR_MAP[avatarKey]);
-      }
-
-      // 5. Sync userId + username dans contexte
-      setUserId(data.id_user);
-      setUsername(data.username ?? data.prenom ?? data.nom ?? "Joueur");
-
-      // 6. Vérifie la dernière fois que le questionnaire a été montré
-      const { data: statsData } = await supabase
-        .from("player_stats")
-        .select("last_periodic_questionnaire")
-        .eq("id_user", Number(data.id_user))
-        .maybeSingle();
-
-      const lastShown = statsData?.last_periodic_questionnaire;
-      const needsQuestionnaire =
-        !lastShown ||
-        Date.now() - new Date(lastShown).getTime() >= INTERVAL_MS;
-
-      // 7. Redirige selon le résultat
-      if (needsQuestionnaire) {
-        router.push("/frontend/screens/QuestionPeriodicScreen");
-      } else {
-        router.push("/frontend/screens/Dashbord");
-      }
+      await syncProfileAndRedirect(authData.user.id);
 
     } catch (err) {
       Alert.alert("Erreur", "Une erreur est survenue");
@@ -169,6 +165,41 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+  try {
+    const redirectUrl = AuthSession.makeRedirectUri({
+      scheme: "odysse",
+      path: "auth/callback",
+    });
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: redirectUrl },
+    });
+
+    if (error || !data?.url) {
+      Alert.alert("Erreur Google", error?.message ?? "URL manquante");
+      return;
+    }
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+    if (result.type === "success") {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !sessionData.session?.user) {
+        Alert.alert("Erreur", "Impossible de récupérer la session Google");
+        return;
+      }
+
+      await syncProfileAndRedirect(sessionData.session.user.id);
+    } else {
+      Alert.alert("Annulé", "Connexion Google annulée");
+    }
+  } catch (err) {
+    Alert.alert("Erreur", "Connexion Google échouée");
+  }
+};
   return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
       <WaveBackground />
@@ -229,7 +260,7 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.socialRow}>
-          <TouchableOpacity style={styles.socialBtn}>
+          <TouchableOpacity style={styles.socialBtn} onPress={handleGoogleLogin}>
             <FontAwesome5 name="google" size={22} color="#EA4335" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.socialBtn}>

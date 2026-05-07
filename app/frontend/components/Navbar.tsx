@@ -1,12 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-<<<<<<< HEAD
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
-=======
-
->>>>>>> sonia
 type Props = {
   active: string;
   onChange: (key: string) => void;

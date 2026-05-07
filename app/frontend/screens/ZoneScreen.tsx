@@ -1,19 +1,18 @@
 /**
  * ZoneScreen.tsx
- * ✅ Nouvelles fonctionnalités :
- * - Dialog "Pause ou Continue" quand on quitte avec un timer actif
- * - Mission échouée → bouton "Recommencer"
- * - Bouton "Modifier" sur chaque mission (titre + description)
+ * ✅ Fix : useFocusEffect pour relancer loadAll() au retour sur la page
+ *         → le timer "laisser tourner" reprend correctement son elapsed
  */
 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Animated, Dimensions, Easing, Image, Modal,
   ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
+import { useZoneMissions } from "../../../backend/viewmodels/UseZoneMissions";
 import SuccessModal from "../components/SuccessModal";
 import ZoneUnlockedModal from "../components/ZoneUnlockedModal";
 import { supabase } from "../constants/supabase";
@@ -76,21 +75,12 @@ function ExitConfirmModal({ visible, accent, onPauseAndLeave, onContinueAndLeave
           <Text style={modalStyles.subtitle}>
             Une mission est en cours. Que veux-tu faire ?
           </Text>
-
-          <TouchableOpacity
-            style={[modalStyles.btn, { backgroundColor: accent }]}
-            onPress={onPauseAndLeave}
-          >
+          <TouchableOpacity style={[modalStyles.btn, { backgroundColor: accent }]} onPress={onPauseAndLeave}>
             <Text style={modalStyles.btnText}>⏸ Mettre en pause et quitter</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[modalStyles.btn, { backgroundColor: "#f59e0b" }]}
-            onPress={onContinueAndLeave}
-          >
+          <TouchableOpacity style={[modalStyles.btn, { backgroundColor: "#f59e0b" }]} onPress={onContinueAndLeave}>
             <Text style={modalStyles.btnText}>▶ Laisser tourner et quitter</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={modalStyles.cancelBtn} onPress={onCancel}>
             <Text style={modalStyles.cancelText}>Annuler</Text>
           </TouchableOpacity>
@@ -108,7 +98,7 @@ function EditMissionModal({ visible, mission, onSave, onCancel }: {
   onSave: (id: number, titre: string, description: string) => void;
   onCancel: () => void;
 }) {
-  const [titre, setTitre]           = useState("");
+  const [titre, setTitre]             = useState("");
   const [description, setDescription] = useState("");
 
   useEffect(() => {
@@ -125,7 +115,6 @@ function EditMissionModal({ visible, mission, onSave, onCancel }: {
       <View style={modalStyles.overlay}>
         <View style={[modalStyles.box, { paddingBottom: 24 }]}>
           <Text style={modalStyles.title}>✏️ Modifier la mission</Text>
-
           <Text style={editStyles.label}>Titre</Text>
           <TextInput
             style={editStyles.input}
@@ -134,7 +123,6 @@ function EditMissionModal({ visible, mission, onSave, onCancel }: {
             placeholder="Titre de la mission"
             maxLength={80}
           />
-
           <Text style={editStyles.label}>Description</Text>
           <TextInput
             style={[editStyles.input, { height: 90, textAlignVertical: "top" }]}
@@ -144,7 +132,6 @@ function EditMissionModal({ visible, mission, onSave, onCancel }: {
             multiline
             maxLength={300}
           />
-
           <TouchableOpacity
             style={[modalStyles.btn, { backgroundColor: "#7f5af0", marginTop: 8 }]}
             onPress={() => onSave(mission.id_mission, titre.trim(), description.trim())}
@@ -152,7 +139,6 @@ function EditMissionModal({ visible, mission, onSave, onCancel }: {
           >
             <Text style={modalStyles.btnText}>💾 Sauvegarder</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={modalStyles.cancelBtn} onPress={onCancel}>
             <Text style={modalStyles.cancelText}>Annuler</Text>
           </TouchableOpacity>
@@ -264,7 +250,6 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
       isDone && { backgroundColor: "#f0fdf4" },
       isFail && { backgroundColor: "#fff1f1" },
     ]}>
-      {/* Header */}
       <View style={styles.missionHeader}>
         <View style={[styles.missionIconBox, { backgroundColor: DIFF_BG[mission.difficulte] ?? "#f3f4f6" }]}>
           <Text style={{ fontSize: 20 }}>{mission.difficulte === 1 ? "💧" : "🔥"}</Text>
@@ -282,13 +267,8 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
             <Text style={styles.metaText}>🧩 +1 pièce</Text>
           </View>
         </View>
-
-        {/* Bouton modifier */}
         {!isDone && (
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => onEdit(mission)}
-          >
+          <TouchableOpacity style={styles.editBtn} onPress={() => onEdit(mission)}>
             <Ionicons name="pencil" size={14} color="#9b87c9" />
           </TouchableOpacity>
         )}
@@ -298,7 +278,6 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
         <Text style={styles.missionDesc} numberOfLines={2}>{mission.description}</Text>
       ) : null}
 
-      {/* Chrono */}
       {(isActive || isDone || isFail) && (
         <View style={[
           styles.chronoBox,
@@ -314,7 +293,7 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
           ]}>
             {isDone ? "✅ Mission terminée !" :
              isFail ? "❌ Temps écoulé — mission échouée" :
-             `⏱ ${fmt(timer.elapsed)} / ${String(mission.duree_min).padStart(2,"0")}:00`}
+             `⏱ ${fmt(timer.elapsed)} / ${String(mission.duree_min).padStart(2, "0")}:00`}
           </Text>
           {isActive && (
             <View style={[styles.chronoPulse, { backgroundColor: isRunning ? "#ea580c" : "#9ca3af" }]} />
@@ -322,7 +301,6 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
         </View>
       )}
 
-      {/* Barre de progression */}
       <View style={styles.missionBottom}>
         <View style={{ flex: 1, gap: 4 }}>
           <View style={styles.progressTrack}>
@@ -337,7 +315,6 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
         </View>
 
         <View style={styles.btnGroup}>
-          {/* ✅ Bouton Recommencer si échoué */}
           {isFail && (
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: "#f59e0b" }]}
@@ -346,7 +323,6 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
               <Text style={styles.actionBtnText}>🔄 Recommencer</Text>
             </TouchableOpacity>
           )}
-
           {!isFail && (
             <>
               {isActive && (
@@ -372,12 +348,74 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
   );
 }
 
+// ─── EmptySlot ────────────────────────────────────────────────────────────────
+
+function EmptySlot({ index, suggestions, onAccept, onCreateNew, accent }: {
+  index: number;
+  suggestions: any[];
+  onAccept: (m: any) => void;
+  onCreateNew: () => void;
+  accent: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <View style={[styles.missionCard, { borderStyle: "dashed", borderWidth: 2, borderColor: accent + "55", backgroundColor: "#faf9ff" }]}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Text style={{ color: accent, fontWeight: "700", fontSize: 14 }}>
+          🧩 Emplacement {index + 1}
+        </Text>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: accent }]}
+          onPress={() => setExpanded(!expanded)}
+        >
+          <Text style={styles.actionBtnText}>+ Ajouter</Text>
+        </TouchableOpacity>
+      </View>
+
+      {expanded && (
+        <View style={{ marginTop: 12, gap: 8 }}>
+          {suggestions.length > 0 && (
+            <>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#6b7280" }}>
+                Suggestions :
+              </Text>
+              {suggestions.slice(0, 3).map(s => (
+                <TouchableOpacity
+                  key={s.id_mission}
+                  style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#f3f0ff", borderRadius: 10, padding: 10 }}
+                  onPress={() => { onAccept(s); setExpanded(false); }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: "700", color: "#2d1a6e" }}>{s.titre}</Text>
+                    <Text style={{ fontSize: 11, color: "#9b87c9" }}>+{s.xp_gain} XP</Text>
+                  </View>
+                  <Text style={{ color: accent, fontWeight: "800" }}>✓</Text>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+          <TouchableOpacity
+            style={{ borderWidth: 1.5, borderColor: accent, borderStyle: "dashed", borderRadius: 10, padding: 10, alignItems: "center" }}
+            onPress={() => { onCreateNew(); setExpanded(false); }}
+          >
+            <Text style={{ color: accent, fontWeight: "700" }}>✏️ Créer une nouvelle mission</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ─── Écran principal ──────────────────────────────────────────────────────────
 
 export default function ZoneScreen() {
-  const router     = useRouter();
-  const { userId } = useUser();
-  const { zoneId, zoneSlug } = useLocalSearchParams<{ zoneId: string; zoneSlug: string }>();
+  const router              = useRouter();
+  const { userId: rawUserId } = useUser();
+  const { zoneId, zoneSlug }  = useLocalSearchParams<{ zoneId: string; zoneSlug: string }>();
+
+  if (!rawUserId) return null;
+  const userId = rawUserId;
 
   const [zoneInfo,  setZoneInfo]  = useState<ZoneInfo | null>(null);
   const [missions,  setMissions]  = useState<Mission[]>([]);
@@ -386,8 +424,16 @@ export default function ZoneScreen() {
   const [saving,    setSaving]    = useState(false);
   const [timers,    setTimers]    = useState<Record<number, TimerData>>({});
 
+  const totalPieces = puzzle?.total_pieces ?? 3;
+
+  const { suggestions, acceptSuggestion } = useZoneMissions(
+    String(userId),
+    Number(zoneId),
+    totalPieces
+  );
+
   const intervalsRef  = useRef<Record<number, ReturnType<typeof setInterval>>>({});
-  const startedAtRef  = useRef<Record<number, number>>({}); // missionId → timestamp ms
+  const startedAtRef  = useRef<Record<number, number>>({});
 
   const [showSuccess,    setShowSuccess]    = useState(false);
   const [showUnlocked,   setShowUnlocked]   = useState(false);
@@ -395,10 +441,7 @@ export default function ZoneScreen() {
   const [nextZoneName,   setNextZoneName]   = useState("");
   const pendingUnlock = useRef(false);
 
-  // ✅ Exit confirm modal
-  const [showExitModal, setShowExitModal] = useState(false);
-
-  // ✅ Edit mission modal
+  const [showExitModal,  setShowExitModal]  = useState(false);
   const [editingMission, setEditingMission] = useState<Mission | null>(null);
 
   const bgFade    = useRef(new Animated.Value(0)).current;
@@ -454,7 +497,7 @@ export default function ZoneScreen() {
           return failed;
         }
 
-        // On garde state "running" avec elapsed recalculé — loadAll redémarrera l'interval
+        // ✅ Reprend avec l'elapsed recalculé et un nouveau startedAt = maintenant
         const resumed: TimerData = { state: "running", elapsed: newElapsed, startedAt: Date.now() };
         await AsyncStorage.setItem(timerKey(userId, zoneId, missionId), JSON.stringify(resumed));
         return resumed;
@@ -484,6 +527,7 @@ export default function ZoneScreen() {
         .from("mission")
         .select("id_mission, titre, description, xp_gain, energie_cout, difficulte, duree_min, priorite")
         .eq("id_zone", numId)
+        .eq("id_user", userId)
         .order("priorite", { ascending: true });
 
       if (!missionsData?.length) { setMissions([]); return; }
@@ -509,7 +553,7 @@ export default function ZoneScreen() {
       }
       setTimers(initTimers);
 
-      // ── Auto-redémarrer les timers qui étaient "running" quand on est parti ──
+      // ✅ Relancer les intervals pour les timers qui sont "running" au retour
       for (const m of loaded) {
         const t = initTimers[m.id_mission];
         if (t?.state === "running") {
@@ -565,7 +609,19 @@ export default function ZoneScreen() {
     }
   }, [zoneId, userId, loadTimer]);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  // ✅ useFocusEffect : relance loadAll() à chaque retour sur la page
+  //    (contrairement à useEffect qui ne se déclenche qu'au montage initial)
+  useFocusEffect(
+    useCallback(() => {
+      // Nettoyer les anciens intervals avant de recharger pour éviter les doublons
+      Object.values(intervalsRef.current).forEach(clearInterval);
+      intervalsRef.current = {};
+      startedAtRef.current = {};
+      loadAll();
+    }, [loadAll])
+  );
+
+  // Cleanup au démontage du composant
   useEffect(() => {
     return () => { Object.values(intervalsRef.current).forEach(clearInterval); };
   }, []);
@@ -646,7 +702,8 @@ export default function ZoneScreen() {
         return;
       }
 
-      setMissions(prev => prev.map(m => m.id_mission === id ? { ...m, done: true } : m));
+      const updatedMissions = missions.map(m => m.id_mission === id ? { ...m, done: true } : m);
+      setMissions(updatedMissions);
 
       setPuzzle(prev => prev ? {
         ...prev,
@@ -667,13 +724,22 @@ export default function ZoneScreen() {
       }
 
       await AsyncStorage.removeItem(timerKey(userId, zoneId, id));
+
+      const allDone = updatedMissions.length === totalPieces &&
+                      updatedMissions.every(m => m.done);
+      if (allDone) {
+        const totalXp = updatedMissions.reduce((sum, m) => sum + (m.xp_gain ?? 0), 0);
+        await supabase.rpc("add_xp", { p_user_id: userId, p_xp: totalXp });
+        setTimeout(() => setShowUnlocked(true), 1500);
+      }
+
       setShowSuccess(true);
     } finally {
       setSaving(false);
     }
-  }, [missions, saving, userId, zoneId, puzzle, updateTimer, getTimer]);
+  }, [missions, saving, userId, zoneId, puzzle, totalPieces, updateTimer, getTimer]);
 
-  // ✅ Retry mission échouée ──────────────────────────────────────────────────
+  // ── Retry mission échouée ──────────────────────────────────────────────────
 
   const handleRetry = useCallback(async (id: number) => {
     clearInterval(intervalsRef.current[id]);
@@ -682,10 +748,9 @@ export default function ZoneScreen() {
     await AsyncStorage.removeItem(timerKey(userId, zoneId, id));
   }, [userId, zoneId]);
 
-  // ✅ Exit modal actions ─────────────────────────────────────────────────────
+  // ── Exit modal actions ─────────────────────────────────────────────────────
 
   const handlePauseAndLeave = useCallback(() => {
-    // Mettre en pause tous les timers running
     Object.keys(timers).forEach(idStr => {
       const id = Number(idStr);
       if (timers[id]?.state === "running") {
@@ -698,17 +763,16 @@ export default function ZoneScreen() {
   }, [timers, updateTimer, router]);
 
   const handleContinueAndLeave = useCallback(async () => {
-    // Pour chaque timer "running", on sauvegarde avec startedAt fiable (depuis le ref)
-    // Au retour, loadTimer recalculera le temps écoulé depuis startedAt
     const saves: Promise<void>[] = [];
     Object.keys(timers).forEach(idStr => {
       const id = Number(idStr);
       const t  = timers[id];
       if (t?.state === "running") {
+        // ✅ On sauvegarde avec startedAt = maintenant pour que loadTimer
+        //    puisse calculer le temps écoulé pendant l'absence
         const timerToSave: TimerData = {
           ...t,
           state:     "running",
-          // On utilise le ref qui est toujours à jour, jamais affecté par les closures
           startedAt: startedAtRef.current[id] ?? t.startedAt ?? Date.now(),
         };
         saves.push(
@@ -724,7 +788,7 @@ export default function ZoneScreen() {
     router.back();
   }, [timers, userId, zoneId, router]);
 
-  // ✅ Save mission edit ──────────────────────────────────────────────────────
+  // ── Save mission edit ──────────────────────────────────────────────────────
 
   const handleSaveEdit = useCallback(async (id: number, titre: string, description: string) => {
     try {
@@ -756,7 +820,6 @@ export default function ZoneScreen() {
   const accent       = zoneInfo?.accent_color ?? "#22c55e";
   const imageUri     = zoneInfo?.image_url    ?? "";
   const piecesEarned = puzzle?.pieces_earned  ?? 0;
-  const totalPieces  = puzzle?.total_pieces   ?? 3;
   const isComplete   = puzzle?.is_complete    ?? false;
   const doneMissions = missions.filter(m => m.done).length;
 
@@ -770,7 +833,6 @@ export default function ZoneScreen() {
       </Animated.View>
 
       <View style={styles.header}>
-        {/* ✅ BackButton custom avec interception */}
         <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -820,29 +882,37 @@ export default function ZoneScreen() {
             )}
           </View>
 
-          {/* Missions */}
-          <Text style={styles.sectionTitle}>Missions ({doneMissions}/{missions.length})</Text>
-          {missions.length === 0 ? (
-            <Text style={{ color: "#9b87c9", textAlign: "center", marginVertical: 20 }}>Aucune mission</Text>
-          ) : missions.map(m => (
-            <MissionCard
-              key={m.id_mission}
-              mission={m}
-              timer={getTimer(m.id_mission)}
-              accent={accent}
-              onStart={handleStart}
-              onPause={handlePause}
-              onFinish={handleFinish}
-              onRetry={handleRetry}
-              onEdit={setEditingMission}
-            />
-          ))}
+          {/* Missions avec slots */}
+          <Text style={styles.sectionTitle}>Missions ({doneMissions}/{totalPieces})</Text>
+          {Array.from({ length: totalPieces }, (_, i) => missions[i] ?? null).map((m, i) =>
+            m ? (
+              <MissionCard
+                key={m.id_mission}
+                mission={m}
+                timer={getTimer(m.id_mission)}
+                accent={accent}
+                onStart={handleStart}
+                onPause={handlePause}
+                onFinish={handleFinish}
+                onRetry={handleRetry}
+                onEdit={setEditingMission}
+              />
+            ) : (
+              <EmptySlot
+                key={`slot-${i}`}
+                index={i}
+                suggestions={suggestions}
+                onAccept={acceptSuggestion}
+                onCreateNew={() => {}}
+                accent={accent}
+              />
+            )
+          )}
 
         </Animated.View>
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ✅ Modal sortie */}
       <ExitConfirmModal
         visible={showExitModal}
         accent={accent}
@@ -851,7 +921,6 @@ export default function ZoneScreen() {
         onCancel={() => setShowExitModal(false)}
       />
 
-      {/* ✅ Modal édition mission */}
       <EditMissionModal
         visible={!!editingMission}
         mission={editingMission}

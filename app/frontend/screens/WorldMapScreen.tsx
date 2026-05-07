@@ -175,7 +175,23 @@ export default function WorldMapScreen() {
             .select("id_zone, unlocked, completed")
             .eq("id_user", userId)
             .in("id_zone", zonesData.map(z => z.id_zone));
+const hasAnyUnlocked = (progData ?? []).some(p => p.unlocked);
 
+if (!hasAnyUnlocked && zonesData.length > 0) {
+  const firstZone = zonesData[0]; // première zone du monde (ordre=1)
+  await supabase.from("zone_progress").upsert({
+    id_user:   userId,
+    id_zone:   firstZone.id_zone,
+    unlocked:  true,
+    completed: false,
+  });
+  // Ajouter manuellement pour la suite
+  (progData as any[] ?? []).push({ 
+    id_zone:   firstZone.id_zone, 
+    unlocked:  true, 
+    completed: false 
+  });
+}
           const progMap: Record<number, any> = {};
           (progData ?? []).forEach(p => { progMap[p.id_zone] = p; });
 

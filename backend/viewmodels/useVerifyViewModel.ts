@@ -58,7 +58,3 @@ export function useVerifyViewModel(email: string) {
 
   return { code, status, userId, errorMsg, timer, timerLabel, handleChange, resend };
 }
-<<<<<<< HEAD
-
-=======
->>>>>>> sonia

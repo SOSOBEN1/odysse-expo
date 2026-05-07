@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-=======
-import React, { useState } from "react";
-import { View, Text, StyleSheet, Modal, Image, Dimensions, TouchableOpacity } from "react-native";
->>>>>>> sonia
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -33,19 +28,11 @@ export default function MissionStatusModal({
   const [activeBtn, setActiveBtn] = useState<"secondary" | "primary">("primary");
 
   const theme = {
-<<<<<<< HEAD
-    bg: (isSuccess ? ["#f0fff4", "#dcfce7", "#bbf7d0"] : ["#fff5f5", "#fee2e2", "#fecaca"]) as const,
-    border: isSuccess ? "#4A7C59" : "#E53E3E",
-    title: isSuccess ? "#2E7D32" : "#C62828",
-    btnGradient: isSuccess ? ["#4CAF50", "#2E7D32"] : ["#FF8A8A", "#E53E3E"],
-    pillBg: "rgba(0,0,0,0.08)"
-=======
     bg:          (isSuccess ? ["#f0fff4", "#dcfce7", "#bbf7d0"] : ["#fff5f5", "#fee2e2", "#fecaca"]) as [string, string, string],
     border:      isSuccess ? "#4A7C59" : "#E53E3E",
     title:       isSuccess ? "#2E7D32" : "#C62828",
     btnGradient: (isSuccess ? ["#4CAF50", "#2E7D32"] : ["#FF8A8A", "#E53E3E"]) as [string, string],
     pillBg:      "rgba(0,0,0,0.08)",
->>>>>>> sonia
   };
 
   return (

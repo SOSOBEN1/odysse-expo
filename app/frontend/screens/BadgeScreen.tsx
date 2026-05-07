@@ -54,6 +54,17 @@ interface StarItem {
   opacity: number;
 }
 
+// ── Filtres par module ───────────────────────────────────────
+type ModuleFilter = "tous" | "bien-etre" | "apprentissage" | "organisation" | "global";
+
+const MODULES: { key: ModuleFilter; label: string; emoji: string }[] = [
+  { key: "tous",           label: "Tous",      emoji: "🏅" },
+  { key: "bien-etre",      label: "Bien-être", emoji: "🌿" },
+  { key: "apprentissage",  label: "Apprendre", emoji: "📚" },
+  { key: "organisation",   label: "Organiser", emoji: "📅" },
+  { key: "global",         label: "Global",    emoji: "⭐" },
+];
+
 // ── Étoiles décoratives ──────────────────────────────────────
 const stars: StarItem[] = [
   { top: 10,    left: 10,   size: 20, opacity: 0.6  },
@@ -65,26 +76,57 @@ const stars: StarItem[] = [
   { top: 40,    right: 50,  size: 22, opacity: 0.7  },
 ];
 
-// ── Mapping badge id → couleur & emoji ───────────────────────
-const BADGE_META: Record<number, { emoji: string; color: string; bg: string }> = {
-  1:  { emoji: "👣", color: COLORS.badgeGold,   bg: COLORS.badgeGoldBg   },
-  2:  { emoji: "🔥", color: COLORS.badgeOrange, bg: COLORS.badgeOrangeBg },
-  3:  { emoji: "👁️", color: COLORS.badgeCyan,   bg: COLORS.badgeCyanBg   },
-  4:  { emoji: "🎯", color: COLORS.badgeGold,   bg: COLORS.badgeGoldBg   },
-  5:  { emoji: "📅", color: COLORS.badgeGreen,  bg: COLORS.badgeGreenBg  },
-  6:  { emoji: "⚡", color: COLORS.badgePurple, bg: COLORS.badgePurpleBg },
-  7:  { emoji: "⭐", color: COLORS.badgeGold,   bg: COLORS.badgeGoldBg   },
-  8:  { emoji: "❤️", color: COLORS.badgePink,   bg: COLORS.badgePinkBg   },
-  9:  { emoji: "🎓", color: COLORS.badgeIndigo, bg: COLORS.badgeIndigoBg },
-  10: { emoji: "🏃", color: COLORS.badgeSky,    bg: COLORS.badgeSkyBg    },
-  11: { emoji: "🏆", color: COLORS.badgeAmber,  bg: COLORS.badgeAmberBg  },
-  12: { emoji: "🌸", color: COLORS.badgeRose,   bg: COLORS.badgeRoseBg   },
+// ── Mapping badge id → couleur, emoji, module ────────────────
+const BADGE_META: Record<number, { emoji: string; color: string; bg: string; module: ModuleFilter }> = {
+  1:  { emoji: "👣", color: COLORS.badgeGold,   bg: COLORS.badgeGoldBg,   module: "global"        },
+  2:  { emoji: "🔥", color: COLORS.badgeOrange, bg: COLORS.badgeOrangeBg, module: "global"        },
+  3:  { emoji: "👁️", color: COLORS.badgeCyan,   bg: COLORS.badgeCyanBg,   module: "global"        },
+  4:  { emoji: "🎯", color: COLORS.badgeGold,   bg: COLORS.badgeGoldBg,   module: "global"        },
+  5:  { emoji: "📅", color: COLORS.badgeGreen,  bg: COLORS.badgeGreenBg,  module: "organisation"  },
+  6:  { emoji: "⚡", color: COLORS.badgePurple, bg: COLORS.badgePurpleBg, module: "global"        },
+  7:  { emoji: "⭐", color: COLORS.badgeGold,   bg: COLORS.badgeGoldBg,   module: "global"        },
+  8:  { emoji: "❤️", color: COLORS.badgePink,   bg: COLORS.badgePinkBg,   module: "bien-etre"     },
+  9:  { emoji: "🎓", color: COLORS.badgeIndigo, bg: COLORS.badgeIndigoBg, module: "global"        },
+  10: { emoji: "🏃", color: COLORS.badgeSky,    bg: COLORS.badgeSkyBg,    module: "global"        },
+  11: { emoji: "🏆", color: COLORS.badgeAmber,  bg: COLORS.badgeAmberBg,  module: "global"        },
+  12: { emoji: "🌸", color: COLORS.badgeRose,   bg: COLORS.badgeRoseBg,   module: "bien-etre"     },
+  // Bien-être
+  13: { emoji: "🌬️", color: COLORS.badgeCyan,   bg: COLORS.badgeCyanBg,   module: "bien-etre"     },
+  14: { emoji: "🧘", color: COLORS.badgePurple, bg: COLORS.badgePurpleBg, module: "bien-etre"     },
+  15: { emoji: "💚", color: COLORS.badgeGreen,  bg: COLORS.badgeGreenBg,  module: "bien-etre"     },
+  16: { emoji: "😴", color: COLORS.badgeIndigo, bg: COLORS.badgeIndigoBg, module: "bien-etre"     },
+  17: { emoji: "🏋️", color: COLORS.badgeOrange, bg: COLORS.badgeOrangeBg, module: "bien-etre"     },
+  18: { emoji: "🥗", color: COLORS.badgeGreen,  bg: COLORS.badgeGreenBg,  module: "bien-etre"     },
+  19: { emoji: "🌿", color: COLORS.badgeCyan,   bg: COLORS.badgeCyanBg,   module: "bien-etre"     },
+  // Apprentissage
+  20: { emoji: "📖", color: COLORS.badgeSky,    bg: COLORS.badgeSkyBg,    module: "apprentissage" },
+  21: { emoji: "🧠", color: COLORS.badgePurple, bg: COLORS.badgePurpleBg, module: "apprentissage" },
+  22: { emoji: "💡", color: COLORS.badgeGold,   bg: COLORS.badgeGoldBg,   module: "apprentissage" },
+  23: { emoji: "🗺️", color: COLORS.badgeAmber,  bg: COLORS.badgeAmberBg,  module: "apprentissage" },
+  24: { emoji: "📚", color: COLORS.badgeIndigo, bg: COLORS.badgeIndigoBg, module: "apprentissage" },
+  // Organisation
+  25: { emoji: "🗓️", color: COLORS.badgeGreen,  bg: COLORS.badgeGreenBg,  module: "organisation"  },
+  26: { emoji: "🍅", color: COLORS.badgeOrange, bg: COLORS.badgeOrangeBg, module: "organisation"  },
+  27: { emoji: "♟️", color: COLORS.badgePink,   bg: COLORS.badgePinkBg,   module: "organisation"  },
+  28: { emoji: "🚀", color: COLORS.badgeCyan,   bg: COLORS.badgeCyanBg,   module: "organisation"  },
+  29: { emoji: "📐", color: COLORS.badgeSky,    bg: COLORS.badgeSkyBg,    module: "organisation"  },
+  // Global / Niveau
+  30: { emoji: "🌟", color: COLORS.badgeGold,   bg: COLORS.badgeGoldBg,   module: "global"        },
+  31: { emoji: "💪", color: COLORS.badgeOrange, bg: COLORS.badgeOrangeBg, module: "global"        },
+  32: { emoji: "🛡️", color: COLORS.badgeSky,    bg: COLORS.badgeSkyBg,    module: "global"        },
+  33: { emoji: "👑", color: COLORS.badgeAmber,  bg: COLORS.badgeAmberBg,  module: "global"        },
+  34: { emoji: "🦁", color: COLORS.badgeGold,   bg: COLORS.badgeGoldBg,   module: "global"        },
+  // Global / XP
+  35: { emoji: "🔍", color: COLORS.badgeCyan,   bg: COLORS.badgeCyanBg,   module: "global"        },
+  36: { emoji: "⚔️", color: COLORS.badgePurple, bg: COLORS.badgePurpleBg, module: "global"        },
+  37: { emoji: "💎", color: COLORS.badgeIndigo, bg: COLORS.badgeIndigoBg, module: "global"        },
 };
 
 const DEFAULT_META = {
   emoji: "🏅",
   color: COLORS.badgeDefault,
   bg:    COLORS.badgeDefaultBg,
+  module: "global" as ModuleFilter,
 };
 
 function getBadgeMeta(id: number) {
@@ -111,7 +153,6 @@ function Badge3DUnlocked({ emoji, color, uid }: { emoji: string; color: string; 
   const gradId   = `grad_${uid}`;
   const shadowId = `sh_${uid}`;
   const filterId = `f_${uid}`;
-
   return (
     <Svg width={72} height={76} viewBox="0 0 72 76">
       <Defs>
@@ -142,7 +183,6 @@ function Badge3DLocked({ emoji, uid }: { emoji: string; uid: string }) {
   const gradId   = `gradL_${uid}`;
   const shadowId = `shL_${uid}`;
   const filterId = `fL_${uid}`;
-
   return (
     <Svg width={72} height={76} viewBox="0 0 72 76">
       <Defs>
@@ -231,11 +271,10 @@ export default function BadgesScreen() {
     clearNewlyUnlocked,
   } = useBadgesViewModel(USER_ID);
 
+  const [activeModule, setActiveModule] = useState<ModuleFilter>("tous");
   const [modalVisible, setModalVisible]   = useState(false);
   const [selectedBadge, setSelectedBadge] = useState<{
-    id: number;
-    label: string;
-    emoji: string;
+    id: number; label: string; emoji: string;
   }>({ id: 0, label: "", emoji: "" });
 
   useEffect(() => {
@@ -251,6 +290,15 @@ export default function BadgesScreen() {
     setSelectedBadge({ id, label, emoji });
     setModalVisible(true);
   };
+
+  // Filtrer par module
+  const filteredUnlocked = activeModule === "tous"
+    ? unlocked
+    : unlocked.filter((b) => getBadgeMeta(b.id).module === activeModule);
+
+  const filteredLocked = activeModule === "tous"
+    ? locked
+    : locked.filter((b) => getBadgeMeta(b.id).module === activeModule);
 
   const xpPct: DimensionValue =
     total > 0 ? `${Math.round((unlocked.length / total) * 100)}%` : "0%";
@@ -291,14 +339,12 @@ export default function BadgesScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Loader */}
       {loading && (
         <View style={styles.loaderContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       )}
 
-      {/* Erreur */}
       {error && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>⚠️ {error}</Text>
@@ -325,19 +371,49 @@ export default function BadgesScreen() {
           </View>
         </View>
 
+        {/* ── Filtres par module ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterContent}
+        >
+          {MODULES.map((m) => {
+            const isActive = activeModule === m.key;
+            return (
+              <TouchableOpacity
+                key={m.key}
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                onPress={() => setActiveModule(m.key)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.filterEmoji}>{m.emoji}</Text>
+                <Text style={[styles.filterLabel, isActive && styles.filterLabelActive]}>
+                  {m.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
         {/* ── Badges débloqués ── */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionLeft}>
             <Text style={styles.sectionTitle}>Badges débloqués</Text>
             <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} style={{ marginLeft: 6 }} />
           </View>
+          <Text style={styles.sectionCount}>{filteredUnlocked.length}</Text>
         </View>
 
         <View style={styles.badgesGrid}>
-          {unlocked.length === 0 && !loading && (
-            <Text style={styles.emptyText}>Aucun badge débloqué pour l'instant.</Text>
+          {filteredUnlocked.length === 0 && !loading && (
+            <Text style={styles.emptyText}>
+              {activeModule === "tous"
+                ? "Aucun badge débloqué pour l'instant."
+                : `Aucun badge "${MODULES.find(m => m.key === activeModule)?.label}" débloqué.`}
+            </Text>
           )}
-          {unlocked.map((b) => {
+          {filteredUnlocked.map((b) => {
             const meta = getBadgeMeta(b.id);
             return (
               <UnlockedBadge
@@ -360,13 +436,18 @@ export default function BadgesScreen() {
             <Ionicons name="lock-closed" size={15} color={COLORS.primary} style={{ marginRight: 6 }} />
             <Text style={styles.sectionTitle}>Badges à débloquer</Text>
           </View>
+          <Text style={styles.sectionCount}>{filteredLocked.length}</Text>
         </View>
 
         <View style={styles.badgesGrid}>
-          {locked.length === 0 && !loading && (
-            <Text style={styles.emptyText}>Tous les badges sont débloqués ! 🎉</Text>
+          {filteredLocked.length === 0 && !loading && (
+            <Text style={styles.emptyText}>
+              {activeModule === "tous"
+                ? "Tous les badges sont débloqués ! 🎉"
+                : `Tous les badges "${MODULES.find(m => m.key === activeModule)?.label}" sont débloqués ! 🎉`}
+            </Text>
           )}
-          {locked.map((b) => {
+          {filteredLocked.map((b) => {
             const meta = getBadgeMeta(b.id);
             return (
               <LockedBadge
@@ -400,24 +481,32 @@ export default function BadgesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:       { flex: 1 },
-  stars:           { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "hidden" },
-  header:          { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 54, paddingBottom: 10, zIndex: 10 },
-  title:           { fontSize: 22, fontWeight: "900", color: COLORS.badgeHeading, letterSpacing: 0.5 },
-  helpBtn:         { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.badgeHelpBtnBg, justifyContent: "center", alignItems: "center", shadowColor: COLORS.primary, shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
-  helpText:        { fontSize: 18, fontWeight: "800", color: COLORS.primary },
-  loaderContainer: { position: "absolute", top: "50%", left: "50%", transform: [{ translateX: -20 }, { translateY: -20 }], zIndex: 20 },
-  errorContainer:  { marginHorizontal: 20, marginTop: 8, padding: 10, backgroundColor: COLORS.badgeErrorBg, borderRadius: 10 },
-  errorText:       { color: COLORS.badgeErrorText, fontSize: 12, textAlign: "center" },
-  scroll:          { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 120 },
-  card:            { backgroundColor: COLORS.card, borderRadius: 20, padding: 16, alignItems: "center", marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 4 },
-  trophyEmoji:     { fontSize: 44, marginBottom: 6 },
-  xpLabel:         { fontSize: 13, color: COLORS.badgeMuted, fontWeight: "600", marginBottom: 10 },
-  xpTrack:         { width: "100%", height: 8, backgroundColor: COLORS.badgeXpTrack, borderRadius: 8, overflow: "hidden" },
-  xpFill:          { height: "100%", borderRadius: 8 },
-  sectionHeader:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  sectionLeft:     { flexDirection: "row", alignItems: "center" },
-  sectionTitle:    { fontSize: 15, fontWeight: "800", color: COLORS.badgeHeading },
-  badgesGrid:      { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 20 },
-  emptyText:       { fontSize: 12, color: COLORS.badgeMuted, fontStyle: "italic", textAlign: "center", width: "100%", paddingVertical: 10 },
+  container:         { flex: 1 },
+  stars:             { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "hidden" },
+  header:            { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 54, paddingBottom: 10, zIndex: 10 },
+  title:             { fontSize: 22, fontWeight: "900", color: COLORS.badgeHeading, letterSpacing: 0.5 },
+  helpBtn:           { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.badgeHelpBtnBg, justifyContent: "center", alignItems: "center", shadowColor: COLORS.primary, shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
+  helpText:          { fontSize: 18, fontWeight: "800", color: COLORS.primary },
+  loaderContainer:   { position: "absolute", top: "50%", left: "50%", transform: [{ translateX: -20 }, { translateY: -20 }], zIndex: 20 },
+  errorContainer:    { marginHorizontal: 20, marginTop: 8, padding: 10, backgroundColor: COLORS.badgeErrorBg, borderRadius: 10 },
+  errorText:         { color: COLORS.badgeErrorText, fontSize: 12, textAlign: "center" },
+  scroll:            { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 120 },
+  card:              { backgroundColor: COLORS.card, borderRadius: 20, padding: 16, alignItems: "center", marginBottom: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 4 },
+  trophyEmoji:       { fontSize: 44, marginBottom: 6 },
+  xpLabel:           { fontSize: 13, color: COLORS.badgeMuted, fontWeight: "600", marginBottom: 10 },
+  xpTrack:           { width: "100%", height: 8, backgroundColor: COLORS.badgeXpTrack, borderRadius: 8, overflow: "hidden" },
+  xpFill:            { height: "100%", borderRadius: 8 },
+  filterScroll:      { marginBottom: 16 },
+  filterContent:     { paddingRight: 8, gap: 8, flexDirection: "row" },
+  filterChip:        { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.badgeCardBg, borderWidth: 1.5, borderColor: "transparent", gap: 4 },
+  filterChipActive:  { backgroundColor: `${COLORS.primary}22`, borderColor: COLORS.primary },
+  filterEmoji:       { fontSize: 14 },
+  filterLabel:       { fontSize: 12, fontWeight: "600", color: COLORS.badgeMuted },
+  filterLabelActive: { color: COLORS.primary, fontWeight: "800" },
+  sectionHeader:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  sectionLeft:       { flexDirection: "row", alignItems: "center" },
+  sectionTitle:      { fontSize: 15, fontWeight: "800", color: COLORS.badgeHeading },
+  sectionCount:      { fontSize: 13, fontWeight: "700", color: COLORS.badgeMuted },
+  badgesGrid:        { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 20 },
+  emptyText:         { fontSize: 12, color: COLORS.badgeMuted, fontStyle: "italic", textAlign: "center", width: "100%", paddingVertical: 10 },
 });

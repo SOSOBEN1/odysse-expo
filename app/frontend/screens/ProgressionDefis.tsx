@@ -709,6 +709,7 @@ export default function ProgressionDefiScreen() {
   };
 
   const chargerMissionsEtCompletions = async () => {
+      console.log("🔍 id_defi =", id_defi, "userId =", userId);   
     const [{ data: missData }, { data: compData }] = await Promise.all([
       getMissions(id_defi),
       getMissionsCompleteesPar(userId ?? 0, id_defi),

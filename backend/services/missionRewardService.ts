@@ -17,6 +17,7 @@
 import { supabase } from "../../app/frontend/constants/supabase";
 import { completeMission as applyStatDeltas } from "./Userstatsservice";
 import { checkAndUnlockBadges } from "./badgeEngine";
+import { checkAndUpdateLevel, LevelUpResult } from "./levelService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ export interface MissionRewardResult {
     organisation: number;
   } | null;
   badgesUnlocked: string[];
+  levelUp: LevelUpResult;
 }
 
 // ─── Calculs ──────────────────────────────────────────────────────────────────
@@ -99,6 +101,9 @@ export async function finishMission(
     xp_gain: mission.xp_gain,
   });
 
+  // 5b. Vérifier et mettre à jour le niveau (500 XP = 1 niveau)
+  const levelUp = await checkAndUpdateLevel(userId);
+
   // 6. Si mission liée à un défi → incrémenter xp_total du participant (COMPTEUR SÉPARÉ)
   if (mission.id_defi) {
     const { data: dp } = await supabase
@@ -131,6 +136,7 @@ export async function finishMission(
       ? { energie: statsResult.newStats.energie, stress: statsResult.newStats.stress, connaissance: statsResult.newStats.connaissance, organisation: statsResult.newStats.organisation }
       : null,
     badgesUnlocked,
+    levelUp,
   };
 }
 

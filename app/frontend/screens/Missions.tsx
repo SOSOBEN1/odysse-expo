@@ -19,6 +19,7 @@ import AvatarCrd from "../components/AvatarCrd";
 import { supabase } from "../constants/supabase"; // ✅ ajout
 import { useMissions } from "../../../backend/viewmodels/useMissions";
 import type { Mission } from "../../../backend/models/mission.types";
+import { useLocalSearchParams } from "expo-router";
 import {
   formatElapsed,
   formatDateLimite,
@@ -216,6 +217,7 @@ export default function MissionsScreen() {
   const [isMissionModalVisible, setMissionModalVisible] = useState(false);
   const [isEventModalVisible, setEventModalVisible]     = useState(false);
   const [selectedData, setSelectedData]         = useState<any>(null);
+   const { openCreate } = useLocalSearchParams();
 
   const navigation            = useNavigation();
   const { selectedModel, setSelectedModel } = useAvatar(); // ✅ ajout setSelectedModel
@@ -224,6 +226,12 @@ export default function MissionsScreen() {
 
   // ✅ State pour le nom et l'avatar récupérés depuis la DB
   const [displayName, setDisplayName] = useState<string>(ctxUsername || "...");
+   useEffect(() => {
+    if (openCreate === "true") {
+      setSelectedData(null);
+      setMissionModalVisible(true);
+    }
+  }, [openCreate]);
 
   // ✅ Fetch username + avatar depuis Supabase (même logique que HomeScreen/Dashboard)
   useEffect(() => {

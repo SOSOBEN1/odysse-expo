@@ -701,11 +701,10 @@ import { supabase } from "../constants/supabase";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
 import { useDerivedStats } from "../hooks/useDerivedStats";
-
 // ✅ Import du hook périodique
 import { usePeriodicQuestionnaire } from "../hooks/usePeriodicQuestionnaire";
-
 import { useTodayMissions, TodayMission } from "../hooks/useTodayMissions";
+
 
 function computeDerivedStats(base: any) {
   const clamp = (v: number) => Math.min(100, Math.max(0, v));
@@ -1030,6 +1029,7 @@ const MISSIONS: Mission[] = [
 ];
 
 export const MissionsSection = () => {
+  const router = useRouter();
   const { missions, loading, error } = useTodayMissions();
 
   return (
@@ -1046,7 +1046,10 @@ export const MissionsSection = () => {
         missions.map((m) => <MissionCard key={m.id_validation} mission={m} />)
       )}
 
-      <TouchableOpacity style={missionsStyles.addBtn}>
+      <TouchableOpacity
+        style={missionsStyles.addBtn}
+         onPress={() => router.push("/frontend/screens/Missions?openCreate=true")} // ← ici
+      >
         <Text style={missionsStyles.addText}>＋ Ajouter une mission</Text>
       </TouchableOpacity>
     </View>

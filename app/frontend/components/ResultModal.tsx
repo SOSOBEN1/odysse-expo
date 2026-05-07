@@ -15,6 +15,9 @@ interface ResultModalProps {
   onClose: () => void;
   type: "success" | "error";
   avatarName?: string;
+  avatarPrice: number; 
+  userCoins: number;
+   newBalance: number;
 }
 
 export default function ResultModal({ visible, onClose, type, avatarName }: ResultModalProps) {

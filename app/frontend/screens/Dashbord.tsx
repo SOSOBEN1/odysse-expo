@@ -189,6 +189,7 @@
 //             <Text style={headerStyles.timeIcon}>{timeIcon}</Text>
 //           </View>
 //           <Text style={headerStyles.levelTitle}>{getLevelTitle(USER.level)}</Text>
+  //        <Text style={headerStyles.levelDesc}>{getLevelDescription(USER.level)}</Text>
 //           <View style={headerStyles.xpBarBg}>
 //             <LinearGradient
 //               colors={[COLORS.secondary, COLORS.primary]}
@@ -770,11 +771,29 @@ function getTimeGreeting() {
 }
 
 function getLevelTitle(niveau: number): string {
-  if (niveau <= 2)  return "Débutant curieux";
-  if (niveau <= 5)  return "Explorateur de savoir";
-  if (niveau <= 10) return "Apprenti maître";
-  if (niveau <= 20) return "Expert confirmé";
-  return "Maître légendaire";
+  if (niveau === 1)  return "Débutant curieux 🌱";
+  if (niveau === 2)  return "Apprenti motivé 🔥";
+  if (niveau <= 4)   return "Explorateur de savoir 🗺️";
+  if (niveau <= 6)   return "Apprenti maître ⚡";
+  if (niveau <= 9)   return "Stratège confirmé 🧠";
+  if (niveau <= 14)  return "Expert discipliné 💎";
+  if (niveau <= 19)  return "Maître de l'odyssée 🏆";
+  if (niveau <= 29)  return "Vétéran légendaire 👑";
+  if (niveau <= 39)  return "Élite suprême 🦁";
+  return "Légende vivante ✨";
+}
+
+function getLevelDescription(niveau: number): string {
+  if (niveau === 1)  return "Chaque mission te rapproche de la maîtrise.";
+  if (niveau === 2)  return "La flamme est allumée, continue !";
+  if (niveau <= 4)   return "Ton potentiel commence à se révéler.";
+  if (niveau <= 6)   return "Place à la discipline et à la régularité.";
+  if (niveau <= 9)   return "Tu penses et agis comme un stratège.";
+  if (niveau <= 14)  return "L'excellence devient une habitude.";
+  if (niveau <= 19)  return "Peu atteignent ce niveau de maîtrise.";
+  if (niveau <= 29)  return "Ton parcours inspire ceux qui commencent.";
+  if (niveau <= 39)  return "La légende se construit mission par mission.";
+  return "Tu es au sommet. Une légende vivante. ✨";
 }
 
 
@@ -794,13 +813,14 @@ function useDashboardUser(): DashboardUser {
         .eq("id_user", userId)
         .single();
       if (error || !data) return;
-      const niveau = data.id_level ?? 1;
-      const xp     = data.xp    ?? 0;
-      const maxXp  = niveau * 500;
+      const xpTotal = data.xp ?? 0;
+      const niveau  = Math.floor(xpTotal / 500) + 1;  // 500 XP = 1 niveau
+      const xpDansNiveau = xpTotal % 500;              // XP dans le niveau actuel (0..499)
+      const maxXp  = 500;
       setUser({
         userName: data.username ?? data.prenom ?? data.nom ?? ctxUsername ?? "Joueur",
         level:    niveau,
-        xp:       xp % maxXp,
+        xp:       xpDansNiveau,
         maxXp,
         coins:    data.gold ?? 0,
       });
@@ -859,6 +879,7 @@ const DashboardHeader = () => {
             <Text style={headerStyles.timeIcon}>{timeIcon}</Text>
           </View>
           <Text style={headerStyles.levelTitle}>{getLevelTitle(USER.level)}</Text>
+          <Text style={headerStyles.levelDesc}>{getLevelDescription(USER.level)}</Text>
           <View style={headerStyles.xpBarBg}>
             <LinearGradient
               colors={[COLORS.secondary, COLORS.primary]}
@@ -894,7 +915,8 @@ const headerStyles = StyleSheet.create({
   greeting:          { fontSize: 14, color: COLORS.greetingColor, flex: 1 },
   greetingName:      { color: COLORS.primary, fontWeight: "800", fontSize: 15 },
   timeIcon:          { fontSize: 20 },
-  levelTitle:        { fontSize: 11, color: COLORS.levelTitleColor, fontWeight: "600", marginTop: 2 },
+  levelTitle:        { fontSize: 11, color: COLORS.levelTitleColor, fontWeight: "700", marginTop: 2 },
+  levelDesc:         { fontSize: 10, color: COLORS.levelTitleColor, opacity: 0.75, fontStyle: "italic", marginTop: 1 },
   xpBarBg:           { height: 8, backgroundColor: COLORS.xpBarBg, borderRadius: 10, marginTop: 8, overflow: "hidden" },
   xpBarFill:         { height: "100%", borderRadius: 10 },
   xpText:            { fontSize: 11, color: COLORS.xpTextColor, marginTop: 4 },

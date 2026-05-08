@@ -313,10 +313,11 @@ export async function completeMission(
     discipline:    newDiscipline,
   };
 
-  // 4. Sauvegarder toutes les stats en BDD
+  // 4. Sauvegarder toutes les stats en BDD (upsert = crée la ligne si elle n'existe pas)
   const { error: updateStatsError } = await supabase
     .from("player_stats")
-    .update({
+    .upsert({
+      id_user:       userId,
       energie:       newStats.energie,
       stress:        newStats.stress,
       connaissance:  newStats.connaissance,
@@ -324,11 +325,11 @@ export async function completeMission(
       serenite:      newStats.serenite,
       concentration: newStats.concentration,
       discipline:    newStats.discipline,
-    })
-    .eq("id_user", userId);
+      date_maj:      new Date().toISOString(),
+    }, { onConflict: "id_user" });
 
   if (updateStatsError) {
-    console.error("[missionStatsService] Failed to update player_stats:", updateStatsError.message);
+    console.error("[missionStatsService] Failed to upsert player_stats:", updateStatsError.message);
     return null;
   }
 

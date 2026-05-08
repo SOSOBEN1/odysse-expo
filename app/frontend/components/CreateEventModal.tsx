@@ -1,15 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useEffect } from "react";
-import { Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert } from "react-native";
-import { COLORS, SHADOWS } from "../styles/theme";
-import { supabase } from "../constants/supabase";
+import { useEffect, useState } from "react";
+import { Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useUser } from "../constants/UserContext";
+import { COLORS, SHADOWS } from "../styles/theme";
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onCreate: () => void;
-  initialData?: any;
+  onCreate: (event: any) => void;
+  initialData?: any; // Ajout pour la modification
 };
 
 const EVENT_TYPES = [
@@ -24,48 +23,30 @@ export default function CreateEventModal({ visible, onClose, onCreate, initialDa
   const [loading, setLoading] = useState(false);
   const { userId } = useUser();
 
+  // Remplir les champs si on modifie
   useEffect(() => {
     if (visible) {
       if (initialData) {
-        setSelectedType(initialData.type_boss ?? "soutenance");
-        setEventName(initialData.nom ?? "");
+        setSelectedType(initialData.type || "soutenance");
+        setEventName(initialData.name || "");
+        setDeadline(initialData.deadline || "");
       } else {
+        // Reset si c'veut créer un nouveau
         setSelectedType("soutenance");
         setEventName("");
+        setDeadline("");
       }
     }
   }, [visible, initialData]);
 
-  const handleSave = async () => {
-    if (!eventName.trim()) {
-      Alert.alert("Erreur", "Le nom de l'événement est requis.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      if (initialData?.id_boss) {
-        // Modification
-        const { error } = await supabase
-          .from("boss_events")
-          .update({ nom: eventName.trim(), type_boss: selectedType })
-          .eq("id_boss", initialData.id_boss);
-        if (error) throw error;
-      } else {
-        // Création
-        const { error } = await supabase
-          .from("boss_events")
-          .insert({ nom: eventName.trim(), type_boss: selectedType, id_creator: userId, });
-        if (error) throw error;
-      }
-
-      onCreate();
-      onClose();
-    } catch (err: any) {
-      Alert.alert("Erreur", err.message);
-    } finally {
-      setLoading(false);
-    }
+  const handleCreate = () => {
+    onCreate({ 
+      ...initialData, // Garde l'ID si on modifie
+      type: selectedType, 
+      name: eventName, 
+      deadline 
+    });
+    onClose();
   };
 
   return (
@@ -75,10 +56,6 @@ export default function CreateEventModal({ visible, onClose, onCreate, initialDa
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
             <Ionicons name="close" size={20} color="#6b7280" />
           </TouchableOpacity>
-
-          <Text style={styles.title}>
-            {initialData?.id_boss ? "✏️ Modifier l'événement" : "✨ Nouvel événement"}
-          </Text>
 
           <Text style={styles.sectionLabel}>Type:</Text>
           <View style={styles.typeRow}>
@@ -114,13 +91,24 @@ export default function CreateEventModal({ visible, onClose, onCreate, initialDa
             onChangeText={setEventName}
           />
 
-          <TouchableOpacity
-            style={[styles.createBtn, loading && { opacity: 0.6 }]}
-            onPress={handleSave}
-            disabled={loading}
-          >
+          <Text style={styles.sectionLabel}>Date limite:</Text>
+          <View style={styles.dateWrapper}>
+            <TextInput
+              style={styles.dateInput}
+              placeholder="01/12/2026"
+              placeholderTextColor="#c4b5fd"
+              value={deadline}
+              onChangeText={setDeadline}
+              keyboardType="numeric"
+            />
+            <TouchableOpacity style={styles.calendarBtn}>
+              <Ionicons name="calendar" size={20} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={styles.createBtn} onPress={handleCreate}>
             <Text style={styles.createBtnText}>
-              {loading ? "Enregistrement..." : initialData?.id_boss ? "✨ Modifier" : "✨ Créer l'événement"}
+              {initialData ? "✨ Modifier l'événement" : "✨ Créer l'événement"}
             </Text>
           </TouchableOpacity>
 
@@ -134,7 +122,6 @@ export default function CreateEventModal({ visible, onClose, onCreate, initialDa
     </Modal>
   );
 }
-
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
   container: { backgroundColor: "#f5f3ff", borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24, paddingBottom: 40 },

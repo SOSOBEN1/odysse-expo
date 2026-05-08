@@ -1,14 +1,20 @@
-import React, { useState, useRef, useEffect } from "react";
-import {
-  View, Text, StyleSheet, Modal, Image,
-  Dimensions, TouchableOpacity, Animated
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import UsernameInput from "./UsernameInput";
+import { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  Image,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
+import UsernameInput from "./UsernameInput";
 
 const { width } = Dimensions.get("window");
 const owlIcon   = require("../assets/Hibou/cool.png");

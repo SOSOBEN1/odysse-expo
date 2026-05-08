@@ -1,14 +1,11 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, Switch, StyleSheet, ScrollView, Dimensions } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import WaveBackground from "../components/waveBackground";
+import { useState } from "react";
+import { Dimensions, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import ChangePasswordModal from "../components/ChangePasswordModal";
-import styles from "../styles/LoginStyle"; 
-import BackButton from "../components/BackButton";
-
-import { COLORS } from "../constants/theme";
+import WaveBackground from "../components/waveBackground";
+import styles from "../styles/LoginStyle";
 
 const { width } = Dimensions.get("window");
 
@@ -55,13 +52,15 @@ export default function SettingsScreen() {
             <WaveBackground />
 
             {/* HEADER : Titre centré et coloré comme les autres */}
-         {/* HEADER */}
-<View style={localStyles.headerWrapper}>
-    <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-        <Ionicons name="arrow-back" size={20} color="#6949a8" />
-    </TouchableOpacity>
-    <Text style={localStyles.mainTitleCentered}>Paramètres</Text>
-</View>
+            <View style={localStyles.headerWrapper}>
+                <View style={localStyles.titleAbsoluteContainer}>
+                    <Text style={localStyles.mainTitleCentered}>Paramètres</Text>
+                </View>
+
+                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                    <Ionicons name="arrow-back" size={20} color="#6949a8" />
+                </TouchableOpacity>
+            </View>
 
             <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
                 <Text style={localStyles.sectionTitle}>Notifications :</Text>
@@ -144,78 +143,43 @@ export default function SettingsScreen() {
 }
 
 const localStyles = StyleSheet.create({
-  headerWrapper: {
-    width: '100%',
-    height: 60,
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 5,
-    gap: 10,
-    zIndex: 10,
-  },
-  mainTitleCentered: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: COLORS.subtitle,           // ✅ existe déjà (#6949a8)
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: COLORS.subtitle,           // ✅
-    marginTop: 20,
-    marginBottom: 10
-  },
-  cardSettings: {
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderRadius: 20,
-    padding: 10
-  },
-  settingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.05)",
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    backgroundColor: COLORS.primaryPale, // ✅ existe déjà
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center"
-  },
-  settingLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: COLORS.subtitle,            // ✅
-  },
-  settingSublabel: {
-    fontSize: 11,
-    color: "#9E9E9E",                  // valeur directe
-  },
-  privacyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.7)",
-    padding: 15,
-    borderRadius: 20,
-    marginTop: 5
-  },
-  privacyBtnText: {
-    flex: 1,
-    marginLeft: 10,
-    fontWeight: "bold",
-    color: COLORS.subtitle,            // ✅
-  },
-  logoutBtn: { marginTop: 40, alignSelf: "center", width: "60%" },
-  logoutGradient: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderRadius: 15
-  },
-  logoutText: { color: COLORS.white, fontWeight: "bold", marginLeft: 8 }
+    headerWrapper: {
+        width: '100%',
+        height: 60,
+        marginTop: 40,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        zIndex: 10,
+    },
+    titleAbsoluteContainer: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: -1, 
+    },
+    mainTitleCentered: {
+        fontSize: 24,
+        fontWeight: "bold",
+        color: "#5A4C91", // Couleur harmonisée avec les autres titres
+    },
+    sectionTitle: { 
+        fontSize: 16, 
+        fontWeight: "bold", 
+        color: "#5A4C91", 
+        marginTop: 20, 
+        marginBottom: 10 
+    },
+    cardSettings: { backgroundColor: "rgba(255,255,255,0.5)", borderRadius: 20, padding: 10 },
+    settingRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
+    iconContainer: { width: 40, height: 40, backgroundColor: "#F0E6FF", borderRadius: 12, justifyContent: "center", alignItems: "center" },
+    settingLabel: { fontSize: 15, fontWeight: "600", color: "#5A4C91" },
+    settingSublabel: { fontSize: 11, color: "#9E9E9E" },
+    privacyBtn: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.7)", padding: 15, borderRadius: 20, marginTop: 5 },
+    privacyBtnText: { flex: 1, marginLeft: 10, fontWeight: "bold", color: "#5A4C91" },
+    logoutBtn: { marginTop: 40, alignSelf: "center", width: "60%" },
+    logoutGradient: { flexDirection: "row", justifyContent: "center", alignItems: "center", paddingVertical: 12, borderRadius: 15 },
+    logoutText: { color: "#fff", fontWeight: "bold", marginLeft: 8 }
 });

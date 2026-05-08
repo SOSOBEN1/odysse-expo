@@ -1,6 +1,6 @@
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -19,7 +19,21 @@ export default function AvatarCrd({ model, bgColor = "#ffffff", isTransparent = 
       try {
         const asset = Asset.fromModule(model);
         await asset.downloadAsync();
-        const b64 = await FileSystem.readAsStringAsync(asset.localUri!, {
+
+        // ✅ Fix: localUri peut être invalide (ex: "/avatar_1" sans extension)
+        let uri = asset.localUri;
+
+        if (!uri || !uri.includes('.')) {
+          const ext = asset.type ?? 'glb';
+          const dest = `${FileSystem.cacheDirectory}avatar_${asset.hash ?? Date.now()}.${ext}`;
+          const info = await FileSystem.getInfoAsync(dest);
+          if (!info.exists) {
+            await FileSystem.downloadAsync(asset.uri, dest);
+          }
+          uri = dest;
+        }
+
+        const b64 = await FileSystem.readAsStringAsync(uri, {
           encoding: 'base64' as any,
         });
         if (isMounted) setBase64(b64);

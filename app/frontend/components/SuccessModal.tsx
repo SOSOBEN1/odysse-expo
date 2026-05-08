@@ -1,13 +1,13 @@
 import { useEffect, useRef } from "react";
 import {
-    Animated,
-    Easing,
-    Image,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Easing,
+  Image,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 // ── Confetti particle ───────────────────────────────────────

@@ -50,5 +50,7 @@
       "typedRoutes": true,
       "reactCompiler": true
     }
+    
   }
+  
 }

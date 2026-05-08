@@ -1,16 +1,25 @@
 // screens/MissionMapScreen.tsx
-import React, { useRef, useEffect, useState, useCallback } from "react";
-import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Dimensions, Animated, StatusBar, Platform, Alert, Modal,
-} from "react-native";
-import Svg, { Path, Circle, Ellipse } from "react-native-svg";
-import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "../constants/supabase";
-import { COLORS, SIZES, SHADOWS } from "../constants/theme";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  Animated,
+  Dimensions,
+  Modal,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Svg, { Circle, Ellipse, Path } from "react-native-svg";
 import CreateMissionModal from "../components/CreateMissionModal";
 import HibouGuide from "../components/ui/Hibou";
+import { supabase } from "../constants/supabase";
+import { SHADOWS } from "../constants/theme";
 import { useUser } from "../constants/UserContext";
 
 const { width } = Dimensions.get("window");

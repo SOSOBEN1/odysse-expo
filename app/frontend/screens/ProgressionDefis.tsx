@@ -408,7 +408,6 @@ function MissionCard({ mission, index, onCocher, savingId, statsCibles }: {
                 <Text style={styles.metaBadgeText}>+{xp_preview} XP</Text>
               </View>
             )}
-
             {!cocheeParMoi && statsCibles.length > 0 && (
               <View style={styles.metaBadge}>
                 <Text style={[styles.metaBadgeText, { color: "#f59e0b" }]}>
@@ -1269,4 +1268,6 @@ const styles = StyleSheet.create({
   currentDateText:   { fontSize: 13, color: "rgba(100,70,160,0.7)", fontWeight: "600", flex: 1 },
   previewDateBox:    { backgroundColor: "rgba(34,197,94,0.08)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12, borderWidth: 1, borderColor: "rgba(34,197,94,0.2)" },
   previewDateText:   { fontSize: 13, color: "rgba(100,70,160,0.7)", fontWeight: "600" },
+missionCardFailed: { borderColor: "rgba(239,68,68,0.35)", backgroundColor: "rgba(255,240,240,0.9)", opacity: 0.75 },
+iconFailed: { backgroundColor: "#ef4444" },
 });

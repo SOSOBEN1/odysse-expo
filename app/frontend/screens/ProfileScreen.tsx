@@ -1,13 +1,12 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ViewStyle } from "react-native";
 import {
-  Animated, Easing, ActivityIndicator, ScrollView, StyleSheet,
-  Text, TouchableOpacity, View,
+  ActivityIndicator, Animated, Easing, ScrollView, StyleSheet,
+  Text, TouchableOpacity, View, ViewStyle
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 
 import AvatarCrd from "../components/AvatarCrd";
 import BackButton from "../components/BackButton";
@@ -15,8 +14,8 @@ import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
 import { useUser } from "../constants/UserContext";
-import { supabase } from "../constants/supabase";
 import { AVATAR_MAP, resolveAvatarModel } from "../constants/avatarMap";
+import { supabase } from "../constants/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface StatCardProps  { emoji: string; value: number; label: string; }
@@ -67,12 +66,86 @@ function AnimatedStar({ style, size, delay = 0 }: AnimatedStarProps) {
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 function StatCard({ emoji, value, label }: StatCardProps) {
   return (
-    <View style={statStyles.card}>
-      <View style={statStyles.row}>
-        <Text style={statStyles.emoji}>{emoji}</Text>
-        <Text style={statStyles.value}>{value}</Text>
-      </View>
-      <Text style={statStyles.label}>{label}</Text>
+    <Animated.View style={[style, {
+      opacity:   a.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.9] }),
+      transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.3] }) }],
+    }]}>
+      <MaterialIcons name="auto-awesome" size={size} color={color} />
+    </Animated.View>
+  );
+}
+
+// ─── Cellule de puzzle ────────────────────────────────────────────────────────
+
+function PuzzleCell({ index, revealed, imageUri, cellSize, accent }: {
+  index: number; revealed: boolean; imageUri: string; cellSize: number; accent: string;
+}) {
+  const sc    = useRef(new Animated.Value(0)).current;
+  const glow  = useRef(new Animated.Value(0)).current;
+
+  const row  = Math.floor(index / GRID_COLS);
+  const col  = index % GRID_COLS;
+  const imgX = -(col * cellSize);
+  const imgY = -(row * cellSize);
+
+  useEffect(() => {
+    Animated.spring(sc, { toValue: 1, friction: 5, delay: index * 80, useNativeDriver: true }).start();
+  }, []);
+
+  useEffect(() => {
+    if (revealed) {
+      Animated.loop(Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 1300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 0, duration: 1300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])).start();
+    }
+  }, [revealed]);
+
+  return (
+    <Animated.View style={[styles.cell, {
+      width: cellSize, height: cellSize,
+      borderColor: revealed ? accent : "rgba(255,255,255,0.25)",
+      transform: [{ scale: sc }],
+    }]}>
+      {revealed ? (
+        <>
+          <View style={{ width: cellSize, height: cellSize, overflow: "hidden" }}>
+            <Image
+              source={{ uri: imageUri }}
+              style={{ width: cellSize * GRID_COLS, height: cellSize * GRID_COLS, position: "absolute", left: imgX, top: imgY }}
+              resizeMode="cover"
+            />
+          </View>
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: accent + "22", borderRadius: 10, opacity: glow }]} />
+          <View style={[styles.cellCheck, { backgroundColor: accent }]}>
+            <Ionicons name="checkmark" size={10} color="#fff" />
+          </View>
+        </>
+      ) : (
+        <View style={styles.cellLocked}>
+          <Ionicons name="lock-closed" size={18} color="rgba(255,255,255,0.5)" />
+        </View>
+      )}
+    </Animated.View>
+  );
+}
+
+// ─── Barre de progression ─────────────────────────────────────────────────────
+
+function ProgressBar({ value, total, accent }: { value: number; total: number; accent: string }) {
+  const w = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(w, {
+      toValue: total > 0 ? value / total : 0,
+      duration: 900, delay: 400, easing: Easing.out(Easing.cubic), useNativeDriver: false,
+    }).start();
+  }, [value, total]);
+  return (
+    <View style={styles.progressTrack}>
+      <Animated.View style={[styles.progressFill, {
+        backgroundColor: accent,
+        width: w.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
+      }]} />
     </View>
   );
 }
@@ -137,7 +210,8 @@ export default function ProfileScreen() {
           .from("users")
           .select("username, prenom, nom, xp, gold, id_level, avatar_url")
           .eq("id_user", userId)
-          .single();
+          .eq("id_puzzle", config.id_puzzle)
+          .maybeSingle();
 
         if (error || !user) {
           console.warn("Erreur fetch profil:", error?.message);
@@ -223,6 +297,21 @@ export default function ProfileScreen() {
     );
   }
 
+  const accent       = zoneInfo?.accent_color ?? "#22c55e";
+  const light        = zoneInfo?.light_color  ?? "#dcfce7";
+  const dark         = zoneInfo?.dark_color   ?? "#14532d";
+  const imageUri     = zoneInfo?.image_url    ?? "";
+  const piecesEarned = puzzle?.pieces_earned  ?? 0;
+  const totalPieces  = puzzle?.total_pieces   ?? TOTAL_PIECES;
+  const isComplete   = puzzle?.is_complete    ?? false;
+
+  const STARS = [
+    { top: 100, left: 14,  size: 16, delay: 0   },
+    { top: 120, right: 16, size: 11, delay: 350  },
+    { top: 155, right: 8,  size: 8,  delay: 650  },
+    { top: 185, left: 32,  size: 7,  delay: 180  },
+  ];
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={StyleSheet.absoluteFill} />
@@ -280,6 +369,7 @@ export default function ProfileScreen() {
                 style={[styles.xpFill, { width: `${xpPct}%` }]}
               />
             </View>
+            <ProgressBar value={piecesEarned} total={totalPieces} accent={accent} />
           </View>
 
           {/* Stats */}
@@ -300,18 +390,14 @@ export default function ProfileScreen() {
 
           {/* Bouton modifier */}
           <TouchableOpacity
-            style={styles.editButton}
+            style={[styles.missionsBtn, { backgroundColor: accent, borderColor: accent + "88" }]}
+            onPress={() => router.push({ pathname: "/frontend/screens/ZoneScreen", params: { zoneId, zoneSlug } })}
             activeOpacity={0.85}
-            onPress={() => router.push("/frontend/screens/EditProfileScreen")}
           >
-            <LinearGradient
-              colors={["#6949a8", "#9574e0", "#baaae7"]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={styles.editGradient}
-            >
-              <Text style={styles.editText}>Modifier profil</Text>
-              <MaterialIcons name="auto-awesome" size={16} color="#fff" style={{ marginLeft: 6 }} />
-            </LinearGradient>
+            <View style={styles.missionsBtnIcon}>
+              <Ionicons name="rocket" size={16} color={accent} />
+            </View>
+            <Text style={styles.missionsBtnText}>Continuer les missions</Text>
           </TouchableOpacity>
 
         </View>

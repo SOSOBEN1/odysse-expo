@@ -1,13 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useEffect } from "react";
-import {
-  Image, Modal, ScrollView, StyleSheet, Text,
-  TextInput, TouchableOpacity, View, Alert, Platform,
-} from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { COLORS, SHADOWS } from "../styles/theme";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  Image, Modal,
+  Platform,
+  ScrollView, StyleSheet, Text,
+  TextInput, TouchableOpacity, View,
+} from "react-native";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
+import { COLORS, SHADOWS } from "../styles/theme";
 
 type Props = {
   visible: boolean;

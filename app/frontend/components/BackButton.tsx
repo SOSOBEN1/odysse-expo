@@ -1,7 +1,6 @@
-import React from "react";
-import { TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { StyleSheet, TouchableOpacity } from "react-native";
 
 interface BackButtonProps {
   onPress?: () => void;

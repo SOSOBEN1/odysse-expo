@@ -124,8 +124,20 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Erreur", "Remplis tous les champs");
+  if (!email || !password) {
+    Alert.alert("Erreur", "Remplis tous les champs");
+    return;
+  }
+   setLoading(true);
+  try {
+    // 1. Connexion via Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError || !authData.user) {
+      Alert.alert("Erreur Auth", authError?.message ?? "user null");
       return;
     }
     setLoading(true);
@@ -135,10 +147,12 @@ export default function LoginScreen() {
         password,
       });
 
-      if (authError || !authData.user) {
-        Alert.alert("Erreur Auth", authError?.message ?? "user null");
-        return;
-      }
+    // 2. Récupérer le profil via auth_id
+    const { data, error } = await supabase
+      .from("users")
+      .select("id_user, avatar_url, username, prenom, nom")
+      .eq("auth_id", authData.user.id)
+      .single();
 
       if (remember) {
         try {
@@ -163,7 +177,6 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  };
 
   const handleGoogleLogin = async () => {
   try {

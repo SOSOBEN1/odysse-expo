@@ -1,7 +1,7 @@
-import React, { useRef, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Animated, PanResponder } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useEffect, useRef } from "react";
+import { Animated, PanResponder, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type Props = {
   question: string;

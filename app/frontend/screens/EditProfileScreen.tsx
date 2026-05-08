@@ -2,7 +2,6 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ViewStyle } from "react-native";
 import {
   Animated, Easing, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,

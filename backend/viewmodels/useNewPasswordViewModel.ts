@@ -24,31 +24,33 @@ export function useNewPasswordViewModel(userId: string) {
   };
 
   const submit = async (): Promise<boolean> => {
-    if (!password) {
-      setError("Entrez un mot de passe");
+  console.log("🔑 userId reçu:", userId, "type:", typeof userId);
+  if (!password) {
+    setError("Entrez un mot de passe");
+    return false;
+  }
+  if (password !== confirmPassword) {
+    setError("Les mots de passe ne correspondent pas");
+    return false;
+  }
+  if (strength < 2) {
+    setError("Mot de passe trop faible (min: 6 car. + majuscule ou chiffre)");
+    return false;
+  }
+  setError(null);
+  setLoading(true);
+  try {
+    const result = await authService.updatePassword(userId, password);
+    console.log("🔄 updatePassword result:", result); // ← ajoute ici
+    if (!result.success) {
+      setError(result.error ?? "Erreur lors de la mise à jour");
       return false;
     }
-    if (password !== confirmPassword) {
-      setError("Les mots de passe ne correspondent pas");
-      return false;
-    }
-    if (strength < 2) {
-      setError("Mot de passe trop faible (min: 6 car. + majuscule ou chiffre)");
-      return false;
-    }
-    setError(null);
-    setLoading(true);
-    try {
-      const result = await authService.updatePassword(userId, password);
-      if (!result.success) {
-        setError(result.error ?? "Erreur lors de la mise à jour");
-        return false;
-      }
-      return true;
-    } finally {
-      setLoading(false);
-    }
-  };
+    return true;
+  } finally {
+    setLoading(false);
+  }
+};
 
   const strengthColors = ["#ff4d4f", "#ff7a45", "#ffa940", "#73d13d"];
   const strengthLabels = ["Très faible", "Faible", "Moyen", "Fort"];

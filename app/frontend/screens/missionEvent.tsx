@@ -2,6 +2,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { COLORS, SHADOWS } from "../styles/theme";
+
 import {
   Alert,
   Animated,
@@ -19,7 +21,6 @@ import Svg, { Circle, Ellipse, Path } from "react-native-svg";
 import CreateMissionModal from "../components/CreateMissionModal";
 import HibouGuide from "../components/ui/Hibou";
 import { supabase } from "../constants/supabase";
-import { SHADOWS } from "../constants/theme";
 import { useUser } from "../constants/UserContext";
 
 const { width } = Dimensions.get("window");

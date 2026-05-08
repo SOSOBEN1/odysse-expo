@@ -20,6 +20,7 @@ const EVENT_TYPES = [
 export default function CreateEventModal({ visible, onClose, onCreate, initialData }: Props) {
   const [selectedType, setSelectedType] = useState("soutenance");
   const [eventName, setEventName] = useState("");
+  const [deadline, setDeadline] = useState("");
   const [loading, setLoading] = useState(false);
   const { userId } = useUser();
 

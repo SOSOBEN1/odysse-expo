@@ -2,14 +2,12 @@
   "expo": {
     "name": "odysse",
     "slug": "odysse",
+    "owner": "aminatoun",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "odysse",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "name": "odysse",
-    "slug": "odysse",
     "scheme": "odysse",
     "ios": {
       "supportsTablet": true

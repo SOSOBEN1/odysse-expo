@@ -1,5 +1,4 @@
 import { Feather, FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
-import * as AuthSession from "expo-auth-session";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
@@ -123,23 +122,13 @@ export default function LoginScreen() {
     }
   };
 
+  // ── Connexion email/password ──
   const handleLogin = async () => {
-  if (!email || !password) {
-    Alert.alert("Erreur", "Remplis tous les champs");
-    return;
-  }
-   setLoading(true);
-  try {
-    // 1. Connexion via Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (authError || !authData.user) {
-      Alert.alert("Erreur Auth", authError?.message ?? "user null");
+    if (!email || !password) {
+      Alert.alert("Erreur", "Remplis tous les champs");
       return;
     }
+
     setLoading(true);
     try {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -147,12 +136,10 @@ export default function LoginScreen() {
         password,
       });
 
-    // 2. Récupérer le profil via auth_id
-    const { data, error } = await supabase
-      .from("users")
-      .select("id_user, avatar_url, username, prenom, nom")
-      .eq("auth_id", authData.user.id)
-      .single();
+      if (authError || !authData.user) {
+        Alert.alert("Erreur Auth", authError?.message ?? "user null");
+        return;
+      }
 
       if (remember) {
         try {
@@ -171,19 +158,18 @@ export default function LoginScreen() {
       }
 
       await syncProfileAndRedirect(authData.user.id);
-
     } catch (err) {
       Alert.alert("Erreur", "Une erreur est survenue");
     } finally {
       setLoading(false);
     }
+  };
 
+  // ── Connexion Google OAuth ──
   const handleGoogleLogin = async () => {
   try {
-    const redirectUrl = AuthSession.makeRedirectUri({
-      scheme: "odysse",
-      path: "auth/callback",
-    });
+    // Construis l'URL proxy manuellement
+const redirectUrl = "https://auth.expo.io/@aminatoun/odysse";    // ↑ Remplace par ton vrai username Expo et le slug de app.json
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -195,24 +181,49 @@ export default function LoginScreen() {
       return;
     }
 
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+    const result = await WebBrowser.openAuthSessionAsync(
+      data.url,
+      redirectUrl
+    );
 
-    if (result.type === "success") {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    console.log("RESULT TYPE:", result.type);
+    console.log("RESULT URL:", result.url);
+
+    if (result.type !== "success" || !result.url) {
+      Alert.alert("Annulé", "Connexion Google annulée");
+      return;
+    }
+
+    const hashPart = result.url.split("#")[1] ?? result.url.split("?")[1] ?? "";
+    const params = Object.fromEntries(new URLSearchParams(hashPart));
+
+    if (params.access_token && params.refresh_token) {
+      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+        access_token: params.access_token,
+        refresh_token: params.refresh_token,
+      });
 
       if (sessionError || !sessionData.session?.user) {
-        Alert.alert("Erreur", "Impossible de récupérer la session Google");
+        Alert.alert("Erreur", "Impossible d'établir la session");
         return;
       }
 
       await syncProfileAndRedirect(sessionData.session.user.id);
     } else {
-      Alert.alert("Annulé", "Connexion Google annulée");
+      await new Promise(r => setTimeout(r, 1000));
+      const { data: fallback } = await supabase.auth.getSession();
+      if (fallback.session?.user) {
+        await syncProfileAndRedirect(fallback.session.user.id);
+      } else {
+        Alert.alert("Erreur", "Session introuvable");
+      }
     }
+
   } catch (err) {
     Alert.alert("Erreur", "Connexion Google échouée");
   }
 };
+
   return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
       <WaveBackground />

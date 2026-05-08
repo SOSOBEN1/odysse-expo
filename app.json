@@ -6,5 +6,12 @@
   ],
   "android": {
     "package": "com.anonymous.odysse"
+  },
+  
+  "expo": {
+    "scheme": "odysse",
+    "slug": "odysse",
+    "owner": "aminatoun",
   }
+
 }

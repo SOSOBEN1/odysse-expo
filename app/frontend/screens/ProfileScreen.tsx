@@ -177,11 +177,29 @@ const badgeStyles = StyleSheet.create({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getLevelTitle(niveau: number): string {
-  if (niveau <= 2)  return "Débutant curieux";
-  if (niveau <= 5)  return "Explorateur de savoir";
-  if (niveau <= 10) return "Apprenti maître";
-  if (niveau <= 20) return "Expert confirmé";
-  return "Maître légendaire";
+  if (niveau === 1)  return "Débutant curieux 🌱";
+  if (niveau === 2)  return "Apprenti motivé 🔥";
+  if (niveau <= 4)   return "Explorateur de savoir 🗺️";
+  if (niveau <= 6)   return "Apprenti maître ⚡";
+  if (niveau <= 9)   return "Stratège confirmé 🧠";
+  if (niveau <= 14)  return "Expert discipliné 💎";
+  if (niveau <= 19)  return "Maître de l'odyssée 🏆";
+  if (niveau <= 29)  return "Vétéran légendaire 👑";
+  if (niveau <= 39)  return "Élite suprême 🦁";
+  return "Légende vivante ✨";
+}
+
+function getLevelDescription(niveau: number): string {
+  if (niveau === 1)  return "Tu commences ton odyssée. Chaque mission te rapproche de la maîtrise.";
+  if (niveau === 2)  return "La flamme est allumée. Continue, tu es sur la bonne voie !";
+  if (niveau <= 4)   return "Tu explores de nouveaux horizons. Ton potentiel se révèle.";
+  if (niveau <= 6)   return "Tu maîtrises les bases. Place à la discipline et à la régularité.";
+  if (niveau <= 9)   return "Ton cerveau s'optimise. Tu penses et agis comme un stratège.";
+  if (niveau <= 14)  return "L'excellence devient une habitude. Tu es une référence.";
+  if (niveau <= 19)  return "Tu domines l'odyssée. Peu atteignent ce niveau de maîtrise.";
+  if (niveau <= 29)  return "Vétéran aguerri. Ton parcours inspire ceux qui commencent.";
+  if (niveau <= 39)  return "Tu fais partie de l'élite. La légende se construit mission par mission.";
+  return "Au sommet. Tu es une légende vivante de l'odyssée. ✨";
 }
 
 // ─── SCREEN ───────────────────────────────────────────────────────────────────
@@ -235,9 +253,10 @@ export default function ProfileScreen() {
           supabase.from("user_badges").select("id_badge",             { count: "exact", head: true }).eq("id_user", userId),
         ]);
 
-        const niveau = user.id_level ?? 1;
-        const xp     = user.xp ?? 0;
-        const maxXp  = niveau * 500;
+        const xpTotal = user.xp ?? 0;
+        const niveau  = Math.floor(xpTotal / 500) + 1; // 500 XP = 1 niveau
+        const xpDansNiveau = xpTotal % 500;
+        const maxXp   = 500;
 
         setUserData({
           username:   user.username ?? "",
@@ -245,7 +264,7 @@ export default function ProfileScreen() {
           nom:        user.nom      ?? "",
           level:      niveau,
           levelTitle: getLevelTitle(niveau),
-          xp:         xp % maxXp,
+          xp:         xpDansNiveau,
           xpMax:      maxXp,
           coins:      user.gold     ?? 0,
           badges:     badgesCount   ?? 0,
@@ -352,6 +371,7 @@ export default function ProfileScreen() {
         {/* Nom + niveau */}
         <Text style={styles.userName}>{displayName.toUpperCase()}</Text>
         <Text style={styles.userLevel}>Niveau {userData.level} – {userData.levelTitle}</Text>
+        <Text style={styles.levelDesc}>{getLevelDescription(userData.level)}</Text>
 
         {/* ── Card principale ── */}
         <View style={styles.card}>
@@ -448,7 +468,8 @@ const styles = StyleSheet.create({
   },
 
   userName:  { fontSize: 22, fontWeight: "900", color: "#2d1a6e", letterSpacing: 1.5, marginBottom: 4, textAlign: "center" },
-  userLevel: { fontSize: 13, color: "#9b87c9", fontWeight: "600", marginBottom: 20, textAlign: "center" },
+  userLevel: { fontSize: 13, color: "#9b87c9", fontWeight: "600", marginBottom: 6, textAlign: "center" },
+  levelDesc: { fontSize: 11, color: "#a78bca", fontStyle: "italic", textAlign: "center", marginBottom: 16, paddingHorizontal: 24, lineHeight: 16 },
 
   card: {
     width: "100%",

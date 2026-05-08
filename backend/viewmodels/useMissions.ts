@@ -194,9 +194,15 @@ export function useMissions(userId: string | null) {
 
           const mission = missionsRef.current.find((m) => m.id === missionId);
           if (mission) {
-            const totalSeconds = parseDurationToSeconds(mission.duration);
-            if (totalSeconds > 0 && newElapsed >= totalSeconds) {
-              setTimeout(() => handleFinishRef.current(missionId), 0);
+            const match = mission.duration?.match(/(\d+)h(\d*)/);
+            if (match) {
+              const totalSeconds =
+                (parseInt(match[1]) || 0) * 3600 +
+                (parseInt(match[2]) || 0) * 60;
+              // ✅ Guard : déclencher UNE SEULE FOIS quand on atteint exactement le temps
+              if (totalSeconds > 0 && newElapsed === totalSeconds) {
+                setTimeout(() => handleFinishRef.current(missionId), 0);
+              }
             }
           }
         });
@@ -292,7 +298,9 @@ export function useMissions(userId: string | null) {
     async (missionId: number) => {
       if (!userId) return;
       const timer = timers[missionId];
-      if (!timer || timer.state === "done") return;
+      if (!timer || !userId) return;
+      // ✅ Double guard : ne jamais appeler deux fois pour la même mission
+      if (timer.state === "done" || timer.state === "fail") return;
       try {
         const { xp, coins } = await finishMissionSession(
           missionId,

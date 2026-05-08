@@ -1,4 +1,7 @@
 import { supabase } from "../../app/frontend/constants/supabase";
+import { completeMission } from "../services/Userstatsservice";
+import { checkAndUnlockBadges } from "../services/badgeEngine";
+import { checkAndUpdateLevel } from "../services/levelService";
 import type {
   Mission,
   MissionCreatePayload,
@@ -58,7 +61,7 @@ export const fetchMissions = async (
     boss_events ( nom )
   `)
   
-    .or(`id_user.eq.${userId},id_defi.not.is.null`)
+    .eq("id_user", userId) 
   .order("id_mission", { ascending: false });
 
   if (errM) throw errM;
@@ -294,6 +297,47 @@ export const finishMissionSession = async (
       .eq("id_user", userIdInt);
 
     if (errWrite) throw errWrite;
+  }
+
+  // 6️⃣ Mettre à jour les stats (énergie, stress, sérenité, concentration, discipline)
+  try {
+    const { data: fullMission } = await supabase
+      .from("mission")
+      .select("id_mission, titre, description, duree_min, difficulte, priorite, energie_cout, stress_gain, connaissance_gain, organisation_gain, xp_gain")
+      .eq("id_mission", missionId)
+      .single();
+
+    if (fullMission) {
+      await completeMission(String(userIdInt), {  // ✅ string requis par completeMission
+        id_mission:        fullMission.id_mission,
+        titre:             fullMission.titre,
+        description:       fullMission.description ?? "",
+        duree_min:         Math.round(elapsedSeconds / 60),
+        difficulte:        fullMission.difficulte,
+        priorite:          fullMission.priorite,
+        energie_cout:      fullMission.energie_cout,
+        stress_gain:       fullMission.stress_gain,
+        connaissance_gain: fullMission.connaissance_gain,
+        organisation_gain: fullMission.organisation_gain,
+        xp_gain:           fullMission.xp_gain,
+      });
+    }
+  } catch (e) {
+    console.warn("⚠️ Stats update failed (non-bloquant):", e);
+  }
+
+  // 7️⃣ Vérifier level-up (500 XP = 1 niveau)
+  try {
+    await checkAndUpdateLevel(userIdInt);
+  } catch (e) {
+    console.warn("⚠️ Level check failed (non-bloquant):", e);
+  }
+
+  // 8️⃣ Vérifier badges débloqués
+  try {
+    await checkAndUnlockBadges(userIdInt);
+  } catch (e) {
+    console.warn("⚠️ Badge check failed (non-bloquant):", e);
   }
 
   console.log(`✅ finishMissionSession — xp: ${xpGain}, coins: ${coins}`);

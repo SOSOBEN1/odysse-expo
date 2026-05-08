@@ -276,7 +276,106 @@ async function checkAllSkillsMax(userId: number): Promise<boolean> {
 // ─── Table de conditions ──────────────────────────────────────────────────────
 // Les clés correspondent EXACTEMENT au champ `condition` dans la table `badges`
 
-const BADGE_CONDITIONS: Record<string, (s: UserSnapshot) => boolean> = {
+// ── Helper : récupérer le niveau d'un skill user ──────────────────────────────
+async function getSkillValue(userId: number, skillId: number): Promise<number> {
+  const { data } = await supabase
+    .from("user_skills")
+    .select("valeur")
+    .eq("id_user", userId)
+    .eq("id_skill", skillId)
+    .maybeSingle();
+  return data?.valeur ?? 0;
+}
+
+// ── Helper : vérifier que plusieurs skills sont >= threshold ──────────────────
+async function checkSkillsAbove(userId: number, skillIds: number[], threshold: number): Promise<boolean> {
+  const { data } = await supabase
+    .from("user_skills")
+    .select("id_skill, valeur")
+    .eq("id_user", userId)
+    .in("id_skill", skillIds);
+
+  if (!data || data.length < skillIds.length) return false;
+  return data.every((s: any) => (s.valeur ?? 0) >= threshold);
+}
+
+// ── Snapshot étendu ───────────────────────────────────────────────────────────
+
+interface ExtendedSnapshot extends UserSnapshot {
+  // Skills bien-être
+  skillRespiration:   number;
+  skillMeditation:    number;
+  skillEmotions:      number;
+  skillSommeil:       number;
+  skillSport:         number;
+  skillNutrition:     number;
+  skillsBienEtre80:   boolean;
+  // Skills apprentissage
+  skillLecture:       number;
+  skillRepetition:    number;
+  skillFeynman:       number;
+  skillMindMap:       number;
+  skillsApprentissage80: boolean;
+  // Skills organisation
+  skillPlanning:      number;
+  skillPomodoro:      number;    // on utilise focusSessions pour les sessions pomodoro
+  skillPriorisation:  number;
+  skillAntiProcra:    number;
+  skillsOrganisation80: boolean;
+  // XP total
+  xpTotal: number;
+}
+
+async function getExtendedSnapshot(userId: number): Promise<ExtendedSnapshot> {
+  const base = await getUserSnapshot(userId);
+
+  const [
+    skillRespiration, skillMeditation, skillEmotions, skillSommeil, skillSport, skillNutrition,
+    skillLecture, skillRepetition, skillFeynman, skillMindMap,
+    skillPlanning, skillPomodoro, skillPriorisation, skillAntiProcra,
+    skillsBienEtre80, skillsApprentissage80, skillsOrganisation80,
+  ] = await Promise.all([
+    // Bien-être (IDs 1-6)
+    getSkillValue(userId, 1),
+    getSkillValue(userId, 2),
+    getSkillValue(userId, 3),
+    getSkillValue(userId, 4),
+    getSkillValue(userId, 5),
+    getSkillValue(userId, 6),
+    // Apprentissage (IDs 7-10)
+    getSkillValue(userId, 7),
+    getSkillValue(userId, 8),
+    getSkillValue(userId, 9),
+    getSkillValue(userId, 10),
+    // Organisation (IDs 11-14)
+    getSkillValue(userId, 11),
+    getSkillValue(userId, 12),
+    getSkillValue(userId, 13),
+    getSkillValue(userId, 14),
+    // Groupes >= 80
+    checkSkillsAbove(userId, [1, 2, 3, 4, 5, 6], 80),
+    checkSkillsAbove(userId, [7, 8, 9, 10], 80),
+    checkSkillsAbove(userId, [11, 12, 13, 14], 80),
+  ]);
+
+  // XP total
+  const { data: user } = await supabase.from("users").select("xp").eq("id_user", userId).single();
+  const xpTotal = user?.xp ?? 0;
+
+  return {
+    ...base,
+    skillRespiration, skillMeditation, skillEmotions, skillSommeil, skillSport, skillNutrition,
+    skillsBienEtre80,
+    skillLecture, skillRepetition, skillFeynman, skillMindMap,
+    skillsApprentissage80,
+    skillPlanning, skillPomodoro, skillPriorisation, skillAntiProcra,
+    skillsOrganisation80,
+    xpTotal,
+  };
+}
+
+const BADGE_CONDITIONS: Record<string, (s: ExtendedSnapshot) => boolean> = {
+  // ── Badges existants ─────────────────────────────────────────────────────────
   "Valider 1 mission":        (s) => s.missionsDone >= 1,
   "7 jours consécutifs":      (s) => s.streak7,
   "Voir les stats 10 fois":   (s) => s.statsViewCount >= 10,
@@ -289,6 +388,40 @@ const BADGE_CONDITIONS: Record<string, (s: UserSnapshot) => boolean> = {
   "Valider 30 missions":      (s) => s.missionsDone >= 30,
   "100% compétences":         (s) => s.skillsMax,
   "7 jours stress < 20%":     (s) => s.stressLow7,
+
+  // ── MODULE BIEN-ÊTRE ────────────────────────────────────────────────────────
+  "Skill Respiration x5":     (s) => s.skillRespiration >= 5,
+  "Skill Méditation 50":      (s) => s.skillMeditation >= 50,
+  "Skill Emotions 75":        (s) => s.skillEmotions >= 75,
+  "Skill Sommeil 50":         (s) => s.skillSommeil >= 50,
+  "Skill Sport 50":           (s) => s.skillSport >= 50,
+  "Skill Nutrition 50":       (s) => s.skillNutrition >= 50,
+  "Skills Bien-Être 80":      (s) => s.skillsBienEtre80,
+
+  // ── MODULE APPRENTISSAGE ────────────────────────────────────────────────────
+  "Skill Lecture 30":         (s) => s.skillLecture >= 30,
+  "Skill Repetition 50":      (s) => s.skillRepetition >= 50,
+  "Skill Feynman 50":         (s) => s.skillFeynman >= 50,
+  "Skill MindMap 75":         (s) => s.skillMindMap >= 75,
+  "Skills Apprentissage 80":  (s) => s.skillsApprentissage80,
+
+  // ── MODULE ORGANISATION ─────────────────────────────────────────────────────
+  "Skill Planning 30":        (s) => s.skillPlanning >= 30,
+  "Skill Pomodoro 10 sessions":(s) => s.focusSessions >= 10,
+  "Skill Priorisation 75":    (s) => s.skillPriorisation >= 75,
+  "Skill AntiProcra 50":      (s) => s.skillAntiProcra >= 50,
+  "Skills Organisation 80":   (s) => s.skillsOrganisation80,
+
+  // ── NIVEAUX ─────────────────────────────────────────────────────────────────
+  "Niveau 5":   (s) => s.niveau >= 5,
+  "Niveau 20":  (s) => s.niveau >= 20,
+  "Niveau 30":  (s) => s.niveau >= 30,
+  "Niveau 50":  (s) => s.niveau >= 50,
+
+  // ── XP TOTAL ────────────────────────────────────────────────────────────────
+  "XP Total 1000":  (s) => s.xpTotal >= 1000,
+  "XP Total 5000":  (s) => s.xpTotal >= 5000,
+  "XP Total 10000": (s) => s.xpTotal >= 10000,
 };
 
 // ─── Fonction principale ──────────────────────────────────────────────────────
@@ -325,7 +458,7 @@ export async function checkAndUnlockBadges(userId: number): Promise<string[]> {
     if (!candidates.length) return [];
 
     // 4. Construire le snapshot du joueur (un seul appel pour tous les badges)
-    const snapshot = await getUserSnapshot(userId);
+    const snapshot = await getExtendedSnapshot(userId);
 
     // 5. Tester chaque condition
     const unlocked: string[] = [];

@@ -3,10 +3,13 @@ import { supabase } from "../../app/frontend/constants/supabase";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface PlayerStats {
-  energie: number;
-  stress: number;
-  connaissance: number;
-  organisation: number;
+  energie:       number;
+  stress:        number;
+  connaissance:  number;
+  organisation:  number;
+  serenite:      number;
+  concentration: number;
+  discipline:    number;
 }
 
 export interface MissionData {
@@ -140,14 +143,10 @@ function computeNewOrganisation(current: number, mission: MissionData): number {
   return clamp(current + impact);
 }
 
-// ─── Derived Stats (read-only, not stored) ───────────────────────────────────
+// ─── Derived Stats ────────────────────────────────────────────────────────────
 /**
- * These are computed live from base stats (same as in DashboardScreen).
- * NOT stored in DB — always derived.
- *
- *   Concentration = Énergie × 0.5 + Connaissance × 0.5
- *   Sérénité      = 100 - Stress
- *   Discipline    = Organisation × 0.7 + Connaissance × 0.3
+ * Calcule sérenité, concentration, discipline à partir des stats de base.
+ * Ces valeurs sont maintenant PERSISTÉES en BDD.
  */
 export function computeDerivedStats(base: PlayerStats) {
   return {
@@ -158,8 +157,27 @@ export function computeDerivedStats(base: PlayerStats) {
 }
 
 /**
- * Full discipline formula using mission completion ratio:
- *   Discipline += (completed / total) × 10 - (missed / total) × 5
+ * Calcule la nouvelle sérenité après complétion d'une mission.
+ * Sérénité_nouvelle = Sérénité_actuelle + (100 − Stress) × 0.1 + Bonus_pause
+ * Bonus_pause = +5 si mission de type pause/détente
+ */
+function computeNewSerenite(current: number, newStress: number, mission: MissionData): number {
+  const bonusPause = isRestMission(mission) ? 5 : 0;
+  return clamp(current + (100 - newStress) * 0.1 + bonusPause);
+}
+
+/**
+ * Calcule la nouvelle concentration après complétion d'une mission.
+ * Concentration_nouvelle = Concentration_actuelle + Gain_apprentissage − (100 − Énergie) × 0.05
+ */
+function computeNewConcentration(current: number, newEnergie: number, mission: MissionData): number {
+  const gainApprentissage = mission.connaissance_gain ?? 0;
+  return clamp(current + gainApprentissage - (100 - newEnergie) * 0.05);
+}
+
+/**
+ * Calcule la nouvelle discipline selon le ratio missions complétées.
+ * Discipline += (réalisées / totales) × 10 − (oubliées / totales) × 5
  */
 export function computeDisciplineFromRatio(
   current: number,
@@ -250,10 +268,10 @@ export async function completeMission(
   userId: string,
   mission: MissionData
 ): Promise<MissionCompletionResult | null> {
-  // 1. Fetch current stats
+  // 1. Fetch current stats (inclut maintenant les 3 nouvelles colonnes)
   const { data: statsData, error: statsError } = await supabase
     .from("player_stats")
-    .select("energie, stress, connaissance, organisation")
+    .select("energie, stress, connaissance, organisation, serenite, concentration, discipline")
     .eq("id_user", userId)
     .maybeSingle();
 
@@ -263,42 +281,63 @@ export async function completeMission(
   }
 
   const current: PlayerStats = {
-    energie:      statsData.energie      ?? 50,
-    stress:       statsData.stress       ?? 50,
-    connaissance: statsData.connaissance ?? 50,
-    organisation: statsData.organisation ?? 50,
+    energie:       statsData.energie       ?? 50,
+    stress:        statsData.stress        ?? 50,
+    connaissance:  statsData.connaissance  ?? 50,
+    organisation:  statsData.organisation  ?? 50,
+    serenite:      statsData.serenite      ?? 50,
+    concentration: statsData.concentration ?? 70,
+    discipline:    statsData.discipline    ?? 50,
   };
 
-  // 2. Apply formulas
+  // 2. Calculer les stats de base
+  const newEnergie      = computeNewEnergie(current.energie, mission);
+  const newStress       = computeNewStress(current.stress, mission);
+  const newConnaissance = computeNewConnaissance(current.connaissance, mission);
+  const newOrganisation = computeNewOrganisation(current.organisation, mission);
+
+  // 3. Calculer les stats dérivées (maintenant persistées)
+  const newSerenite      = computeNewSerenite(current.serenite, newStress, mission);
+  const newConcentration = computeNewConcentration(current.concentration, newEnergie, mission);
+  // Discipline : on passe 1 mission réalisée / 1 totale / 0 oubliée comme delta unitaire
+  // (le ratio précis est calculé dans ProgressionService.ts pour les défis)
+  const newDiscipline = computeDisciplineFromRatio(current.discipline, 1, 1, 0);
+
   const newStats: PlayerStats = {
-    energie:      computeNewEnergie(current.energie, mission),
-    stress:       computeNewStress(current.stress, mission),
-    connaissance: computeNewConnaissance(current.connaissance, mission),
-    organisation: computeNewOrganisation(current.organisation, mission),
+    energie:       newEnergie,
+    stress:        newStress,
+    connaissance:  newConnaissance,
+    organisation:  newOrganisation,
+    serenite:      newSerenite,
+    concentration: newConcentration,
+    discipline:    newDiscipline,
   };
 
-  // 3. Update player_stats
+  // 4. Sauvegarder toutes les stats en BDD (upsert = crée la ligne si elle n'existe pas)
   const { error: updateStatsError } = await supabase
     .from("player_stats")
-    .update({
-      energie:      newStats.energie,
-      stress:       newStats.stress,
-      connaissance: newStats.connaissance,
-      organisation: newStats.organisation,
-    })
-    .eq("id_user", userId);
+    .upsert({
+      id_user:       userId,
+      energie:       newStats.energie,
+      stress:        newStats.stress,
+      connaissance:  newStats.connaissance,
+      organisation:  newStats.organisation,
+      serenite:      newStats.serenite,
+      concentration: newStats.concentration,
+      discipline:    newStats.discipline,
+      date_maj:      new Date().toISOString(),
+    }, { onConflict: "id_user" });
 
   if (updateStatsError) {
-    console.error("[missionStatsService] Failed to update player_stats:", updateStatsError.message);
+    console.error("[missionStatsService] Failed to upsert player_stats:", updateStatsError.message);
     return null;
   }
 
-
   return {
-  newStats,
-  xpEarned: 0,   // XP géré par missionRewardService.ts
-  goldEarned: 0,
-};
+    newStats,
+    xpEarned:   0, // XP géré par missionRewardService.ts
+    goldEarned: 0,
+  };
 }
 
 // ─── Fetch mission from DB ────────────────────────────────────────────────────

@@ -20,35 +20,58 @@ import CoinPrice from "../components/CoinPrice";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import { useAvatar } from "../constants/AvatarContext";
-import { AVATAR_MAP, resolveAvatarModel } from "../constants/avatarMap"; // ✅ unifié
+import { AVATAR_MAP, resolveAvatarModel } from "../constants/avatarMap";
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = (width / 3) - 16;
 
-const AVATARS_STATIC = [
-  { id: "1", avatarKey: "avatar_boutique_1", price: 50,   itemId: 1 },
-  { id: "2", avatarKey: "avatar_boutique_2", price: 30,   itemId: 2 },
-  { id: "3", avatarKey: "avatar_boutique_3", price: 1200, itemId: 3 },
-  { id: "4", avatarKey: "avatar_boutique_4", price: 40,   itemId: 4 },
-  { id: "5", avatarKey: "avatar_boutique_5", price: 100,  itemId: 5 },
-  { id: "6", avatarKey: "avatar_boutique_6", price: 250,  itemId: 6 },
-  { id: "7", avatarKey: "avatar_boutique_7", price: 900,  itemId: 7 },
-  { id: "8", avatarKey: "avatar_boutique_8", price: 1100, itemId: 8 },
-  { id: "9", avatarKey: "avatar_boutique_9", price: 1300, itemId: 9 },
+// ─── Liste complète — féminin + masculin ──────────────────────────────────────
+const AVATARS_STATIC_ALL = [
+  // ── Boutique Féminin ──
+  { id: "f1", avatarKey: "avatar_boutique_f_1", price: 50,   itemId: 1,  gender: "Feminin"  },
+  { id: "f2", avatarKey: "avatar_boutique_f_2", price: 30,   itemId: 2,  gender: "Feminin"  },
+  { id: "f3", avatarKey: "avatar_boutique_f_3", price: 1200, itemId: 3,  gender: "Feminin"  },
+  { id: "f4", avatarKey: "avatar_boutique_f_4", price: 40,   itemId: 4,  gender: "Feminin"  },
+  { id: "f5", avatarKey: "avatar_boutique_f_5", price: 100,  itemId: 5,  gender: "Feminin"  },
+  { id: "f6", avatarKey: "avatar_boutique_f_6", price: 250,  itemId: 6,  gender: "Feminin"  },
+  { id: "f7", avatarKey: "avatar_boutique_f_7", price: 900,  itemId: 7,  gender: "Feminin"  },
+  { id: "f8", avatarKey: "avatar_boutique_f_8", price: 1100, itemId: 8,  gender: "Feminin"  },
+  { id: "f9", avatarKey: "avatar_boutique_f_9", price: 1300, itemId: 9,  gender: "Feminin"  },
+  // ── Boutique Masculin ──
+  { id: "m1", avatarKey: "avatar_boutique_m_1", price: 50,   itemId: 10, gender: "Masculin" },
+  { id: "m2", avatarKey: "avatar_boutique_m_2", price: 30,   itemId: 11, gender: "Masculin" },
+  { id: "m3", avatarKey: "avatar_boutique_m_3", price: 1200, itemId: 12, gender: "Masculin" },
+  { id: "m4", avatarKey: "avatar_boutique_m_4", price: 40,   itemId: 13, gender: "Masculin" },
+  { id: "m5", avatarKey: "avatar_boutique_m_5", price: 100,  itemId: 14, gender: "Masculin" },
+  { id: "m6", avatarKey: "avatar_boutique_m_6", price: 250,  itemId: 15, gender: "Masculin" },
+  { id: "m7", avatarKey: "avatar_boutique_m_7", price: 900,  itemId: 16, gender: "Masculin" },
+  { id: "m8", avatarKey: "avatar_boutique_m_8", price: 1100, itemId: 17, gender: "Masculin" },
+  { id: "m9", avatarKey: "avatar_boutique_m_9", price: 1300, itemId: 18, gender: "Masculin" },
 ];
 
+// ─── Noms & descriptions par id ───────────────────────────────────────────────
 const AVATAR_DETAILS: Record<string, { name: string; description: string }> = {
-  "1": { name: "Léa",    description: "Douce et rêveuse."       },
-  "2": { name: "Chloé",  description: "Pétillante et sportive." },
-  "3": { name: "Mia",    description: "Passionnée par l'art."   },
-  "4": { name: "Sarah",  description: "Curieuse de tout."       },
-  "5": { name: "Jade",   description: "Un style unique."        },
-  "6": { name: "Emma",   description: "La joie de vivre."       },
-  "7": { name: "Inès",   description: "Calme et réfléchie."     },
-  "8": { name: "Lina",   description: "Pleine d'énergie."       },
-  "9": { name: "Sophie", description: "Douée en sciences."      },
+  f1: { name: "Léa",    description: "Douce et rêveuse."       },
+  f2: { name: "Chloé",  description: "Pétillante et sportive." },
+  f3: { name: "Mia",    description: "Passionnée par l'art."   },
+  f4: { name: "Sarah",  description: "Curieuse de tout."       },
+  f5: { name: "Jade",   description: "Un style unique."        },
+  f6: { name: "Emma",   description: "La joie de vivre."       },
+  f7: { name: "Inès",   description: "Calme et réfléchie."     },
+  f8: { name: "Lina",   description: "Pleine d'énergie."       },
+  f9: { name: "Sophie", description: "Douée en sciences."      },
+  m1: { name: "Axel",   description: "Courageux et direct."    },
+  m2: { name: "Noah",   description: "Sportif et compétitif."  },
+  m3: { name: "Lucas",  description: "Créatif et curieux."     },
+  m4: { name: "Tom",    description: "Toujours prêt."          },
+  m5: { name: "Léo",    description: "Stratège né."            },
+  m6: { name: "Hugo",   description: "Calme et posé."          },
+  m7: { name: "Théo",   description: "Plein d'humour."         },
+  m8: { name: "Enzo",   description: "Vif et déterminé."       },
+  m9: { name: "Maxime", description: "Leader naturel."         },
 };
 
+// ─── Éclairage partagé ────────────────────────────────────────────────────────
 const LIGHTING_SCRIPT = `
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ReinhardToneMapping;
@@ -67,6 +90,7 @@ const LIGHTING_SCRIPT = `
 const AvatarRendererStatic = React.memo(
   ({ model, grayscale = false }: { model: any; grayscale?: boolean }) => {
     const [base64, setBase64] = useState<string | null>(null);
+
     useEffect(() => {
       let ok = true;
       (async () => {
@@ -105,13 +129,22 @@ const AvatarRendererStatic = React.memo(
     }, [base64, grayscale]);
 
     if (!base64) return <ActivityIndicator size="small" color="#765EFF" />;
-    return <WebView originWhitelist={["*"]} source={{ html }} style={{ backgroundColor: "transparent" }} javaScriptEnabled scrollEnabled={false} />;
+    return (
+      <WebView
+        originWhitelist={["*"]}
+        source={{ html }}
+        style={{ backgroundColor: "transparent" }}
+        javaScriptEnabled
+        scrollEnabled={false}
+      />
+    );
   }
 );
 
 // ─── Renderer rotatif ────────────────────────────────────────────────────────
 const AvatarRendererRotating = React.memo(({ model }: { model: any }) => {
   const [base64, setBase64] = useState<string | null>(null);
+
   useEffect(() => {
     let ok = true;
     (async () => {
@@ -152,7 +185,15 @@ const AvatarRendererRotating = React.memo(({ model }: { model: any }) => {
   }, [base64]);
 
   if (!base64) return <ActivityIndicator size="small" color="#765EFF" />;
-  return <WebView originWhitelist={["*"]} source={{ html }} style={{ backgroundColor: "transparent" }} javaScriptEnabled scrollEnabled={false} />;
+  return (
+    <WebView
+      originWhitelist={["*"]}
+      source={{ html }}
+      style={{ backgroundColor: "transparent" }}
+      javaScriptEnabled
+      scrollEnabled={false}
+    />
+  );
 });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -161,6 +202,7 @@ type AvatarItem = {
   avatarKey: string;
   price: number;
   itemId: number;
+  gender: string;
   model: any;
   owned: boolean;
   active: boolean;
@@ -168,7 +210,7 @@ type AvatarItem = {
 
 // ─── Écran principal ──────────────────────────────────────────────────────────
 export default function BoutiqueScreen() {
-  const { userId } = useUser();
+  const { userId, gender } = useUser(); // ✅ gender lu depuis le contexte global
   const { setSelectedModel } = useAvatar();
 
   const [activeTab, setActiveTab]     = useState<"mes_avatars" | "boutique">("mes_avatars");
@@ -183,6 +225,16 @@ export default function BoutiqueScreen() {
 
   const [modalCoins, setModalCoins]           = useState(0);
   const [modalNewBalance, setModalNewBalance] = useState(0);
+
+  // ✅ Filtre la liste complète selon le genre de l'utilisateur connecté
+  // Si genre non défini (edge case), on affiche tout
+  const AVATARS_STATIC = useMemo(
+    () =>
+      gender
+        ? AVATARS_STATIC_ALL.filter((a) => a.gender === gender)
+        : AVATARS_STATIC_ALL,
+    [gender]
+  );
 
   // ── Chargement Supabase ───────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -205,7 +257,7 @@ export default function BoutiqueScreen() {
 
       const enriched: AvatarItem[] = AVATARS_STATIC.map((a) => ({
         ...a,
-        model:  AVATAR_MAP[a.avatarKey], // ✅ map unifiée
+        model:  AVATAR_MAP[a.avatarKey] ?? AVATAR_MAP["avatar_1"],
         owned:  ownedIds.has(a.itemId),
         active: a.avatarKey === activeAvatarKey,
       }));
@@ -217,7 +269,7 @@ export default function BoutiqueScreen() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, AVATARS_STATIC]);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
@@ -226,7 +278,6 @@ export default function BoutiqueScreen() {
     if (!userId) return;
 
     const snapshotCoins = userCoins;
-
     setSelectedAvatar({ ...item, ...AVATAR_DETAILS[item.id] });
     setModalCoins(snapshotCoins);
 
@@ -254,7 +305,6 @@ export default function BoutiqueScreen() {
       setAvatarsData((prev) =>
         prev.map((a) => (a.id === item.id ? { ...a, owned: true } : a))
       );
-
       setModalNewBalance(after);
       setModalType("success");
       setResultVisible(true);
@@ -280,7 +330,6 @@ export default function BoutiqueScreen() {
         .update({ avatar_url: selectedAvatar.avatarKey })
         .eq("id_user", userId);
 
-      // ✅ resolveAvatarModel gère tous les types de clés
       setSelectedModel(resolveAvatarModel(selectedAvatar.avatarKey));
       setAvatarsData((prev) =>
         prev.map((a) => ({ ...a, active: a.id === selectedAvatar.id }))
@@ -293,8 +342,8 @@ export default function BoutiqueScreen() {
   }, [userId, selectedAvatar, setSelectedModel]);
 
   // ── Dérivés ───────────────────────────────────────────────────────────────
-  const ownedCount   = useMemo(() => avatarsData.filter((a) => a.owned).length, [avatarsData]);
-  const activeAvatar = useMemo(() => avatarsData.find((a) => a.active),         [avatarsData]);
+  const ownedCount   = useMemo(() => avatarsData.filter((a) => a.owned).length,  [avatarsData]);
+  const activeAvatar = useMemo(() => avatarsData.find((a) => a.active),           [avatarsData]);
 
   // ── Rendu carte ───────────────────────────────────────────────────────────
   const renderItem = useCallback(
@@ -333,8 +382,8 @@ export default function BoutiqueScreen() {
             )}
           </View>
 
-          <Text style={styles.itemName}>{details.name}</Text>
-          <Text style={styles.itemDesc} numberOfLines={1}>{details.description}</Text>
+          <Text style={styles.itemName}>{details?.name ?? "Avatar"}</Text>
+          <Text style={styles.itemDesc} numberOfLines={1}>{details?.description ?? ""}</Text>
 
           {isBoutique ? (
             item.owned ? (
@@ -376,9 +425,14 @@ export default function BoutiqueScreen() {
       <View style={styles.header}>
         <BackButton />
         <Text style={styles.title}>Ma boutique</Text>
-        <CoinPrice price={userCoins.toLocaleString()} colors={["#5A4C91", "#5A4C91"]} iconSize={14} />
+        <CoinPrice
+          price={userCoins.toLocaleString()}
+          colors={["#5A4C91", "#5A4C91"]}
+          iconSize={14}
+        />
       </View>
 
+      {/* Avatar actif rotatif */}
       <View style={styles.profileArea}>
         <View style={styles.profileCircle}>
           {activeAvatar
@@ -388,12 +442,21 @@ export default function BoutiqueScreen() {
         </View>
       </View>
 
+      {/* Onglets */}
       <View style={styles.tabsWrapper}>
         <View style={styles.tabsPill}>
           {(["mes_avatars", "boutique"] as const).map((tab) => (
-            <TouchableOpacity key={tab} style={styles.tabItem} onPress={() => setActiveTab(tab)}>
+            <TouchableOpacity
+              key={tab}
+              style={styles.tabItem}
+              onPress={() => setActiveTab(tab)}
+            >
               <LinearGradient
-                colors={activeTab === tab ? ["#BAAAE7", "#6949A8"] : ["transparent", "transparent"]}
+                colors={
+                  activeTab === tab
+                    ? ["#BAAAE7", "#6949A8"]
+                    : ["transparent", "transparent"]
+                }
                 style={styles.tabGradient}
               >
                 <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
@@ -405,7 +468,9 @@ export default function BoutiqueScreen() {
         </View>
       </View>
 
-      <Text style={styles.counterText}>{ownedCount}/{avatarsData.length} avatars disponibles</Text>
+      <Text style={styles.counterText}>
+        {ownedCount}/{avatarsData.length} avatars disponibles
+      </Text>
 
       <FlatList
         data={avatarsData}
@@ -421,7 +486,10 @@ export default function BoutiqueScreen() {
           <View style={styles.footerFrame}>
             <Text style={styles.footerTitle}>Débloque plus d'avatars</Text>
             <Text style={styles.footerSub}>Rends ta collection unique !</Text>
-            <TouchableOpacity style={styles.footerBtn} onPress={() => setActiveTab("boutique")}>
+            <TouchableOpacity
+              style={styles.footerBtn}
+              onPress={() => setActiveTab("boutique")}
+            >
               <LinearGradient colors={["#BAAAE7", "#6949A8"]} style={styles.footerBtnGradient}>
                 <Text style={styles.footerBtnText}>Aller à la boutique</Text>
               </LinearGradient>

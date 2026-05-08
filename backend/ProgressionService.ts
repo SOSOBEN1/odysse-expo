@@ -356,7 +356,7 @@ export const getParticipants = async (id_defi: number) => {
 export const getMissions = async (defiId: number) => {
   const { data, error } = await supabase
     .from('mission')
-    .select('id_mission, id_defi, titre, description, duree_min, difficulte, priorite, progression, id_user_accompli, xp_gain, users ( nom )')
+.select('id_mission, id_defi, titre, description, duree_min, difficulte, priorite, progression, id_user_accompli, xp_gain')
     .eq('id_defi', defiId)
     .order('id_mission', { ascending: true })
 

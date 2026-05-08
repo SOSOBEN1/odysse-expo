@@ -1,4 +1,5 @@
 import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ScrollView, StatusBar, StyleSheet, Text,
@@ -214,11 +215,18 @@ export default function MissionsScreen() {
   const [isMissionModalVisible, setMissionModalVisible] = useState(false);
   const [isEventModalVisible, setEventModalVisible]     = useState(false);
   const [selectedData, setSelectedData]         = useState<any>(null);
+   const { openCreate } = useLocalSearchParams();
 
   const { selectedModel, setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername }   = useUser();
 
   const [displayName, setDisplayName] = useState<string>(ctxUsername || "...");
+   useEffect(() => {
+    if (openCreate === "true") {
+      setSelectedData(null);
+      setMissionModalVisible(true);
+    }
+  }, [openCreate]);
 
   useEffect(() => {
     if (!userId) return;

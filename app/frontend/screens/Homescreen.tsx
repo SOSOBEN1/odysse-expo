@@ -304,7 +304,6 @@ import MissionsList from "../components/MissionsList";
 import Navbar from "../components/Navbar";
 import StatsBar from "../components/StatsBar";
 import WaveBackground from "../components/waveBackground";
-import SuggestedMissionsSection from "../components/Suggestedmissionssection";
 import { useAvatar } from "../constants/AvatarContext";
 import { useUser } from "../constants/UserContext";
 import { supabase } from "../../../app/frontend/constants/supabase";
@@ -312,7 +311,7 @@ import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 
 import { fetchMissionStats, fetchRecentMissions } from "../../../backend/models/mission.service";
 import type { MissionStats, RecentMission } from "../../../backend/models/mission.service";
-import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
+
 
 
 // ─────────────────────────────────────────────────────────────
@@ -431,10 +430,7 @@ export default function HomeScreen() {
     }
   };
 
-  // ── Handler mission suggérée démarrée ─────────────────────
-  const handleSuggestedMissionStart = (mission: MissionSuggestion) => {
-    console.log("Mission suggérée démarrée:", mission.title);
-  };
+  
 
   const xpPercent = userStats.maxXp > 0 ? (userStats.xp / userStats.maxXp) * 100 : 0;
 
@@ -533,11 +529,7 @@ export default function HomeScreen() {
               onAdd={() => { loadMissionData(); fetchUserStats(); }}
             />
 
-            {/* ── Suggestions intelligentes basées sur les stats ── */}
-            <SuggestedMissionsSection
-              maxSuggestions={5}
-              onMissionStart={handleSuggestedMissionStart}
-            />
+          
           </>
         ) : (
           <EventsTab onViewAll={() => router.push("/EventsScreen")} />

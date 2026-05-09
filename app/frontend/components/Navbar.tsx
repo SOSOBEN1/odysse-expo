@@ -23,6 +23,7 @@ export default function Navbar({ active, onChange, onBeforeNavigate }: Props) {
 
   const handlePress = (item: typeof items[0]) => {
     if (item.key === active) return; // déjà sur cet onglet
+    
 
     const navigate = () => {
       onChange(item.key);

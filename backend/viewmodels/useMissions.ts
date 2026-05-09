@@ -1,4 +1,3 @@
-// NOTE: install @react-native-async-storage/async-storage si pas déjà fait
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -41,48 +40,44 @@ async function saveTimerToStorage(userId: string, missionId: number, timer: Miss
   } catch {}
 }
 
-async function loadTimerFromStorage(userId: string, missionId: number, durationStr: string | undefined): Promise<MissionTimer | null> {
+async function loadTimerFromStorage(
+  userId: string,
+  missionId: number,
+  durationStr: string | undefined
+): Promise<MissionTimer | null> {
   try {
     const raw = await AsyncStorage.getItem(timerKey(userId, missionId));
     if (!raw) return null;
 
     const saved = JSON.parse(raw) as any;
 
-    // Recalculer elapsed si le timer était en cours quand on a quitté
     if (saved.state === "running" && saved.startedAt) {
-      const startedAt = new Date(saved.startedAt);
-      const now = new Date();
+      const startedAt  = new Date(saved.startedAt);
+      const now        = new Date();
       const passedSecs = Math.floor((now.getTime() - startedAt.getTime()) / 1000);
       const newElapsed = (saved.elapsed ?? 0) + passedSecs;
 
-      // Vérifier si la mission a expiré
       const totalSeconds = parseDurationToSeconds(durationStr);
       if (totalSeconds > 0 && newElapsed >= totalSeconds) {
-        // Mission échouée pendant l'absence
         const failed: MissionTimer = {
-          state: "fail",
-          elapsed: totalSeconds,
-          validationId: saved.validationId ?? null,
-          startedAt: null,
+          state: "fail", elapsed: totalSeconds,
+          validationId: saved.validationId ?? null, startedAt: null,
         };
         await AsyncStorage.setItem(timerKey(userId, missionId), JSON.stringify(failed));
         return failed;
       }
 
-      // Timer toujours en cours : reprendre avec elapsed recalculé
       return {
-        state: "running",
-        elapsed: newElapsed,
-        validationId: saved.validationId ?? null,
-        startedAt: new Date(), // nouveau startedAt = maintenant
+        state: "running", elapsed: newElapsed,
+        validationId: saved.validationId ?? null, startedAt: new Date(),
       };
     }
 
     return {
-      state: saved.state ?? "idle",
-      elapsed: saved.elapsed ?? 0,
+      state:        saved.state ?? "idle",
+      elapsed:      saved.elapsed ?? 0,
       validationId: saved.validationId ?? null,
-      startedAt: saved.startedAt ? new Date(saved.startedAt) : null,
+      startedAt:    saved.startedAt ? new Date(saved.startedAt) : null,
     };
   } catch {
     return null;
@@ -104,6 +99,21 @@ function parseDurationToSeconds(duration: string | undefined): number {
   return 0;
 }
 
+// ─── Store module-level : survit au démontage du composant ────────────────────
+const pausedTimersStore = new Map<string, MissionTimer>();
+
+function storePausedTimer(userId: string, missionId: number, timer: MissionTimer) {
+  pausedTimersStore.set(`${userId}:${missionId}`, timer);
+}
+
+function getPausedTimer(userId: string, missionId: number): MissionTimer | null {
+  return pausedTimersStore.get(`${userId}:${missionId}`) ?? null;
+}
+
+function clearPausedTimer(userId: string, missionId: number) {
+  pausedTimersStore.delete(`${userId}:${missionId}`);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useMissions(userId: string | null) {
@@ -112,25 +122,21 @@ export function useMissions(userId: string | null) {
   const [loading, setLoading]   = useState(true);
 
   const [statusModal, setStatusModal] = useState<StatusModal>({
-    visible: false,
-    type: "success",
-    missionTitle: undefined,
-    dateLimit: undefined,
-    xp: 0,
-    coins: 0,
+    visible: false, type: "success",
+    missionTitle: undefined, dateLimit: undefined, xp: 0, coins: 0,
   });
 
   const [exitModal, setExitModal] = useState<ExitModal>({
-    visible: false,
-    pendingAction: null,
+    visible: false, pendingAction: null,
   });
 
   const intervalRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const missionsRef     = useRef<Mission[]>([]);
+  const timersRef       = useRef<Record<number, MissionTimer>>({});
   const handleFinishRef = useRef<(id: number) => Promise<void>>(async () => {});
 
   // ─────────────────────────────────────────────────────────
-  //  Chargement (avec restauration des timers depuis AsyncStorage)
+  //  Chargement
   // ─────────────────────────────────────────────────────────
 
   const loadMissions = useCallback(async () => {
@@ -140,20 +146,30 @@ export function useMissions(userId: string | null) {
       const { missions: fetchedMissions, timers: fetchedTimers } =
         await fetchMissions(userId);
 
-      // Pour chaque mission, essayer de restaurer un timer persisté
       const restoredTimers: Record<number, MissionTimer> = {};
       for (const mission of fetchedMissions) {
-        const stored = await loadTimerFromStorage(userId, mission.id, mission.duration);
-        if (stored && stored.state !== "idle") {
-          restoredTimers[mission.id] = stored;
-        } else {
-          // Utiliser le timer venant du backend (peut être "idle" ou autre)
-          restoredTimers[mission.id] = fetchedTimers[mission.id] ?? {
-            state: "idle",
-            elapsed: 0,
-            validationId: null,
-            startedAt: null,
+        const memoryTimer = getPausedTimer(userId, mission.id);
+        if (memoryTimer && memoryTimer.state !== "idle") {
+          clearPausedTimer(userId, mission.id);
+          restoredTimers[mission.id] = {
+            ...memoryTimer,
+            validationId: memoryTimer.validationId ?? (fetchedTimers[mission.id]?.validationId ?? null),
           };
+          continue;
+        }
+
+        const stored = await loadTimerFromStorage(userId, mission.id, mission.duration);
+        const backendTimer = fetchedTimers[mission.id] ?? {
+          state: "idle", elapsed: 0, validationId: null, startedAt: null,
+        };
+
+        if (stored && stored.state !== "idle") {
+          restoredTimers[mission.id] = {
+            ...stored,
+            validationId: stored.validationId ?? backendTimer.validationId,
+          };
+        } else {
+          restoredTimers[mission.id] = backendTimer;
         }
       }
 
@@ -168,16 +184,37 @@ export function useMissions(userId: string | null) {
 
   useEffect(() => { loadMissions(); }, [loadMissions]);
   useEffect(() => { missionsRef.current = missions; }, [missions]);
+  useEffect(() => { timersRef.current   = timers;   }, [timers]);
 
   // ─────────────────────────────────────────────────────────
-  //  Ticker global + auto-finish (inchangé)
+  //  Cleanup au démontage : sauvegarder les timers running
+  // ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    return () => {
+      if (!userId) return;
+      const currentTimers = timersRef.current;
+      Object.entries(currentTimers).forEach(([id, timer]) => {
+        if (timer.state !== "running") return;
+        const missionId = Number(id);
+        const timerWithStart = { ...timer, startedAt: timer.startedAt ?? new Date() };
+        // 1. Module-level store (survit au démontage)
+        storePausedTimer(userId, missionId, timerWithStart);
+        // 2. AsyncStorage en backup
+        saveTimerToStorage(userId, missionId, timerWithStart).catch(() => {});
+      });
+    };
+  }, [userId]); // userId seulement — on lit timersRef.current, pas timers
+
+  // ─────────────────────────────────────────────────────────
+  //  Ticker global + auto-finish
   // ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       setTimers((prev) => {
         const updated = { ...prev };
-        let changed = false;
+        let changed   = false;
 
         Object.entries(updated).forEach(([id, timer]) => {
           if (timer.state !== "running") return;
@@ -187,7 +224,6 @@ export function useMissions(userId: string | null) {
           updated[missionId] = { ...timer, elapsed: newElapsed };
           changed = true;
 
-          // Persistance du elapsed à chaque tick
           if (userId) {
             saveTimerToStorage(userId, missionId, updated[missionId]).catch(() => {});
           }
@@ -199,7 +235,6 @@ export function useMissions(userId: string | null) {
               const totalSeconds =
                 (parseInt(match[1]) || 0) * 3600 +
                 (parseInt(match[2]) || 0) * 60;
-              // ✅ Guard : déclencher UNE SEULE FOIS quand on atteint exactement le temps
               if (totalSeconds > 0 && newElapsed === totalSeconds) {
                 setTimeout(() => handleFinishRef.current(missionId), 0);
               }
@@ -221,10 +256,7 @@ export function useMissions(userId: string | null) {
   const getTimer = useCallback(
     (missionId: number): MissionTimer =>
       timers[missionId] ?? {
-        state: "idle",
-        elapsed: 0,
-        validationId: null,
-        startedAt: null,
+        state: "idle", elapsed: 0, validationId: null, startedAt: null,
       },
     [timers]
   );
@@ -240,20 +272,13 @@ export function useMissions(userId: string | null) {
       try {
         if (timer?.state === "paused" && timer.validationId) {
           await resumeMissionSession(timer.validationId);
-          const updated: MissionTimer = {
-            ...timer,
-            state: "running",
-            startedAt: new Date(),
-          };
+          const updated: MissionTimer = { ...timer, state: "running", startedAt: new Date() };
           setTimers((prev) => ({ ...prev, [missionId]: updated }));
           await saveTimerToStorage(userId, missionId, updated);
         } else {
           const validationId = await startMissionSession(userId, missionId);
           const newTimer: MissionTimer = {
-            state: "running",
-            elapsed: 0,
-            validationId,
-            startedAt: new Date(),
+            state: "running", elapsed: 0, validationId, startedAt: new Date(),
           };
           setTimers((prev) => ({ ...prev, [missionId]: newTimer }));
           await saveTimerToStorage(userId, missionId, newTimer);
@@ -276,11 +301,7 @@ export function useMissions(userId: string | null) {
       if (!timer?.validationId) return;
       try {
         await pauseMissionSession(timer.validationId);
-        const updated: MissionTimer = {
-          ...timer,
-          state: "paused",
-          startedAt: null,
-        };
+        const updated: MissionTimer = { ...timer, state: "paused", startedAt: null };
         setTimers((prev) => ({ ...prev, [missionId]: updated }));
         await saveTimerToStorage(userId, missionId, updated);
       } catch (err) {
@@ -298,29 +319,22 @@ export function useMissions(userId: string | null) {
     async (missionId: number) => {
       if (!userId) return;
       const timer = timers[missionId];
-      if (!timer || !userId) return;
-      // ✅ Double guard : ne jamais appeler deux fois pour la même mission
+      if (!timer) return;
       if (timer.state === "done" || timer.state === "fail") return;
       try {
         const { xp, coins } = await finishMissionSession(
-          missionId,
-          timer.validationId,
-          timer.elapsed,
-          userId
+          missionId, timer.validationId, timer.elapsed, userId
         );
         const done: MissionTimer = { ...timer, state: "done", startedAt: null };
         setTimers((prev) => ({ ...prev, [missionId]: done }));
-        // Supprimer le timer persisté une fois terminé
         await clearTimerFromStorage(userId, missionId);
 
         const mission = missions.find((m) => m.id === missionId);
         setStatusModal({
-          visible: true,
-          type: "success",
+          visible: true, type: "success",
           missionTitle: mission?.title,
           dateLimit: mission?.dateLimite?.toLocaleDateString("fr-FR") ?? undefined,
-          xp,
-          coins,
+          xp, coins,
         });
       } catch (err) {
         console.error("❌ handleFinish error:", err);
@@ -363,17 +377,8 @@ export function useMissions(userId: string | null) {
   // ─────────────────────────────────────────────────────────
 
   const hasRunningMission = useCallback(() => {
-    return Object.values(timers).some((t) => t.state === "running");
-  }, [timers]);
-
-  const pauseAllRunning = useCallback(async () => {
-    const runningIds = Object.entries(timers)
-      .filter(([, t]) => t.state === "running")
-      .map(([id]) => Number(id));
-    for (const id of runningIds) {
-      await handlePause(id);
-    }
-  }, [timers, handlePause]);
+    return Object.values(timersRef.current).some((t) => t.state === "running");
+  }, []);
 
   const requestExit = useCallback((onConfirm: () => void) => {
     if (!hasRunningMission()) {
@@ -384,37 +389,70 @@ export function useMissions(userId: string | null) {
   }, [hasRunningMission]);
 
   const handlePauseAndLeave = useCallback(async () => {
-    await pauseAllRunning();
-    setExitModal((prev) => {
-      prev.pendingAction?.();
-      return { visible: false, pendingAction: null };
-    });
-  }, [pauseAllRunning]);
+    if (!userId) return;
 
-  const handleLeaveRunning = useCallback(async () => {
-    // Persister le startedAt actuel pour recalculer à la reprise
-    if (userId) {
-      const runningEntries = Object.entries(timers).filter(([, t]) => t.state === "running");
-      for (const [id, timer] of runningEntries) {
-        await saveTimerToStorage(userId, Number(id), {
-          ...timer,
-          startedAt: timer.startedAt ?? new Date(),
-        });
+    const currentTimers  = timersRef.current;
+    const runningEntries = Object.entries(currentTimers).filter(([, t]) => t.state === "running");
+
+    for (const [id, timer] of runningEntries) {
+      const missionId = Number(id);
+      const paused: MissionTimer = { ...timer, state: "paused", startedAt: null };
+      try {
+        if (timer.validationId) await pauseMissionSession(timer.validationId);
+        setTimers(prev => ({ ...prev, [missionId]: paused }));
+        storePausedTimer(userId, missionId, paused);
+        saveTimerToStorage(userId, missionId, paused).catch(() => {});
+      } catch (err) {
+        console.error("❌ handlePauseAndLeave error:", err);
       }
     }
-    setExitModal((prev) => {
-      prev.pendingAction?.();
-      return { visible: false, pendingAction: null };
-    });
-  }, [userId, timers]);
+
+    const pendingAction = exitModal.pendingAction;
+    setExitModal({ visible: false, pendingAction: null });
+    setTimeout(() => { pendingAction?.(); }, 0);
+  }, [userId, exitModal]);
+
+  const handleLeaveRunning = useCallback(async () => {
+    // ✅ FIX : lire timersRef.current (jamais périmé), pas timers
+    if (userId) {
+      const currentTimers  = timersRef.current;
+      const runningEntries = Object.entries(currentTimers)
+        .filter(([, t]) => t.state === "running");
+
+      for (const [id, timer] of runningEntries) {
+        const timerWithStart = { ...timer, startedAt: timer.startedAt ?? new Date() };
+        // Module-level store en priorité
+        storePausedTimer(userId, Number(id), timerWithStart);
+        // AsyncStorage en backup
+        await saveTimerToStorage(userId, Number(id), timerWithStart);
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 100));
+
+    // ✅ FIX : extraire pendingAction AVANT le setState
+    const pendingAction = exitModal.pendingAction;
+    setExitModal({ visible: false, pendingAction: null });
+    setTimeout(() => { pendingAction?.(); }, 0);
+  }, [userId, exitModal]); // exitModal au lieu de timers
 
   const handleCancelExit = useCallback(() => {
     setExitModal({ visible: false, pendingAction: null });
   }, []);
 
   // ─────────────────────────────────────────────────────────
-  //  Edit payload
+  //  Reload missions only (sans écraser les timers)
   // ─────────────────────────────────────────────────────────
+
+  const reloadMissionsOnly = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const { missions: fetchedMissions } = await fetchMissions(userId);
+      setMissions(fetchedMissions);
+    } catch (err) {
+      console.error("❌ reloadMissionsOnly error:", err);
+    }
+  }, [userId]);
 
   const buildEditPayload = useCallback((mission: Mission) => ({
     id_mission:  mission.id,
@@ -443,6 +481,7 @@ export function useMissions(userId: string | null) {
     handleDelete,
     buildEditPayload,
     loadMissions,
+    reloadMissionsOnly,
     closeStatusModal,
     requestExit,
     handlePauseAndLeave,

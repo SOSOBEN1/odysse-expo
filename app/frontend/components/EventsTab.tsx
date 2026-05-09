@@ -6,6 +6,7 @@ import { COLORS, SHADOWS } from "../styles/theme";
 import CreateEventModal from "./CreateEventModal";
 import { useRouter } from "expo-router";
 import { supabase } from "../../../app/frontend/constants/supabase";
+import { useUser } from "../constants/UserContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -122,38 +123,6 @@ const eventStyles = StyleSheet.create({
   chevron:      { marginLeft: 4 },
 });
 
-// ─── Upcoming Card ────────────────────────────────────────────────────────────
-
-function UpcomingCard({ event }: { event: UpcomingEvent }) {
-  return (
-    <TouchableOpacity style={upcomingStyles.card} activeOpacity={0.85}>
-      <View style={upcomingStyles.iconWrapper}>
-        <Text style={upcomingStyles.icon}>📅</Text>
-      </View>
-      <View style={upcomingStyles.content}>
-        <Text style={upcomingStyles.title}>{event.title}</Text>
-        <Text style={upcomingStyles.date}>{event.date}</Text>
-        <View style={upcomingStyles.countdownRow}>
-          <Ionicons name="time-outline" size={12} color={COLORS.secondary} />
-          <Text style={upcomingStyles.countdown}>Commence dans {event.daysLeft} jours</Text>
-        </View>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color="#c4b5fd" />
-    </TouchableOpacity>
-  );
-}
-
-const upcomingStyles = StyleSheet.create({
-  card:         { backgroundColor: "#fff", borderRadius: 20, padding: 14, flexDirection: "row", alignItems: "center", gap: 12, ...SHADOWS.light },
-  iconWrapper:  { width: 44, height: 44, borderRadius: 12, backgroundColor: "#ede9fe", justifyContent: "center", alignItems: "center" },
-  icon:         { fontSize: 22 },
-  content:      { flex: 1 },
-  title:        { fontSize: 14, fontWeight: "700", color: "#1e1b4b" },
-  date:         { fontSize: 11, color: "#9ca3af", marginVertical: 3 },
-  countdownRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  countdown:    { fontSize: 11, color: COLORS.secondary, fontWeight: "600" },
-});
-
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface EventsTabProps {
@@ -163,19 +132,19 @@ interface EventsTabProps {
 // ─── Main EventsTab ───────────────────────────────────────────────────────────
 
 export default function EventsTab({ onViewAll }: EventsTabProps) {
-  const [showModal, setShowModal]   = useState(false);
-  const [events, setEvents]         = useState<Event[]>([]);
-  const [upcoming, setUpcoming]     = useState<UpcomingEvent[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const router = useRouter();
+  const [showModal, setShowModal] = useState(false);
+  const [events, setEvents]       = useState<Event[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const router  = useRouter();
+  const { userId } = useUser();
 
   // ── Fetch depuis Supabase ─────────────────────────────────────────────────
 
   const loadEvents = async () => {
+    if (!userId) return;
     try {
       setLoading(true);
 
-      // 🔵 Récupérer les 4 derniers boss_events
       const { data: bossEvents, error } = await supabase
         .from("boss_events")
         .select(`
@@ -183,56 +152,50 @@ export default function EventsTab({ onViewAll }: EventsTabProps) {
           nom,
           type_boss,
           created_at,
-          mission ( id_mission, mission_validation ( statut ) )
+          mission (
+            id_mission,
+            id_user,
+            mission_validation ( statut )
+          )
         `)
         .order("created_at", { ascending: false })
-        .limit(8); // on prend 8 pour avoir assez pour "actifs" + "à venir"
+        
 
       if (error) throw error;
 
-      const now = new Date();
-      const activeEvents: Event[]    = [];
-      const upcomingEvents: UpcomingEvent[] = [];
+      const activeEvents: Event[] = [];
 
       (bossEvents ?? []).forEach((boss: any) => {
-        const cfg        = getTypeConfig(boss.type_boss ?? "event");
-        const createdAt  = new Date(boss.created_at);
-        const daysLeft   = Math.ceil((createdAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        // Garder uniquement les missions du user connecté
+        const userMissions = (boss.mission ?? []).filter(
+          (m: any) => String(m.id_user) === String(userId)
+        );
 
-        // Compter les missions et celles terminées
-        const missions   = boss.mission ?? [];
-        const total      = missions.length;
-        const done       = missions.filter((m: any) =>
+        // Si cet événement n'a aucune mission pour ce user → on skip
+        if (userMissions.length === 0) return;
+
+        const cfg   = getTypeConfig(boss.type_boss ?? "event");
+        const total = userMissions.length;
+        const done  = userMissions.filter((m: any) =>
           (m.mission_validation ?? []).some((v: any) => v.statut === "done")
         ).length;
 
-        // Formater la date
-        const dateStr = createdAt.toLocaleDateString("fr-FR", {
+        const dateStr = new Date(boss.created_at).toLocaleDateString("fr-FR", {
           day: "2-digit", month: "short",
         }).toUpperCase();
 
-        if (activeEvents.length < 4) {
-          activeEvents.push({
-            id:     String(boss.id_boss),
-            title:  boss.nom ?? "Événement",
-            date:   dateStr,
-            total,
-            done,
-            icon:   cfg.icon,
-            iconBg: cfg.iconBg,
-          });
-        } else if (upcomingEvents.length < 3) {
-          upcomingEvents.push({
-            id:       String(boss.id_boss),
-            title:    boss.nom ?? "Événement",
-            date:     dateStr,
-            daysLeft: Math.max(0, daysLeft),
-          });
-        }
+        activeEvents.push({
+          id:     String(boss.id_boss),
+          title:  boss.nom ?? "Événement",
+          date:   dateStr,
+          total,
+          done,
+          icon:   cfg.icon,
+          iconBg: cfg.iconBg,
+        });
       });
 
-      setEvents(activeEvents);
-      setUpcoming(upcomingEvents);
+      setEvents(activeEvents.slice(0, 5));
     } catch (err: any) {
       console.error("❌ loadEvents error:", err.message);
     } finally {
@@ -242,7 +205,7 @@ export default function EventsTab({ onViewAll }: EventsTabProps) {
 
   useEffect(() => {
     loadEvents();
-  }, []);
+  }, [userId]);
 
   // ── Stats globales ────────────────────────────────────────────────────────
 
@@ -258,7 +221,7 @@ export default function EventsTab({ onViewAll }: EventsTabProps) {
       {/* ── Progression globale ── */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Progression des événements</Text>
-        <Text style={styles.cardSubtitle}>Avancement global de toutes vos événements</Text>
+        <Text style={styles.cardSubtitle}>Avancement global de tous vos événements</Text>
         <View style={styles.progressRow}>
           <DonutChart percent={globalPercent} />
           <View style={styles.legend}>
@@ -286,7 +249,7 @@ export default function EventsTab({ onViewAll }: EventsTabProps) {
         </TouchableOpacity>
       </View>
 
-      {/* ── Liste 4 événements ── */}
+      {/* ── Liste 5 événements ── */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Mes événements</Text>
         <TouchableOpacity onPress={() => router.push("/frontend/screens/EventsScreen")}>
@@ -309,21 +272,6 @@ export default function EventsTab({ onViewAll }: EventsTabProps) {
           ))
         )}
       </View>
-
-      {/* ── Événements à venir ── */}
-      {upcoming.length > 0 && (
-        <>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Événements à venir</Text>
-            <TouchableOpacity onPress={onViewAll}>
-              <Text style={styles.seeAll}>Voir tout</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.list}>
-            {upcoming.map(e => <UpcomingCard key={e.id} event={e} />)}
-          </View>
-        </>
-      )}
 
       {/* ── Conseil hibou ── */}
       <View style={styles.tipCard}>

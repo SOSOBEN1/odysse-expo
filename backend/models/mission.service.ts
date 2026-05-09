@@ -26,7 +26,6 @@ export const fetchMissions = async (
   userId: string
 ): Promise<{ missions: Mission[]; timers: Record<number, MissionTimer> }> => {
 
-  // 1. Récupérer les validations de l'utilisateur
   const { data: validations, error: errV } = await supabase
     .from("mission_validation")
     .select("id_validation, id_mission, date_debut, date_fin, xp_obtenu, statut")
@@ -34,7 +33,6 @@ export const fetchMissions = async (
 
   if (errV) throw errV;
 
-  // Map id_mission → validation la plus récente
   const validationMap: Record<number, any> = {};
   (validations ?? []).forEach(v => {
     const existing = validationMap[v.id_mission];
@@ -43,26 +41,22 @@ export const fetchMissions = async (
     }
   });
 
-  // ✅ Récupérer TOUTES les missions — mais créées par l'utilisateur
-  // Si tes missions ont un id_user dans la table → filtre ici
-  // Sinon, récupère toutes + on affiche selon validation
- const { data: missionsData, error: errM } = await supabase
-  .from("mission")
-  .select(`
-    id_mission,
-    titre,
-    description,
-    duree_min,
-    difficulte,
-    priorite,
-    id_boss,
-    id_defi,
-    date_limite,
-    boss_events ( nom )
-  `)
-  
-    .eq("id_user", userId) 
-  .order("id_mission", { ascending: false });
+  const { data: missionsData, error: errM } = await supabase
+    .from("mission")
+    .select(`
+      id_mission,
+      titre,
+      description,
+      duree_min,
+      difficulte,
+      priorite,
+      id_boss,
+      id_defi,
+      date_limite,
+      boss_events ( nom )
+    `)
+    .eq("id_user", userId)
+    .order("id_mission", { ascending: false });
 
   if (errM) throw errM;
 
@@ -86,6 +80,7 @@ export const fetchMissions = async (
       urgent:      (m.priorite ?? 1) >= 4,
       today:       !!isToday,
       dateLimite:  m.date_limite ? new Date(m.date_limite) : null,
+      idDefi:      m.id_defi ?? null, // ← nouveau
     };
   });
 
@@ -153,7 +148,6 @@ export const startMissionSession = async (
   userId: string,
   missionId: number
 ): Promise<number> => {
-  // Chercher une validation existante (pas encore terminée)
   const { data: existing } = await supabase
     .from("mission_validation")
     .select("id_validation, statut")
@@ -200,9 +194,7 @@ export const pauseMissionSession = async (validationId: number): Promise<void> =
 };
 
 // ─────────────────────────────────────────────────────────────
-//  ✅ FIX — finishMissionSession
-//  - Crée la validation si elle n'existe pas (validationId null)
-//  - Met à jour date_fin + statut + xp_obtenu dans tous les cas
+//  finishMissionSession
 // ─────────────────────────────────────────────────────────────
 
 export const finishMissionSession = async (
@@ -214,7 +206,6 @@ export const finishMissionSession = async (
   const now = new Date();
   const userIdInt = parseInt(userId, 10);
 
-  // 1️⃣ Récupérer les données de la mission
   const { data: missionData, error: errM } = await supabase
     .from("mission")
     .select("xp_gain, difficulte, priorite")
@@ -223,12 +214,10 @@ export const finishMissionSession = async (
 
   if (errM) throw errM;
 
-  // 2️⃣ Calcul XP et coins
   const timeXp  = Math.max(10, Math.round(elapsedSeconds / 60) * 2);
   const xpGain  = (missionData?.xp_gain ?? 0) + timeXp;
   const coins   = (missionData?.difficulte ?? 1) * 10 + (missionData?.priorite ?? 1) * 5;
 
-  // 3️⃣ ✅ Si pas de validationId → créer la validation d'abord
   let finalValidationId = validationId;
 
   if (!finalValidationId) {
@@ -251,7 +240,6 @@ export const finishMissionSession = async (
     finalValidationId = newValidation.id_validation;
 
   } else {
-    // 4️⃣ ✅ Mettre à jour date_fin + statut + xp_obtenu
     const { error: errUpdate } = await supabase
       .from("mission_validation")
       .update({
@@ -269,7 +257,6 @@ export const finishMissionSession = async (
     console.log("✅ mission_validation mis à jour — id:", finalValidationId);
   }
 
-  // 5️⃣ Mettre à jour XP et gold du user
   const { error: errRpc } = await supabase.rpc("increment_user_rewards", {
     p_user_id: userIdInt,
     p_xp:      xpGain,
@@ -279,7 +266,6 @@ export const finishMissionSession = async (
   if (errRpc) {
     console.error("❌ RPC error:", errRpc.message);
 
-    // Fallback manuel
     const { data: userData, error: errRead } = await supabase
       .from("users")
       .select("xp, gold")
@@ -299,7 +285,6 @@ export const finishMissionSession = async (
     if (errWrite) throw errWrite;
   }
 
-  // 6️⃣ Mettre à jour les stats (énergie, stress, sérenité, concentration, discipline)
   try {
     const { data: fullMission } = await supabase
       .from("mission")
@@ -308,7 +293,7 @@ export const finishMissionSession = async (
       .single();
 
     if (fullMission) {
-      await completeMission(String(userIdInt), {  // ✅ string requis par completeMission
+      await completeMission(String(userIdInt), {
         id_mission:        fullMission.id_mission,
         titre:             fullMission.titre,
         description:       fullMission.description ?? "",
@@ -326,14 +311,12 @@ export const finishMissionSession = async (
     console.warn("⚠️ Stats update failed (non-bloquant):", e);
   }
 
-  // 7️⃣ Vérifier level-up (500 XP = 1 niveau)
   try {
     await checkAndUpdateLevel(userIdInt);
   } catch (e) {
     console.warn("⚠️ Level check failed (non-bloquant):", e);
   }
 
-  // 8️⃣ Vérifier badges débloqués
   try {
     await checkAndUnlockBadges(userIdInt);
   } catch (e) {
@@ -402,6 +385,22 @@ export const deleteMission = async (missionId: number): Promise<void> => {
   const { error } = await supabase
     .from("mission")
     .delete()
+    .eq("id_mission", missionId);
+
+  if (error) throw error;
+};
+
+// ─────────────────────────────────────────────────────────────
+//  linkMissionToDefi  ← nouveau
+// ─────────────────────────────────────────────────────────────
+
+export const linkMissionToDefi = async (
+  missionId: number,
+  defiId: number
+): Promise<void> => {
+  const { error } = await supabase
+    .from("mission")
+    .update({ id_defi: defiId })
     .eq("id_mission", missionId);
 
   if (error) throw error;
@@ -529,6 +528,7 @@ export const fetchRecentMissions = async (
       : "-",
   }));
 };
+
 // ─────────────────────────────────────────────────────────────
 //  fetchZoneMissions
 // ─────────────────────────────────────────────────────────────
@@ -548,7 +548,7 @@ export const fetchZoneMissions = async (
 };
 
 // ─────────────────────────────────────────────────────────────
-//  fetchSuggestions — missions sans zone assignée
+//  fetchSuggestions
 // ─────────────────────────────────────────────────────────────
 
 export const fetchSuggestions = async (

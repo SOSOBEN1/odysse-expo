@@ -388,10 +388,11 @@ export default function HomeScreen() {
 
       if (error || !data) return;
 
-      const niveau = data.id_level ?? 1;
-      const maxXp  = niveau * 500;
-      const xp     = data.xp ?? 0;
-      const xpInCurrentLevel = xp % maxXp;
+     // ✅ APRÈS — même logique que DashboardScreen
+const xpTotal = data.xp ?? 0;
+const niveau  = Math.floor(xpTotal / 500) + 1;
+const maxXp   = 500;                         // toujours 500, comme dans le Dashboard
+const xpInCurrentLevel = xpTotal % 500;     // XP dans le niveau actuel (0..499)
 
       const displayName =
         data.username ??
@@ -402,14 +403,14 @@ export default function HomeScreen() {
 
       if (data.avatar_url) setSelectedModel(data.avatar_url);
 
-      setUserStats({
-        userName: displayName,
-        level:    niveau,
-        xp:       xpInCurrentLevel,
-        maxXp,
-     coins: data.gold ?? 0,
-        energie:  data.energie ?? 100,
-      });
+   setUserStats({
+  userName: displayName,
+  level:    niveau,
+  xp:       xpInCurrentLevel,
+  maxXp,                        // = 500 fixe
+  coins:    data.gold ?? 0,
+  energie:  data.energie ?? 100,
+});
     } catch (err: any) {
       console.error("Erreur fetchUserStats:", err.message);
     }

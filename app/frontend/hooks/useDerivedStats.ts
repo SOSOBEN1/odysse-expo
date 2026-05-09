@@ -1,8 +1,5 @@
 // ─────────────────────────────────────────────────────────────
 //  hooks/useDerivedStats.ts
-//  Lit sérenité, concentration, discipline DEPUIS LA BDD
-//  (colonnes persistées dans player_stats).
-//  Fallback sur le calcul local si les colonnes sont absentes.
 // ─────────────────────────────────────────────────────────────
 
 import { useEffect, useState } from "react";
@@ -17,6 +14,7 @@ import {
 } from "../utils/computeDerivedStats";
 
 const PAUSE_KEYWORDS = ["pause", "repos", "bien-être", "bienetre", "relaxation", "détente", "relax"];
+
 function isPauseMission(titre: string, description: string): boolean {
   const text = (titre + " " + description).toLowerCase();
   return PAUSE_KEYWORDS.some((k) => text.includes(k));
@@ -42,47 +40,50 @@ export function useDerivedStats(): {
 
     const load = async () => {
       setLoading(true);
+
+      // ── 1. Fetch stats brutes depuis player_stats ──────────────
+      const { data: statsData, error: statsError } = await supabase
+        .from("player_stats")
+        .select("energie, stress, connaissance, organisation")
+        .eq("id_user", userId)
+        .maybeSingle();
+
+      if (statsError) {
+        console.error("[useDerivedStats] Erreur player_stats:", statsError.message);
+      }
+
+      // baseStats local — utilisé partout dans ce useEffect
+      const baseStats: BaseStats = {
+        energie:      statsData?.energie      ?? 50,
+        stress:       statsData?.stress       ?? 50,
+        connaissance: statsData?.connaissance ?? 50,
+        organisation: statsData?.organisation ?? 50,
+      };
+      setBase(baseStats);
+
+      // ── 2. Fetch missions du jour ──────────────────────────────
       try {
-        // ── 1. Fetch TOUTES les stats (brutes + dérivées persistées) ──
-        const { data: statsData } = await supabase
-          .from("player_stats")
-          .select("energie, stress, connaissance, organisation, serenite, concentration, discipline")
-          .eq("id_user", userId)
-          .maybeSingle();
-
-        const baseStats: BaseStats = {
-          energie:      statsData?.energie      ?? 50,
-          stress:       statsData?.stress       ?? 50,
-          connaissance: statsData?.connaissance ?? 50,
-          organisation: statsData?.organisation ?? 50,
-        };
-        setBase(baseStats);
-
-        // ── 2. Si les dérivées sont déjà en BDD → on les utilise ──────
-        if (
-          statsData?.serenite      != null &&
-          statsData?.concentration != null &&
-          statsData?.discipline    != null
-        ) {
-          setDerived({
-            serenite:      statsData.serenite,
-            concentration: statsData.concentration,
-            discipline:    statsData.discipline,
-          });
-          return; // pas besoin de recalculer
-        }
-
-        // ── 3. Fallback : recalcul depuis les missions du jour ─────────
         const today = new Date();
-        const start = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0,  0,  0).toISOString();
-        const end   = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString();
+        const start = new Date(
+          today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0
+        ).toISOString();
+        const end = new Date(
+          today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59
+        ).toISOString();
 
-        const { data: validations } = await supabase
+        const { data: validations, error: valError } = await supabase
           .from("mission_validation")
           .select(`statut, mission ( titre, description, connaissance_gain )`)
           .eq("id_user", userId)
           .gte("date_debut", start)
           .lte("date_debut", end);
+
+        if (valError) {
+          console.error("[useDerivedStats] Erreur mission_validation:", valError.message);
+          // Fallback sur baseStats local (pas le state)
+          setDerived(computeSimpleDerivedStats(baseStats));
+          return;
+        }
 
         const rows = validations ?? [];
 
@@ -102,12 +103,19 @@ export function useDerivedStats(): {
           .filter((r: any) => r.statut === "done")
           .reduce((sum: number, r: any) => sum + (r.mission?.connaissance_gain ?? 0), 0);
 
-        const computed = computeAllDerivedStats(baseStats, ratio, hasCompletedPause, connaissanceGainTotal);
+        const computed = computeAllDerivedStats(
+          baseStats,
+          ratio,
+          hasCompletedPause,
+          connaissanceGainTotal
+        );
+
         setDerived(computed);
 
       } catch (e) {
-        console.error("[useDerivedStats]", e);
-        setDerived(computeSimpleDerivedStats(base));
+        console.error("[useDerivedStats] Exception:", e);
+        // ✅ Fix : utilise baseStats local et non le state `base`
+        setDerived(computeSimpleDerivedStats(baseStats));
       } finally {
         setLoading(false);
       }

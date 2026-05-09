@@ -1,6 +1,7 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   DimensionValue,
@@ -24,6 +25,7 @@ import BackButton from "../components/BackButton";
 import BadgeUnlockedModal from "../components/BadgeUnlockedModel";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
+import { useUser } from "../constants/UserContext";
 import { COLORS } from "../styles/theme";
 import { useBadgesViewModel } from "../../../backend/viewmodels/useBadgesViewModel";
 
@@ -257,8 +259,8 @@ const lockedStyles = StyleSheet.create({
 // ── Écran principal ──────────────────────────────────────────
 export default function BadgesScreen() {
 
-  // ⚠️ Remplace par ton vrai userId depuis le contexte auth
-  const USER_ID = 1;
+  const { userId } = useUser();
+  const USER_ID = userId ?? 0;
 
   const {
     unlocked,
@@ -270,6 +272,13 @@ export default function BadgesScreen() {
     loadBadges,
     clearNewlyUnlocked,
   } = useBadgesViewModel(USER_ID);
+
+  // Rafraîchir les badges à chaque fois qu'on ouvre la page
+  useFocusEffect(
+    useCallback(() => {
+      if (USER_ID) loadBadges();
+    }, [USER_ID, loadBadges])
+  );
 
   const [activeModule, setActiveModule] = useState<ModuleFilter>("tous");
   const [modalVisible, setModalVisible]   = useState(false);

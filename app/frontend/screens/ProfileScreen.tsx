@@ -26,14 +26,41 @@ interface StarItem {
 }
 type AnimatedStarProps = { style: ViewStyle; size: number; delay?: number };
 
-// ─── Données statiques ────────────────────────────────────────────────────────
-const BADGES: BadgeItemProps[] = [
-  { label: "Maître de la\nTo-Do",   emoji: "📋", color: "#f9c74f" },
-  { label: "Planificateur\nExpert", emoji: "⏰", color: "#90be6d" },
-  { label: "Organisateur\nPro",     emoji: "📊", color: "#4cc9f0" },
-  { label: "Journée\nProductive",   emoji: "☀️", color: "#f8961e" },
-];
+interface UserBadge {
+  id_badge: number;
+  nom:      string;
+  emoji:    string;
+  color:    string;
+}
 
+// ─── Mapping emoji/couleur par id_badge ───────────────────────────────────────
+const BADGE_EMOJI: Record<number, string> = {
+  1:  "👣",
+  2:  "🔥",
+  3:  "👁️",
+  4:  "📋",
+  5:  "🗂️",
+  6:  "🎯",
+  7:  "💪",
+  8:  "😌",
+  9:  "🧠",
+  10: "🏃",
+};
+
+const BADGE_COLOR: Record<number, string> = {
+  1:  "#f9c74f",
+  2:  "#f8961e",
+  3:  "#4cc9f0",
+  4:  "#90be6d",
+  5:  "#43aa8b",
+  6:  "#7f5af0",
+  7:  "#e63946",
+  8:  "#06d6a0",
+  9:  "#118ab2",
+  10: "#ffd166",
+};
+
+// ─── Données statiques ────────────────────────────────────────────────────────
 const STAR_POSITIONS = [
   { top: 20,  left: 20,  size: 18, delay: 0   },
   { top: 15,  right: 30, size: 12, delay: 200 },
@@ -42,7 +69,7 @@ const STAR_POSITIONS = [
   { top: 38,  left: 180, size: 14, delay: 300 },
 ];
 
-// ─── AnimatedStar (copié depuis EditProfileScreen) ────────────────────────────
+// ─── AnimatedStar ─────────────────────────────────────────────────────────────
 function AnimatedStar({ style, size, delay = 0 }: AnimatedStarProps) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -66,89 +93,16 @@ function AnimatedStar({ style, size, delay = 0 }: AnimatedStarProps) {
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 function StatCard({ emoji, value, label }: StatCardProps) {
   return (
-    <Animated.View style={[style, {
-      opacity:   a.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.9] }),
-      transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.3] }) }],
-    }]}>
-      <MaterialIcons name="auto-awesome" size={size} color={color} />
-    </Animated.View>
-  );
-}
-
-// ─── Cellule de puzzle ────────────────────────────────────────────────────────
-
-function PuzzleCell({ index, revealed, imageUri, cellSize, accent }: {
-  index: number; revealed: boolean; imageUri: string; cellSize: number; accent: string;
-}) {
-  const sc    = useRef(new Animated.Value(0)).current;
-  const glow  = useRef(new Animated.Value(0)).current;
-
-  const row  = Math.floor(index / GRID_COLS);
-  const col  = index % GRID_COLS;
-  const imgX = -(col * cellSize);
-  const imgY = -(row * cellSize);
-
-  useEffect(() => {
-    Animated.spring(sc, { toValue: 1, friction: 5, delay: index * 80, useNativeDriver: true }).start();
-  }, []);
-
-  useEffect(() => {
-    if (revealed) {
-      Animated.loop(Animated.sequence([
-        Animated.timing(glow, { toValue: 1, duration: 1300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(glow, { toValue: 0, duration: 1300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])).start();
-    }
-  }, [revealed]);
-
-  return (
-    <Animated.View style={[styles.cell, {
-      width: cellSize, height: cellSize,
-      borderColor: revealed ? accent : "rgba(255,255,255,0.25)",
-      transform: [{ scale: sc }],
-    }]}>
-      {revealed ? (
-        <>
-          <View style={{ width: cellSize, height: cellSize, overflow: "hidden" }}>
-            <Image
-              source={{ uri: imageUri }}
-              style={{ width: cellSize * GRID_COLS, height: cellSize * GRID_COLS, position: "absolute", left: imgX, top: imgY }}
-              resizeMode="cover"
-            />
-          </View>
-          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: accent + "22", borderRadius: 10, opacity: glow }]} />
-          <View style={[styles.cellCheck, { backgroundColor: accent }]}>
-            <Ionicons name="checkmark" size={10} color="#fff" />
-          </View>
-        </>
-      ) : (
-        <View style={styles.cellLocked}>
-          <Ionicons name="lock-closed" size={18} color="rgba(255,255,255,0.5)" />
-        </View>
-      )}
-    </Animated.View>
-  );
-}
-
-// ─── Barre de progression ─────────────────────────────────────────────────────
-
-function ProgressBar({ value, total, accent }: { value: number; total: number; accent: string }) {
-  const w = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(w, {
-      toValue: total > 0 ? value / total : 0,
-      duration: 900, delay: 400, easing: Easing.out(Easing.cubic), useNativeDriver: false,
-    }).start();
-  }, [value, total]);
-  return (
-    <View style={styles.progressTrack}>
-      <Animated.View style={[styles.progressFill, {
-        backgroundColor: accent,
-        width: w.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
-      }]} />
+    <View style={statStyles.card}>
+      <View style={statStyles.row}>
+        <Text style={statStyles.emoji}>{emoji}</Text>
+        <Text style={statStyles.value}>{value}</Text>
+      </View>
+      <Text style={statStyles.label}>{label}</Text>
     </View>
   );
 }
+
 const statStyles = StyleSheet.create({
   card:  { width: "48%", backgroundColor: "#f0edff", borderRadius: 18, padding: 14, marginBottom: 10, minHeight: 78, justifyContent: "space-between" },
   row:   { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -168,6 +122,7 @@ function BadgeItem({ emoji, label, color }: BadgeItemProps) {
     </View>
   );
 }
+
 const badgeStyles = StyleSheet.create({
   container: { alignItems: "center", width: 70 },
   iconBox:   { width: 60, height: 60, borderRadius: 14, justifyContent: "center", alignItems: "center", marginBottom: 5, borderWidth: 1.5 },
@@ -208,17 +163,16 @@ export default function ProfileScreen() {
   const { setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername, isLoading: ctxLoading } = useUser();
 
-  // ✅ Exactement comme EditProfileScreen : avatarKey initialisé à "avatar_1", jamais null
   const [avatarKey, setAvatarKey] = useState("avatar_1");
   const [loading,   setLoading]   = useState(true);
+  const [badges,    setBadges]    = useState<UserBadge[]>([]);
   const [userData,  setUserData]  = useState({
     username: "", prenom: "", nom: "",
     level: 1, levelTitle: "Explorateur de savoir",
     xp: 0, xpMax: 500, coins: 0,
-    badges: 0, missions: 0, defis: 0,
+    badgeCount: 0, missions: 0, defis: 0,
   });
 
-  // ✅ useEffect comme EditProfileScreen (pas useFocusEffect pour le chargement initial)
   useEffect(() => {
     const loadProfile = async () => {
       if (!userId) return;
@@ -228,8 +182,7 @@ export default function ProfileScreen() {
           .from("users")
           .select("username, prenom, nom, xp, gold, id_level, avatar_url")
           .eq("id_user", userId)
-          .eq("id_puzzle", config.id_puzzle)
-          .maybeSingle();
+          .single();
 
         if (error || !user) {
           console.warn("Erreur fetch profil:", error?.message);
@@ -243,6 +196,7 @@ export default function ProfileScreen() {
         setAvatarKey(key);
         setSelectedModel(resolveAvatarModel(key));
 
+        // ── Fetch counts ──────────────────────────────────────────────────────
         const [
           { count: missionsCount },
           { count: defisCount },
@@ -253,10 +207,35 @@ export default function ProfileScreen() {
           supabase.from("user_badges").select("id_badge",             { count: "exact", head: true }).eq("id_user", userId),
         ]);
 
-        const xpTotal = user.xp ?? 0;
-        const niveau  = Math.floor(xpTotal / 500) + 1; // 500 XP = 1 niveau
+        // ── Fetch badges réels avec jointure ──────────────────────────────────
+        const { data: userBadgesData, error: badgeError } = await supabase
+          .from("user_badges")
+          .select(`
+            id_badge,
+            badges ( nom )
+          `)
+          .eq("id_user", userId)
+          .order("date_obtention", { ascending: false })
+          .limit(4);
+
+        if (badgeError) {
+          console.warn("Erreur fetch badges:", badgeError.message);
+        }
+
+        const mappedBadges: UserBadge[] = (userBadgesData ?? []).map((row: any) => ({
+          id_badge: row.id_badge,
+          nom:      row.badges?.nom ?? "Badge",
+          emoji:    BADGE_EMOJI[row.id_badge]  ?? "🏅",
+          color:    BADGE_COLOR[row.id_badge]  ?? "#9b87c9",
+        }));
+
+        setBadges(mappedBadges);
+
+        // ── XP / niveau ───────────────────────────────────────────────────────
+        const xpTotal      = user.xp ?? 0;
+        const niveau       = Math.floor(xpTotal / 500) + 1;
         const xpDansNiveau = xpTotal % 500;
-        const maxXp   = 500;
+        const maxXp        = 500;
 
         setUserData({
           username:   user.username ?? "",
@@ -267,10 +246,11 @@ export default function ProfileScreen() {
           xp:         xpDansNiveau,
           xpMax:      maxXp,
           coins:      user.gold     ?? 0,
-          badges:     badgesCount   ?? 0,
+          badgeCount: badgesCount   ?? 0,
           missions:   missionsCount ?? 0,
           defis:      defisCount    ?? 0,
         });
+
       } catch (e) {
         console.warn("Erreur loadProfile :", e);
       } finally {
@@ -280,7 +260,7 @@ export default function ProfileScreen() {
     loadProfile();
   }, [userId]);
 
-  // Recharger quand on revient sur l'écran (useFocusEffect uniquement pour le refresh)
+  // ── Refresh avatar au focus ───────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
       if (!userId || ctxLoading) return;
@@ -306,7 +286,6 @@ export default function ProfileScreen() {
     ctxUsername ||
     "Joueur";
 
-  // ✅ Loader identique à EditProfileScreen
   if (loading || ctxLoading) {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
@@ -316,27 +295,12 @@ export default function ProfileScreen() {
     );
   }
 
-  const accent       = zoneInfo?.accent_color ?? "#22c55e";
-  const light        = zoneInfo?.light_color  ?? "#dcfce7";
-  const dark         = zoneInfo?.dark_color   ?? "#14532d";
-  const imageUri     = zoneInfo?.image_url    ?? "";
-  const piecesEarned = puzzle?.pieces_earned  ?? 0;
-  const totalPieces  = puzzle?.total_pieces   ?? TOTAL_PIECES;
-  const isComplete   = puzzle?.is_complete    ?? false;
-
-  const STARS = [
-    { top: 100, left: 14,  size: 16, delay: 0   },
-    { top: 120, right: 16, size: 11, delay: 350  },
-    { top: 155, right: 8,  size: 8,  delay: 650  },
-    { top: 185, left: 32,  size: 7,  delay: 180  },
-  ];
-
   return (
     <View style={styles.container}>
       <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={StyleSheet.absoluteFill} />
       <WaveBackground />
 
-      {/* Étoiles animées — identiques à EditProfileScreen */}
+      {/* Étoiles animées */}
       {STAR_POSITIONS.map((s, i) => (
         <AnimatedStar
           key={i}
@@ -361,7 +325,7 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
       >
-        {/* ── Avatar principal — COPIÉ PIXEL POUR PIXEL depuis EditProfileScreen ── */}
+        {/* Avatar */}
         <View style={styles.mainAvatarWrapper}>
           <View style={styles.mainAvatarCircle}>
             <AvatarCrd model={resolveAvatarModel(avatarKey)} bgColor="#f0edff" />
@@ -373,7 +337,7 @@ export default function ProfileScreen() {
         <Text style={styles.userLevel}>Niveau {userData.level} – {userData.levelTitle}</Text>
         <Text style={styles.levelDesc}>{getLevelDescription(userData.level)}</Text>
 
-        {/* ── Card principale ── */}
+        {/* Card principale */}
         <View style={styles.card}>
 
           {/* Barre XP */}
@@ -389,35 +353,51 @@ export default function ProfileScreen() {
                 style={[styles.xpFill, { width: `${xpPct}%` }]}
               />
             </View>
-            <ProgressBar value={piecesEarned} total={totalPieces} accent={accent} />
           </View>
 
           {/* Stats */}
           <View style={styles.statsGrid}>
-            <StatCard emoji="🪙" value={userData.coins}    label="Pièces d'or" />
-            <StatCard emoji="🏆" value={userData.badges}   label="Badges"      />
-            <StatCard emoji="📋" value={userData.missions} label="Missions"    />
-            <StatCard emoji="🎯" value={userData.defis}    label="Défis"       />
+            <StatCard emoji="🪙" value={userData.coins}      label="Pièces d'or" />
+            <StatCard emoji="🏆" value={userData.badgeCount} label="Badges"      />
+            <StatCard emoji="📋" value={userData.missions}   label="Missions"    />
+            <StatCard emoji="🎯" value={userData.defis}      label="Défis"       />
           </View>
 
           {/* Badges */}
-          <Text style={styles.badgesTitle}>Badges gagnés</Text>
-          <View style={styles.badgesRow}>
-            {BADGES.map((b, i) => (
-              <BadgeItem key={i} emoji={b.emoji} label={b.label} color={b.color} />
-            ))}
-          </View>
+          <Text style={styles.badgesTitle}>
+            Badges gagnés {userData.badgeCount > 0 ? `(${userData.badgeCount})` : ""}
+          </Text>
 
-          {/* Bouton modifier */}
+          {badges.length === 0 ? (
+            <Text style={styles.badgesEmpty}>
+              Aucun badge encore 🎯 Complète des missions pour en gagner !
+            </Text>
+          ) : (
+            <View style={styles.badgesRow}>
+              {badges.map((b) => (
+                <BadgeItem
+                  key={b.id_badge}
+                  emoji={b.emoji}
+                  label={b.nom}
+                  color={b.color}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Bouton modifier profil */}
           <TouchableOpacity
-            style={[styles.missionsBtn, { backgroundColor: accent, borderColor: accent + "88" }]}
-            onPress={() => router.push({ pathname: "/frontend/screens/ZoneScreen", params: { zoneId, zoneSlug } })}
+            style={styles.editButton}
+            onPress={() => router.push("/frontend/screens/EditProfileScreen")}
             activeOpacity={0.85}
           >
-            <View style={styles.missionsBtnIcon}>
-              <Ionicons name="rocket" size={16} color={accent} />
-            </View>
-            <Text style={styles.missionsBtnText}>Continuer les missions</Text>
+            <LinearGradient
+              colors={["#7f5af0", "#9b87c9"]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.editGradient}
+            >
+              <Text style={styles.editText}>✏️ Modifier le profil</Text>
+            </LinearGradient>
           </TouchableOpacity>
 
         </View>
@@ -430,6 +410,7 @@ export default function ProfileScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
@@ -450,7 +431,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  // ✅ Identique à EditProfileScreen — c'est ce qui marche
   mainAvatarWrapper: { alignItems: "center", marginBottom: 8 },
   mainAvatarCircle: {
     width: 120,
@@ -467,9 +447,9 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
 
-  userName:  { fontSize: 22, fontWeight: "900", color: "#2d1a6e", letterSpacing: 1.5, marginBottom: 4, textAlign: "center" },
-  userLevel: { fontSize: 13, color: "#9b87c9", fontWeight: "600", marginBottom: 6, textAlign: "center" },
-  levelDesc: { fontSize: 11, color: "#a78bca", fontStyle: "italic", textAlign: "center", marginBottom: 16, paddingHorizontal: 24, lineHeight: 16 },
+  userName:    { fontSize: 22, fontWeight: "900", color: "#2d1a6e", letterSpacing: 1.5, marginBottom: 4, textAlign: "center" },
+  userLevel:   { fontSize: 13, color: "#9b87c9", fontWeight: "600", marginBottom: 6, textAlign: "center" },
+  levelDesc:   { fontSize: 11, color: "#a78bca", fontStyle: "italic", textAlign: "center", marginBottom: 16, paddingHorizontal: 24, lineHeight: 16 },
 
   card: {
     width: "100%",
@@ -491,7 +471,8 @@ const styles = StyleSheet.create({
 
   statsGrid:   { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 8 },
   badgesTitle: { fontSize: 16, fontWeight: "800", color: "#2d1a6e", textAlign: "center", marginBottom: 14, marginTop: 6 },
-  badgesRow:   { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
+  badgesEmpty: { fontSize: 12, color: "#9b87c9", textAlign: "center", marginBottom: 20, fontStyle: "italic" },
+  badgesRow:   { flexDirection: "row", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 8 },
 
   editButton:   { width: "100%", borderRadius: 15, overflow: "hidden", elevation: 7, shadowColor: "#6949a8", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
   editGradient: { flexDirection: "row", paddingVertical: 15, alignItems: "center", justifyContent: "center" },

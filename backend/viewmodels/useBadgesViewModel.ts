@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { checkAndUnlockBadges } from "../services/badgeEngine";
 import {
   Badge,
-  checkAndGrantBadges,
   getBadgesForUser,
 } from "../models/badgeRepository";
 
@@ -44,12 +44,12 @@ export function useBadgesViewModel(userId: number) {
   // ── Vérification & attribution automatique des badges ─────
   const checkBadges = useCallback(async () => {
     try {
-      const newIds = await checkAndGrantBadges(userId);
-      if (newIds.length > 0) {
-        // Rechargement pour avoir les dates d'obtention à jour
+      // checkAndUnlockBadges retourne les NOMS des badges débloqués
+      const unlockedNames = await checkAndUnlockBadges(userId);
+      if (unlockedNames.length > 0) {
         const result = await getBadgesForUser(userId);
         const newlyUnlocked = result.unlocked.filter((b) =>
-          newIds.includes(b.id)
+          unlockedNames.includes(b.label)
         );
         setBadges({ ...result, newlyUnlocked });
       }

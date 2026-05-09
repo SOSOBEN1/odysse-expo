@@ -1088,38 +1088,134 @@ const missionsStyles = StyleSheet.create({
 
 
 // ─── BossEventBanner ──────────────────────────────────────────────────────────
-const BossEventBanner = () => (
-  <View style={bossStyles.outer}>
-    <View style={bossStyles.topBanner}>
-      <Text style={{ fontSize: 30 }}>🏆</Text>
-      <View style={{ flex: 1 }}>
-        <Text style={bossStyles.bossTitle}>Boss Event</Text>
-        <Text style={bossStyles.bossSub}>2 actifs 🔥🔥🔥</Text>
-      </View>
-      <View style={bossStyles.xpChip}><Text style={bossStyles.xpText}>+75 XP</Text></View>
-      <TouchableOpacity style={bossStyles.voirBtn}><Text style={bossStyles.voirText}>Voir ▶</Text></TouchableOpacity>
-    </View>
-    <View style={bossStyles.progressRow}>
-      <Text style={bossStyles.progLabel}>Progression globale</Text>
-      <View style={bossStyles.progTrack}><View style={bossStyles.progFill} /></View>
-      <Text style={bossStyles.progPct}>45%</Text>
-    </View>
-    <View style={bossStyles.bottomCard}>
-      <View style={bossStyles.circleGauge}><Text style={bossStyles.circleText}>45%</Text></View>
-      <View style={{ flex: 1, marginLeft: 14 }}>
-        <View style={bossStyles.bottomRow}>
-          <Text style={{ fontSize: 22 }}>🏆</Text>
-          <Text style={bossStyles.bottomTitle}>Boss Event</Text>
-          <Text style={bossStyles.stars}>⭐⭐⭐ XP</Text>
+// ─── BossEventBanner ──────────────────────────────────────────────────────────
+const BossEventBanner = () => {
+  const { userId } = useUser();
+  const router = useRouter();
+  const [bossData, setBossData] = useState({
+    activeCount: 0,
+    progression: 0,
+    totalXp: 0,
+    loading: true,
+  });
+
+  useEffect(() => {
+    if (!userId) return;
+    const load = async () => {
+      try {
+        const { data: bossEvents, error } = await supabase
+          .from("boss_events")
+          .select(`
+            id_boss,
+            nom,
+            mission (
+              id_mission,
+              id_user,
+              xp_gain,
+              mission_validation ( statut )
+            )
+          `)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        let totalMissions = 0;
+        let doneMissions  = 0;
+        let activeCount   = 0;
+        let totalXp       = 0;
+
+        (bossEvents ?? []).forEach((boss: any) => {
+          const userMissions = (boss.mission ?? []).filter(
+            (m: any) => String(m.id_user) === String(userId)
+          );
+          if (userMissions.length === 0) return;
+
+          activeCount++;
+
+          userMissions.forEach((m: any) => {
+            totalMissions++;
+            const isDone = (m.mission_validation ?? []).some(
+              (v: any) => v.statut === "done"
+            );
+            if (isDone) {
+              doneMissions++;
+              totalXp += m.xp_gain ?? 0;
+            }
+          });
+        });
+
+        const progression = totalMissions > 0
+          ? Math.round((doneMissions / totalMissions) * 100)
+          : 0;
+
+        setBossData({ activeCount, progression, totalXp, loading: false });
+
+      } catch (err: any) {
+        console.error("[BossEventBanner]", err.message);
+        setBossData(prev => ({ ...prev, loading: false }));
+      }
+    };
+
+    load();
+  }, [userId]);
+
+  if (bossData.loading) return null;
+
+  // Rien à afficher si l'user n'a aucun boss event
+  if (bossData.activeCount === 0) return null;
+
+  return (
+    <View style={bossStyles.outer}>
+      <View style={bossStyles.topBanner}>
+        <Text style={{ fontSize: 30 }}>🏆</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={bossStyles.bossTitle}>Boss Event</Text>
+          <Text style={bossStyles.bossSub}>
+            {bossData.activeCount} actif{bossData.activeCount > 1 ? "s" : ""} 🔥
+          </Text>
         </View>
-        <View style={bossStyles.bottomRow2}>
-          <Text style={bossStyles.bottomSub}>2 actifs</Text>
-          <View style={bossStyles.xpChipSmall}><Text style={bossStyles.xpTextSmall}>+75 XP</Text></View>
+        <View style={bossStyles.xpChip}>
+          <Text style={bossStyles.xpText}>+{bossData.totalXp} XP</Text>
+        </View>
+        <TouchableOpacity
+          style={bossStyles.voirBtn}
+          onPress={() => router.push("/frontend/screens/EventsScreen")}
+        >
+          <Text style={bossStyles.voirText}>Voir ▶</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={bossStyles.progressRow}>
+        <Text style={bossStyles.progLabel}>Progression globale</Text>
+        <View style={bossStyles.progTrack}>
+          <View style={[bossStyles.progFill, { width: `${bossData.progression}%` }]} />
+        </View>
+        <Text style={bossStyles.progPct}>{bossData.progression}%</Text>
+      </View>
+
+      <View style={bossStyles.bottomCard}>
+        <View style={bossStyles.circleGauge}>
+          <Text style={bossStyles.circleText}>{bossData.progression}%</Text>
+        </View>
+        <View style={{ flex: 1, marginLeft: 14 }}>
+          <View style={bossStyles.bottomRow}>
+            <Text style={{ fontSize: 22 }}>🏆</Text>
+            <Text style={bossStyles.bottomTitle}>Boss Event</Text>
+            <Text style={bossStyles.stars}>⭐⭐⭐ XP</Text>
+          </View>
+          <View style={bossStyles.bottomRow2}>
+            <Text style={bossStyles.bottomSub}>
+              {bossData.activeCount} actif{bossData.activeCount > 1 ? "s" : ""}
+            </Text>
+            <View style={bossStyles.xpChipSmall}>
+              <Text style={bossStyles.xpTextSmall}>+{bossData.totalXp} XP</Text>
+            </View>
+          </View>
         </View>
       </View>
     </View>
-  </View>
-);
+  );
+};
 
 const bossStyles = StyleSheet.create({
   outer:       { marginHorizontal: SIZES.padding, borderRadius: SIZES.radiusLarge, overflow: "hidden", marginBottom: 14, backgroundColor: COLORS.bossOuter },

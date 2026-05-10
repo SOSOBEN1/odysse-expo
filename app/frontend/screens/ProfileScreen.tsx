@@ -3,10 +3,12 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Pencil, LogOut, ShoppingBag } from "lucide-react-native";
 import {
-  ActivityIndicator, Animated, Easing, ScrollView, StyleSheet,
+  ActivityIndicator,Alert, Animated, Easing, ScrollView, StyleSheet,
   Text, TouchableOpacity, View, ViewStyle
 } from "react-native";
+
 
 import AvatarCrd from "../components/AvatarCrd";
 import BackButton from "../components/BackButton";
@@ -90,6 +92,7 @@ function AnimatedStar({ style, size, delay = 0 }: AnimatedStarProps) {
   );
 }
 
+
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 function StatCard({ emoji, value, label }: StatCardProps) {
   return (
@@ -159,6 +162,23 @@ function getLevelDescription(niveau: number): string {
 
 // ─── SCREEN ───────────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
+  const handleLogout = () => {
+  Alert.alert(
+    "Déconnexion",
+    "Tu veux vraiment te déconnecter ?",
+    [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Déconnexion",
+        style: "destructive",
+        onPress: async () => {
+          await supabase.auth.signOut();
+          router.replace("/");
+        },
+      },
+    ]
+  );
+};
   const router = useRouter();
   const { setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername, isLoading: ctxLoading } = useUser();
@@ -385,20 +405,31 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {/* Bouton modifier profil */}
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => router.push("/frontend/screens/EditProfileScreen")}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={["#7f5af0", "#9b87c9"]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={styles.editGradient}
-            >
-              <Text style={styles.editText}>✏️ Modifier le profil</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+{/* Bouton modifier profil */}
+<TouchableOpacity
+  style={styles.editButton}
+  onPress={() => router.push("/frontend/screens/EditProfileScreen")}
+  activeOpacity={0.85}
+>
+  <LinearGradient
+    colors={["#7f5af0", "#9b87c9"]}
+    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+    style={styles.editGradient}
+  >
+    <Pencil size={18} color="#fff" style={{ marginRight: 8 }} />
+    <Text style={styles.editText}>Modifier le profil</Text>
+  </LinearGradient>
+</TouchableOpacity>
+
+{/* Bouton déconnexion */}
+<TouchableOpacity
+  style={styles.logoutButton}
+  onPress={handleLogout}
+  activeOpacity={0.85}
+>
+  <LogOut size={18} color="#fff" style={{ marginRight: 8 }} />
+  <Text style={styles.logoutText}>Se déconnecter</Text>
+</TouchableOpacity>
 
         </View>
 
@@ -423,6 +454,28 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     zIndex: 10,
   },
+ logoutButton: {
+  width: "100%",
+  borderRadius: 15,
+  paddingVertical: 15,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "#c0392b",  // rouge sombre, pas flashy
+  marginTop: 10,
+  elevation: 3,
+  shadowColor: "#7b241c",
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.2,
+  shadowRadius: 6,
+},
+logoutText: {
+  color: "#fff",
+  fontWeight: "bold",
+  fontSize: 16,
+  letterSpacing: 0.4,
+},
+
 
   scroll: {
     paddingHorizontal: 20,

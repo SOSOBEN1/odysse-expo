@@ -10,9 +10,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../app/frontend/constants/supabase";
 import {
-    assignMissionToZone,
-    fetchSuggestions,
-    fetchZoneMissions,
+  assignMissionToZone,
+  fetchSuggestions,
+  fetchZoneMissions,
 } from "../models/mission.service";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────

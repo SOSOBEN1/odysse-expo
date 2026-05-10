@@ -116,7 +116,7 @@ export default function SuggestedMissionsSection({
       {/* ── Bouton rafraîchir ── */}
       {!isLoading && (
         <TouchableOpacity style={styles.refreshBtn} onPress={refresh}>
-          <Text style={styles.refreshText}>＋ Ajouter une mission</Text>
+          <Text style={styles.refreshText}> Actualiser</Text>
         </TouchableOpacity>
       )}
     </View>

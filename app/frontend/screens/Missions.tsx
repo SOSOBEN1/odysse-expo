@@ -25,6 +25,7 @@ import { useAvatar } from "../constants/AvatarContext";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
+import { useSounds } from "../hooks/useSounds";
 
 // ─────────────────────────────────────────────────────────────
 //  Constants
@@ -33,6 +34,7 @@ import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 type Difficulty = "Difficile" | "Moyen" | "Facile";
 
 const TABS = ["Tout", "Urgent", "Aujourd'hui", "Défis", "Par Événements"] as const;
+const { playSound } = useSounds();
 type Tab = (typeof TABS)[number];
 
 // ─────────────────────────────────────────────────────────────

@@ -297,6 +297,7 @@ import NotifIcone from "../components/NotifIcone";
 import {
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import AvatarCrd from "../components/AvatarCrd";
 import EventsTab from "../components/EventsTab";
 import MissionProgress from "../components/MissionProgress";
@@ -344,6 +345,7 @@ type UserStats = {
 // ─────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
+    const { startMissionId } = useLocalSearchParams<{ startMissionId?: string }>();
   const router    = useRouter();
   const [activeTab, setActiveTab] = useState("Missions");
   const [activeNav, setActiveNav] = useState("home");
@@ -360,6 +362,7 @@ export default function HomeScreen() {
     coins:    0,
     energie:  100,
   });
+  
 
   const [missions, setMissions] = useState<RecentMission[]>([]);
   const [stats,    setStats]    = useState<MissionStats>({
@@ -370,12 +373,17 @@ export default function HomeScreen() {
     weekTime:    "0h 00",
     successRate: 0,
   });
+  const [autoStartId, setAutoStartId] = useState<number | null>(null);
 
   useEffect(() => {
     if (isLoading || !userId) return;
     fetchUserStats();
     loadMissionData();
   }, [userId, isLoading]);
+  useEffect(() => {
+  if (!startMissionId) return;
+  setAutoStartId(Number(startMissionId));
+}, [startMissionId]);
 
   // ── Fetch stats utilisateur ───────────────────────────────
   const fetchUserStats = async () => {

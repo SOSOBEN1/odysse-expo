@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────
 //  components/SuggestedMissionsSection.tsx
-//  Section complète de suggestions de missions intelligentes
 // ─────────────────────────────────────────────────────────────
 
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -11,6 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useUser } from "../constants/UserContext";
+import { supabase } from "../constants/supabase";
 import { useMissionSuggestions } from "../hooks/Usemissionsuggestions";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
@@ -20,13 +22,15 @@ type Props = {
   maxSuggestions?: number;
 };
 
-// ─── MissionCard — même style que dans DashboardScreen ───────
+// ─── MissionCard ──────────────────────────────────────────────
 const MissionCard = ({
   mission,
   onStart,
+  starting,
 }: {
   mission: MissionSuggestion;
   onStart: (m: MissionSuggestion) => void;
+  starting: boolean;
 }) => (
   <View style={[missionStyles.card, missionStyles.suggestedCard]}>
     <View style={missionStyles.iconBox}>
@@ -38,10 +42,13 @@ const MissionCard = ({
       <Text style={missionStyles.sub}>{mission.description}</Text>
     </View>
     <TouchableOpacity
-      style={[missionStyles.btn, missionStyles.btnStart]}
+      style={[missionStyles.btn, missionStyles.btnStart, starting && missionStyles.btnDisabled]}
       onPress={() => onStart(mission)}
+      disabled={starting}
     >
-      <Text style={missionStyles.btnText}>Démarrer ▶</Text>
+      <Text style={missionStyles.btnText}>
+        {starting ? "..." : "Démarrer ▶"}
+      </Text>
     </TouchableOpacity>
   </View>
 );
@@ -56,6 +63,7 @@ const missionStyles = StyleSheet.create({
   sub:           { fontSize: 11, color: COLORS.missionSubColor, marginTop: 1 },
   btn:           { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
   btnStart:      { backgroundColor: COLORS.missionBtnStart },
+  btnDisabled:   { opacity: 0.5 },
   btnText:       { fontSize: 11, fontWeight: "700", color: COLORS.modalTitle },
 });
 
@@ -64,25 +72,65 @@ export default function SuggestedMissionsSection({
   onMissionStart,
   maxSuggestions = 5,
 }: Props) {
+  const router = useRouter();
+  const { userId } = useUser();
+  const [startingId, setStartingId] = useState<string | null>(null);
+
   const {
     suggestions,
     isLoading,
     error,
     refresh,
-    completeMission,
   } = useMissionSuggestions(maxSuggestions);
 
-  const handleStart = (mission: MissionSuggestion) => {
-    completeMission(mission.id);
-    onMissionStart?.(mission);
+  // ─── Démarrer une mission suggérée ───────────────────────────
+  // 1. Insère la mission dans la DB
+  // 2. Navigue vers Homescreen avec l'id → le chrono démarre auto
+  const handleStart = async (mission: MissionSuggestion) => {
+    if (!userId || startingId) return;
+    setStartingId(mission.id);
+
+    try {
+      // Insère dans ta table mission (adapte les colonnes à ta structure)
+      const { data, error: insertError } = await supabase
+        .from("mission")
+        .insert({
+        id_user:     userId,
+    titre:       mission.title,
+    description: mission.description ?? "",
+    difficulte:  mission.category === "stress"       ? "Facile"  :
+                 mission.category === "energie"      ? "Moyen"   :
+                 mission.category === "connaissance" ? "Difficile" : "Moyen",
+    duree:       mission.duration ?? "30 min",
+    urgent:      false,
+    today:       true,
+        })
+        .select("id_mission")
+        .single();
+
+      if (insertError || !data) {
+        console.error("[SuggestedMissions] Erreur insert:", insertError?.message);
+        return;
+      }
+
+      onMissionStart?.(mission);
+
+      // Navigue vers la page Missions avec l'id à démarrer
+      router.push(
+        `/frontend/screens//Homescreen?startMissionId=${data.id_mission}` as any
+      );
+
+    } catch (err: any) {
+      console.error("[SuggestedMissions]", err.message);
+    } finally {
+      setStartingId(null);
+    }
   };
 
   return (
     <View style={[styles.container, SHADOWS.light]}>
-      {/* ── En-tête ── */}
       <Text style={styles.title}>Missions suggérées</Text>
 
-      {/* ── Contenu ── */}
       {isLoading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator color={COLORS.primary} size="small" />
@@ -109,14 +157,14 @@ export default function SuggestedMissionsSection({
             key={mission.id}
             mission={mission}
             onStart={handleStart}
+            starting={startingId === mission.id}
           />
         ))
       )}
 
-      {/* ── Bouton rafraîchir ── */}
       {!isLoading && (
         <TouchableOpacity style={styles.refreshBtn} onPress={refresh}>
-          <Text style={styles.refreshText}> Actualiser</Text>
+          <Text style={styles.refreshText}>↻ Actualiser</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -124,79 +172,18 @@ export default function SuggestedMissionsSection({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor:  COLORS.card,
-    borderRadius:     SIZES.radiusLarge,
-    marginHorizontal: SIZES.padding,
-    padding:          SIZES.padding,
-    marginBottom:     14,
-  },
-  title: {
-    fontSize:     18,
-    fontWeight:   "800",
-    color:        COLORS.text,
-    marginBottom: 14,
-  },
-  loadingBox: {
-    alignItems:      "center",
-    justifyContent:  "center",
-    paddingVertical: 24,
-    gap:             8,
-  },
-  loadingText: {
-    fontSize: 12,
-    color:    COLORS.suggMutedText,
-  },
-  errorBox: {
-    alignItems:      "center",
-    paddingVertical: 16,
-    gap:             10,
-  },
-  errorText: {
-    color:    COLORS.suggPriorityCritical,
-    fontSize: 13,
-  },
-  retryBtn: {
-    backgroundColor:   COLORS.primary,
-    borderRadius:      20,
-    paddingHorizontal: 16,
-    paddingVertical:   8,
-  },
-  retryText: {
-    color:      COLORS.background,
-    fontWeight: "700",
-    fontSize:   12,
-  },
-  emptyBox: {
-    alignItems:      "center",
-    paddingVertical: 20,
-    gap:             6,
-  },
-  emptyEmoji: {
-    fontSize: 36,
-  },
-  emptyTitle: {
-    fontSize:   15,
-    fontWeight: "800",
-    color:      COLORS.text,
-  },
-  emptyText: {
-    fontSize:  12,
-    color:     COLORS.suggMutedText,
-    textAlign: "center",
-  },
-  refreshBtn: {
-    borderWidth:     1.5,
-    borderColor:     COLORS.secondary,
-    borderStyle:     "dashed",
-    borderRadius:    30,
-    paddingVertical: 11,
-    alignItems:      "center",
-    marginTop:       4,
-  },
-  refreshText: {
-    color:      COLORS.secondary,
-    fontWeight: "700",
-    fontSize:   14,
-  },
+  container:   { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 14 },
+  title:       { fontSize: 18, fontWeight: "800", color: COLORS.text, marginBottom: 14 },
+  loadingBox:  { alignItems: "center", justifyContent: "center", paddingVertical: 24, gap: 8 },
+  loadingText: { fontSize: 12, color: COLORS.suggMutedText },
+  errorBox:    { alignItems: "center", paddingVertical: 16, gap: 10 },
+  errorText:   { color: COLORS.suggPriorityCritical, fontSize: 13 },
+  retryBtn:    { backgroundColor: COLORS.primary, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 },
+  retryText:   { color: COLORS.background, fontWeight: "700", fontSize: 12 },
+  emptyBox:    { alignItems: "center", paddingVertical: 20, gap: 6 },
+  emptyEmoji:  { fontSize: 36 },
+  emptyTitle:  { fontSize: 15, fontWeight: "800", color: COLORS.text },
+  emptyText:   { fontSize: 12, color: COLORS.suggMutedText, textAlign: "center" },
+  refreshBtn:  { borderWidth: 1.5, borderColor: COLORS.secondary, borderStyle: "dashed", borderRadius: 30, paddingVertical: 11, alignItems: "center", marginTop: 4 },
+  refreshText: { color: COLORS.secondary, fontWeight: "700", fontSize: 14 },
 });

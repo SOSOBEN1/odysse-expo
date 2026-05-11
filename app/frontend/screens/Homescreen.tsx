@@ -1,3 +1,5 @@
+
+
 // // screens/HomeScreen.tsx
 // import { LinearGradient } from "expo-linear-gradient";
 // import { useRouter } from "expo-router";
@@ -7,6 +9,7 @@
 // import {
 //   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 // } from "react-native";
+// import { useLocalSearchParams } from "expo-router";
 // import AvatarCrd from "../components/AvatarCrd";
 // import EventsTab from "../components/EventsTab";
 // import MissionProgress from "../components/MissionProgress";
@@ -21,6 +24,7 @@
 
 // import { fetchMissionStats, fetchRecentMissions } from "../../../backend/models/mission.service";
 // import type { MissionStats, RecentMission } from "../../../backend/models/mission.service";
+
 
 
 // // ─────────────────────────────────────────────────────────────
@@ -53,23 +57,24 @@
 // // ─────────────────────────────────────────────────────────────
 
 // export default function HomeScreen() {
+//     const { startMissionId } = useLocalSearchParams<{ startMissionId?: string }>();
 //   const router    = useRouter();
 //   const [activeTab, setActiveTab] = useState("Missions");
 //   const [activeNav, setActiveNav] = useState("home");
 
-//   // ✅ username du contexte utilisé immédiatement (même pattern que le Dashboard)
 //   const { userId, username: ctxUsername, isLoading } = useUser();
 //   const { icon: timeIcon, text: timeText }  = getTimeGreeting();
 //   const { selectedModel, setSelectedModel } = useAvatar();
 
 //   const [userStats, setUserStats] = useState<UserStats>({
-//     userName: ctxUsername || "Joueur", // ✅ affiché dès le départ depuis AsyncStorage
+//     userName: ctxUsername || "Joueur",
 //     level:    1,
 //     xp:       0,
 //     maxXp:    500,
 //     coins:    0,
 //     energie:  100,
 //   });
+  
 
 //   const [missions, setMissions] = useState<RecentMission[]>([]);
 //   const [stats,    setStats]    = useState<MissionStats>({
@@ -80,34 +85,35 @@
 //     weekTime:    "0h 00",
 //     successRate: 0,
 //   });
+//   const [autoStartId, setAutoStartId] = useState<number | null>(null);
 
-//   // ✅ On attend que isLoading soit false ET que userId soit disponible
 //   useEffect(() => {
 //     if (isLoading || !userId) return;
 //     fetchUserStats();
 //     loadMissionData();
 //   }, [userId, isLoading]);
+//   useEffect(() => {
+//   if (!startMissionId) return;
+//   setAutoStartId(Number(startMissionId));
+// }, [startMissionId]);
 
-//   // ── Fetch stats utilisateur — aligné sur DashboardScreen ─────
+//   // ── Fetch stats utilisateur ───────────────────────────────
 //   const fetchUserStats = async () => {
 //     try {
 //       const { data, error } = await supabase
 //         .from("users")
-//         // ✅ On sélectionne xp ET coins comme le Dashboard (+ gold en fallback)
-//         .select("nom, prenom, username, xp, coins, gold, niveau, energie, avatar_url")
+// .select("nom, prenom, username, xp, gold, id_level, energie, avatar_url")
 //         .eq("id_user", userId)
 //         .single();
 
 //       if (error || !data) return;
 
-//       const niveau = data.niveau ?? 1;
-//       const maxXp  = niveau * 500;
+//      // ✅ APRÈS — même logique que DashboardScreen
+// const xpTotal = data.xp ?? 0;
+// const niveau  = Math.floor(xpTotal / 500) + 1;
+// const maxXp   = 500;                         // toujours 500, comme dans le Dashboard
+// const xpInCurrentLevel = xpTotal % 500;     // XP dans le niveau actuel (0..499)
 
-//       // ✅ Même logique XP que le Dashboard : xp % maxXp
-//       const xp             = data.xp ?? 0;
-//       const xpInCurrentLevel = xp % maxXp;
-
-//       // ✅ Même logique username que le Dashboard
 //       const displayName =
 //         data.username ??
 //         data.prenom ??
@@ -115,18 +121,16 @@
 //         ctxUsername ??
 //         "Joueur";
 
-//       // ✅ Même logique avatar que le Dashboard
 //       if (data.avatar_url) setSelectedModel(data.avatar_url);
 
-//       setUserStats({
-//         userName: displayName,
-//         level:    niveau,
-//         xp:       xpInCurrentLevel,
-//         maxXp,
-//         // ✅ coins en priorité, gold en fallback
-//         coins:    data.coins ?? data.gold ?? 0,
-//         energie:  data.energie ?? 100,
-//       });
+//    setUserStats({
+//   userName: displayName,
+//   level:    niveau,
+//   xp:       xpInCurrentLevel,
+//   maxXp,                        // = 500 fixe
+//   coins:    data.gold ?? 0,
+//   energie:  data.energie ?? 100,
+// });
 //     } catch (err: any) {
 //       console.error("Erreur fetchUserStats:", err.message);
 //     }
@@ -147,6 +151,8 @@
 //     }
 //   };
 
+  
+
 //   const xpPercent = userStats.maxXp > 0 ? (userStats.xp / userStats.maxXp) * 100 : 0;
 
 //   return (
@@ -162,17 +168,19 @@
 //               <Text style={styles.coinIcon}>🪙</Text>
 //               <Text style={styles.coinsText}>{userStats.coins.toLocaleString()}</Text>
 //             </View>
+            
 //             <View style={styles.headerIcons}>
-//               <NotifIcone onPress={() => console.log("Notifications")} />
+//               <NotifIcone onPress={() => {
+//   router.push("/frontend/screens/NotificationsScreen");
+// }} />
 //               <SettingIcone onPress={() => console.log("Settings")} />
 //             </View>
 //           </View>
 
 //           <View style={styles.profileRow}>
 //             <View style={styles.avatarWrapper}>
-//               {/* ✅ selectedModel vient du contexte useAvatar, mis à jour par fetchUserStats */}
 //               {selectedModel ? (
-//                 <AvatarCrd model={selectedModel} bgColor="#ede9fe" />
+//                 <AvatarCrd model={selectedModel} bgColor={COLORS.coinsBadgeBg} />
 //               ) : (
 //                 <View style={styles.avatarPlaceholder}>
 //                   <Text style={styles.avatarEmoji}>🧑</Text>
@@ -241,6 +249,8 @@
 //               missions={missions}
 //               onAdd={() => { loadMissionData(); fetchUserStats(); }}
 //             />
+
+          
 //           </>
 //         ) : (
 //           <EventsTab onViewAll={() => router.push("/EventsScreen")} />
@@ -257,38 +267,36 @@
 // // ─────────────────────────────────────────────────────────────
 
 // const styles = StyleSheet.create({
-//   container:         { flex: 1, backgroundColor: "#f5f3ff" },
+//   container:         { flex: 1, backgroundColor: COLORS.screenBg },
 //   scroll:            { flex: 1 },
 //   scrollContent:     { paddingBottom: 20 },
 //   header:            { paddingTop: 30, paddingHorizontal: SIZES.padding, paddingBottom: 20 },
 //   topRow:            { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-//   coinsBadge:        { flexDirection: "row", alignItems: "center", backgroundColor: "#ede9fe", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, gap: 6, ...SHADOWS.light },
+//   coinsBadge:        { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.coinsBadgeBg, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, gap: 6, ...SHADOWS.light },
 //   coinIcon:          { fontSize: 16 },
 //   coinsText:         { color: COLORS.primary, fontWeight: "700", fontSize: 15 },
 //   headerIcons:       { flexDirection: "row", gap: 8 },
 //   profileRow:        { flexDirection: "row", alignItems: "center", gap: 16 },
-//   avatarWrapper:     { width: 80, height: 100, borderRadius: 20, overflow: "hidden", position: "relative", backgroundColor: "#ede9fe", ...SHADOWS.medium },
-//   avatarPlaceholder: { flex: 1, backgroundColor: "#ede9fe", justifyContent: "center", alignItems: "center" },
+//   avatarWrapper:     { width: 80, height: 100, borderRadius: 20, overflow: "hidden", position: "relative", backgroundColor: COLORS.coinsBadgeBg, ...SHADOWS.medium },
+//   avatarPlaceholder: { flex: 1, backgroundColor: COLORS.coinsBadgeBg, justifyContent: "center", alignItems: "center" },
 //   avatarEmoji:       { fontSize: 40 },
-//   levelBadge:        { position: "absolute", bottom: 4, alignSelf: "center", backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5, borderColor: "#fff", zIndex: 10 },
-//   levelText:         { color: "#fff", fontSize: 10, fontWeight: "700" },
+//   levelBadge:        { position: "absolute", bottom: 4, alignSelf: "center", backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5, borderColor: COLORS.modalTitle, zIndex: 10 },
+//   levelText:         { color: COLORS.modalTitle, fontSize: 10, fontWeight: "700" },
 //   infoBlock:         { flex: 1 },
 //   greetingRow:       { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-//   greeting:          { color: "#6b7280", fontSize: 14, flex: 1 },
+//   greeting:          { color: COLORS.greetingColor, fontSize: 14, flex: 1 },
 //   greetingName:      { color: COLORS.primary, fontWeight: "800", fontSize: 15 },
 //   timeIcon:          { fontSize: 20 },
-//   xpBarBg:           { height: 8, backgroundColor: "#ddd6fe", borderRadius: 10, marginTop: 10, overflow: "hidden" },
+//   xpBarBg:           { height: 8, backgroundColor: COLORS.xpBarBg, borderRadius: 10, marginTop: 10, overflow: "hidden" },
 //   xpBarFill:         { height: "100%", borderRadius: 10 },
-//   xpText:            { color: "#9ca3af", fontSize: 11, marginTop: 4 },
-//   streakText:        { color: "#F59E0B", fontSize: 12, fontWeight: "700", marginTop: 4 },
-//   tabsRow:           { flexDirection: "row", marginHorizontal: 16, marginTop: 8, backgroundColor: "#ede9fe", borderRadius: 30, padding: 4 },
+//   xpText:            { color: COLORS.xpTextColor, fontSize: 11, marginTop: 4 },
+//   streakText:        { color: COLORS.streakColor, fontSize: 12, fontWeight: "700", marginTop: 4 },
+//   tabsRow:           { flexDirection: "row", marginHorizontal: 16, marginTop: 8, backgroundColor: COLORS.tabBarBg, borderRadius: 30, padding: 4 },
 //   tabBtn:            { flex: 1, paddingVertical: 10, borderRadius: 26, alignItems: "center" },
 //   tabBtnActive:      { backgroundColor: COLORS.primary },
 //   tabText:           { fontSize: 14, fontWeight: "600", color: COLORS.primary },
-//   tabTextActive:     { color: "#fff" },
+//   tabTextActive:     { color: COLORS.modalTitle },
 // });
-
-// screens/HomeScreen.tsx
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
@@ -312,6 +320,8 @@ import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 
 import { fetchMissionStats, fetchRecentMissions } from "../../../backend/models/mission.service";
 import type { MissionStats, RecentMission } from "../../../backend/models/mission.service";
+import SuggestedMissionsSection from "../components/Suggestedmissionssection";
+import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
 
 
 
@@ -537,6 +547,7 @@ const xpInCurrentLevel = xpTotal % 500;     // XP dans le niveau actuel (0..499)
               missions={missions}
               onAdd={() => { loadMissionData(); fetchUserStats(); }}
             />
+           
 
           
           </>

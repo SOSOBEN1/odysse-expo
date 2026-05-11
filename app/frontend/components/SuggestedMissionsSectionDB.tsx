@@ -134,6 +134,9 @@ export default function SuggestedMissionsSectionDB({
   const handleStart = (mission: MissionSuggestion) => {
     completeMission(mission.id);
     onMissionStart?.(mission);
+    // Naviguer vers Missions avec la mission encodée → chrono démarre auto
+    const missionJson = JSON.stringify(mission);
+    router.push(`/frontend/screens/Missions?suggestedMission=${missionJson}` as any);
   };
 
   return (

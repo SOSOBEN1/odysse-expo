@@ -12,7 +12,6 @@ import {
   View,
 } from "react-native";
 import { useUser } from "../constants/UserContext";
-import { supabase } from "../constants/supabase";
 import { useMissionSuggestions } from "../hooks/Usemissionsuggestions";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
@@ -29,7 +28,7 @@ const MissionCard = ({
   starting,
 }: {
   mission: MissionSuggestion;
-  onStart: (m: MissionSuggestion) => void;
+  onStart: (m: MissionSuggestion) => void | Promise<void>;
   starting: boolean;
 }) => (
   <View style={[missionStyles.card, missionStyles.suggestedCard]}>
@@ -84,40 +83,19 @@ export default function SuggestedMissionsSection({
   } = useMissionSuggestions(maxSuggestions);
 
   // ─── Démarrer une mission suggérée ───────────────────────────
-  // 1. Insère la mission dans la DB
-  // 2. Navigue vers Homescreen avec l'id → le chrono démarre auto
+  // Navigue directement vers MissionsScreen avec la mission encodée
+  // Le chrono démarre automatiquement à l'arrivée
   const handleStart = async (mission: MissionSuggestion) => {
     if (!userId || startingId) return;
     setStartingId(mission.id);
 
     try {
-      // Insère dans ta table mission (adapte les colonnes à ta structure)
-      const { data, error: insertError } = await supabase
-        .from("mission")
-        .insert({
-        id_user:     userId,
-    titre:       mission.title,
-    description: mission.description ?? "",
-    difficulte:  mission.category === "stress"       ? "Facile"  :
-                 mission.category === "energie"      ? "Moyen"   :
-                 mission.category === "connaissance" ? "Difficile" : "Moyen",
-    duree:       mission.duration ?? "30 min",
-    urgent:      false,
-    today:       true,
-        })
-        .select("id_mission")
-        .single();
-
-      if (insertError || !data) {
-        console.error("[SuggestedMissions] Erreur insert:", insertError?.message);
-        return;
-      }
-
       onMissionStart?.(mission);
 
-      // Navigue vers la page Missions avec l'id à démarrer
+      // Naviguer vers Missions avec la mission en JSON — expo-router encode automatiquement
+      const missionJson = JSON.stringify(mission);
       router.push(
-        `/frontend/screens//Homescreen?startMissionId=${data.id_mission}` as any
+        `/frontend/screens/Missions?suggestedMission=${missionJson}` as any
       );
 
     } catch (err: any) {

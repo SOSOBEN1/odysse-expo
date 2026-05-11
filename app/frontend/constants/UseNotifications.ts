@@ -50,6 +50,9 @@ export function useNotifications() {
         case 'rappel':
           router.push({ pathname: '/frontend/screens/Dashbord' })
           break
+        case 'level_up':
+  router.push({ pathname: '/frontend/screens/Dashbord' })
+  break
         default:
           break
       }

@@ -2,6 +2,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
+// ── Helpers canal et son ─────────────────────────────────────────────────────
+async function getChannelId(): Promise<string> {
+  const reminders = await AsyncStorage.getItem('pref_reminders')
+  return reminders !== 'false' ? 'odyssee_v2' : 'odyssee_silent'
+}
+
+async function getSound(): Promise<string | false> {
+  const reminders = await AsyncStorage.getItem('pref_reminders')
+  return reminders !== 'false' ? 'notification.wav' : false
+}
 Notifications.setNotificationHandler({
   handleNotification: async (): Promise<Notifications.NotificationBehavior> => {
     const sound = await AsyncStorage.getItem('pref_sound')
@@ -223,4 +233,19 @@ export async function annulerRappelsMission(missionId: number) {
 
 export async function annulerRappelDefi(defiId: number) {
   await Notifications.cancelScheduledNotificationAsync(`defi-${defiId}`).catch(() => {})
+}
+export async function envoyerNotifLevelUp(nouveauNiveau: number, goldGagne: number) {
+  const channelId = await getChannelId()
+  const sound = await getSound()
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: `🎉 Niveau ${nouveauNiveau} atteint !`,
+      body: `Félicitations ! Tu passes au niveau ${nouveauNiveau} et gagnes ${goldGagne} 🪙 gold !`,
+      sound,
+      data: { type: 'level_up', niveau: nouveauNiveau },
+      ...(Platform.OS === 'android' && { channelId }),
+    },
+    trigger: null,
+  })
 }

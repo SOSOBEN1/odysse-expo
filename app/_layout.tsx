@@ -9,11 +9,10 @@ import { StatsProvider } from "./frontend/constants/StatsContext";
 import { supabase } from "./frontend/constants/supabase";
 import { useNotifications } from './frontend/constants/UseNotifications';
 import { UserProvider, useUser } from "./frontend/constants/UserContext";
+import { useBackgroundMusic } from './frontend/hooks/useBackgroundMusic';
 
-// ── Nécessaire pour fermer le browser OAuth proprement ───────
 WebBrowser.maybeCompleteAuthSession();
 
-// ── Badge meta (emoji) ────────────────────────────────────────
 const BADGE_EMOJI: Record<number, string> = {
   1:"👣", 2:"🔥", 3:"👁️", 4:"🎯", 5:"📅", 6:"⚡", 7:"⭐", 8:"❤️",
   9:"🎓", 10:"🏃", 11:"🏆", 12:"🌸", 13:"🌬️", 14:"🧘", 15:"💚",
@@ -132,63 +131,62 @@ function BadgeWatcher() {
   );
 }
 
-// ── Gestionnaire OAuth deep link ──────────────────────────────
-// Écoute le retour de Google OAuth et redirige proprement
+// ── Gestionnaire OAuth ────────────────────────────────────────
 function OAuthHandler() {
   const router = useRouter();
-  const { setUserId, setUsername } = useUser();
 
   useEffect(() => {
-    // Écoute les changements de session Supabase
-    // Quand Google OAuth réussit, onAuthStateChange se déclenche
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (event === "SIGNED_IN" && session?.user) {
-          const authUserId = session.user.id;
+        if (event !== 'SIGNED_IN' || !session?.user) return
 
-          // Vérifie si le profil existe dans users
-          const { data } = await supabase
-            .from("users")
-            .select("id_user, username, prenom, nom")
-            .eq("auth_id", authUserId)
-            .maybeSingle();
+        // Ignorer connexions email/password
+        const provider = session.user.app_metadata?.provider
+        if (provider !== 'google') return
 
-          if (!data) {
-            // Nouveau compte Google → inscription
-            router.push({
-              pathname: "/frontend/screens/Register",
-              params: {
-                fromGoogle:  "true",
-                authId:      authUserId,
-                emailGoogle: session.user.email ?? "",
-              },
-            });
-          }
-          // Si profil existe → Login.tsx gère déjà la redirection
+        const authUserId = session.user.id
+
+        const { data } = await supabase
+          .from("users")
+          .select("id_user")
+          .eq("auth_id", authUserId)
+          .maybeSingle()
+
+        if (!data) {
+          router.push({
+            pathname: "/frontend/screens/Register",
+            params: {
+              fromGoogle:  "true",
+              authId:      authUserId,
+              emailGoogle: session.user.email ?? "",
+            },
+          })
         }
+        // Si profil existe → Login.tsx gère via syncProfileAndRedirect
       }
-    );
+    )
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => subscription.unsubscribe()
+  }, [])
 
-  return null;
+  return null
 }
 
 // ── Layout racine ─────────────────────────────────────────────
 export default function RootLayout() {
-  useNotifications();
+  useNotifications()
+  useBackgroundMusic()
 
   return (
     <UserProvider>
       <AvatarProvider>
         <StatsProvider>
-          <OAuthHandler />
+          {/* <OAuthHandler /> */}
           <Stack screenOptions={{ headerShown: false }} />
           <LevelUpWatcher />
           <BadgeWatcher />
         </StatsProvider>
       </AvatarProvider>
     </UserProvider>
-  );
+  )
 }

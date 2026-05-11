@@ -182,70 +182,76 @@ export default function LoginScreen() {
   };
 
   // ── Connexion Google OAuth ──
-  const handleGoogleLogin = async () => {
-    try {
-      const redirectUrl = "odysse://"; // scheme depuis app.json
+ const handleGoogleLogin = async () => {
+  try {
+    const redirectUrl = "odysse://";
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo:          redirectUrl,
-          skipBrowserRedirect: true, // important !
-        },
-      });
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: redirectUrl,
+        skipBrowserRedirect: true,
+      },
+    });
 
-      if (error || !data?.url) {
-        Alert.alert("Erreur Google", error?.message ?? "URL manquante");
-        return;
-      }
-
-      const result = await WebBrowser.openAuthSessionAsync(
-        data.url,
-        redirectUrl
-      );
-
-      if (result.type !== "success" || !result.url) {
-        Alert.alert("Annulé", "Connexion Google annulée");
-        return;
-      }
-
-      // Extraire les tokens de l'URL de retour
-      const url = result.url;
-      const params = new URLSearchParams(
-        url.includes("#") ? url.split("#")[1] : url.split("?")[1] ?? ""
-      );
-
-      const access_token  = params.get("access_token");
-      const refresh_token = params.get("refresh_token");
-
-      if (access_token && refresh_token) {
-        const { data: sessionData, error: sessionError } =
-          await supabase.auth.setSession({ access_token, refresh_token });
-
-        if (sessionError || !sessionData.session?.user) {
-          Alert.alert("Erreur", "Impossible d'établir la session");
-          return;
-        }
-
-        // syncProfileAndRedirect gère les deux cas :
-        // → profil existant : Dashboard
-        // → nouveau compte  : Register (étapes d'inscription complètes)
-        await syncProfileAndRedirect(sessionData.session.user.id);
-      } else {
-        // Fallback session
-        await new Promise(r => setTimeout(r, 1000));
-        const { data: fallback } = await supabase.auth.getSession();
-        if (fallback.session?.user) {
-          await syncProfileAndRedirect(fallback.session.user.id);
-        } else {
-          Alert.alert("Erreur", "Session introuvable");
-        }
-      }
-    } catch (err) {
-      console.error(err);
-      Alert.alert("Erreur", "Connexion Google échouée");
+    if (error || !data?.url) {
+      Alert.alert("Erreur Google", error?.message ?? "URL manquante");
+      return;
     }
-  };
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+    if (result.type !== "success" || !result.url) {
+      // L'utilisateur a annulé — pas d'alerte agressive
+      return;
+    }
+
+    // ── Extraction robuste : cherche dans #fragment d'abord, puis ?query ──
+    const returnUrl = result.url;
+    let params: URLSearchParams;
+
+    const hashIndex  = returnUrl.indexOf("#");
+    const queryIndex = returnUrl.indexOf("?");
+
+    if (hashIndex !== -1) {
+      params = new URLSearchParams(returnUrl.slice(hashIndex + 1));
+    } else if (queryIndex !== -1) {
+      params = new URLSearchParams(returnUrl.slice(queryIndex + 1));
+    } else {
+      params = new URLSearchParams("");
+    }
+
+    const access_token  = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+
+    if (access_token && refresh_token) {
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.setSession({ access_token, refresh_token });
+
+      if (sessionError || !sessionData.session?.user) {
+        Alert.alert("Erreur", "Impossible d'établir la session");
+        return;
+      }
+
+      await syncProfileAndRedirect(sessionData.session.user.id);
+      return;
+    }
+
+    // ── Fallback : attendre que Supabase établisse la session seul ──
+    await new Promise(r => setTimeout(r, 1500));
+    const { data: fallback } = await supabase.auth.getSession();
+
+    if (fallback.session?.user) {
+      await syncProfileAndRedirect(fallback.session.user.id);
+    } else {
+      Alert.alert("Erreur", "Session introuvable après connexion Google");
+    }
+
+  } catch (err) {
+    console.error("[Google Login]", err);
+    Alert.alert("Erreur", "Connexion Google échouée");
+  }
+};
 
   return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>

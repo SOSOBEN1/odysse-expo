@@ -5,11 +5,10 @@ import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Dimensions, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
-import {
-  demanderPermission
-} from "../../../backend/models/NotificationService";
+import { demanderPermission } from "../../../backend/models/NotificationService";
 import ChangePasswordModal from "../components/ChangePasswordModal";
 import WaveBackground from "../components/waveBackground";
+import { useBackgroundMusic } from '../hooks/useBackgroundMusic';
 import styles from "../styles/LoginStyle";
 
 const { width } = Dimensions.get("window");
@@ -21,6 +20,7 @@ export default function SettingsScreen() {
   const [reminders, setReminders] = useState(true);
   const [music, setMusic] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const { start, stop } = useBackgroundMusic()
 
   // ── Charger les préférences sauvegardées ──
   useEffect(() => {
@@ -28,9 +28,11 @@ export default function SettingsScreen() {
       const n = await AsyncStorage.getItem('pref_notifications')
       const s = await AsyncStorage.getItem('pref_sound')
       const r = await AsyncStorage.getItem('pref_reminders')
+      const m = await AsyncStorage.getItem('pref_music')
       if (n !== null) setNotifications(n === 'true')
       if (s !== null) setSound(s === 'true')
       if (r !== null) setReminders(r === 'true')
+      if (m !== null) setMusic(m === 'true')
     }
     charger()
   }, [])
@@ -39,7 +41,6 @@ export default function SettingsScreen() {
   const handleNotifications = async (value: boolean) => {
     setNotifications(value)
     await AsyncStorage.setItem('pref_notifications', String(value))
-
     if (value) {
       const ok = await demanderPermission()
       if (!ok) {
@@ -55,16 +56,24 @@ export default function SettingsScreen() {
   const handleSound = async (value: boolean) => {
     setSound(value)
     await AsyncStorage.setItem('pref_sound', String(value))
-    // Le son est géré via le canal — rebuild nécessaire pour changer
-    // On sauvegarde juste la préférence ici
   }
 
   // ── Activer/désactiver les rappels ──
   const handleReminders = async (value: boolean) => {
-  setReminders(value)
-  await AsyncStorage.setItem('pref_reminders', String(value))
-  // juste sauvegarder la préférence son — pas d'annulation
-}
+    setReminders(value)
+    await AsyncStorage.setItem('pref_reminders', String(value))
+  }
+
+  // ── Activer/désactiver la musique ──
+  const handleMusic = async (value: boolean) => {
+    setMusic(value)
+    await AsyncStorage.setItem('pref_music', String(value))
+    if (value) {
+      await start()
+    } else {
+      await stop()
+    }
+  }
 
   const stars = [
     { top: 50, left: 30, size: 20, opacity: 0.6 },
@@ -133,7 +142,7 @@ export default function SettingsScreen() {
             label="Musique de fond"
             sublabel="Ambiances pendant les missions"
             value={music}
-            onValueChange={setMusic}
+            onValueChange={handleMusic}
           />
           <SettingItem
             icon="alarm-outline"
@@ -156,23 +165,25 @@ export default function SettingsScreen() {
           <Ionicons name="chevron-forward" size={20} color="#6949a8" />
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={{ backgroundColor: '#6C3FC8', padding: 15, borderRadius: 20, marginTop: 10, alignItems: 'center' }}
+          onPress={async () => {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: '🌅 Une nouvelle journée, une nouvelle victoire !',
+                body: 'Approche-toi de ton objectif, chaque effort compte !',
+                sound: true,
+              },
+              trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+                seconds: 10,
+              },
+            })
+          }}
+        >
+          <Text style={{ color: '#fff', fontWeight: 'bold' }}>🔔 Tester notif (10s)</Text>
+        </TouchableOpacity>
 
-// Bouton test
-<TouchableOpacity onPress={async () => {
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: '🌅 Une nouvelle journée, une nouvelle victoire !',
-      body: 'Approche-toi de ton objectif, chaque effort compte !',
-      sound: true,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds: 10,
-    },
-  })
-}}>
-  <Text>Test notif 10s</Text>
-</TouchableOpacity>
         <TouchableOpacity
           style={localStyles.logoutBtn}
           onPress={() => router.replace('/frontend/screens/Login')}

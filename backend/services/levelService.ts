@@ -18,7 +18,7 @@
  */
 
 import { supabase } from "../../app/frontend/constants/supabase";
-
+import { envoyerNotifLevelUp } from '../models/NotificationService';
 // ─── Constante ────────────────────────────────────────────────────────────────
 
 export const XP_PAR_NIVEAU = 500;
@@ -91,7 +91,6 @@ export async function seedLevels(maxNiveau: number = 50): Promise<void> {
     console.log("[levelService] Niveaux déjà seedés, skip.");
     return;
   }
-
   const rows = Array.from({ length: maxNiveau }, (_, i) => {
     const n = i + 1;
     return {
@@ -232,6 +231,7 @@ export async function checkAndUpdateLevel(userId: number): Promise<LevelUpResult
   console.log(
     `[levelService] 🎉 Level-up user ${userId} : niveau ${oldNiveau} → ${nouveauNiveau} (+${goldReward} gold)`
   );
+await envoyerNotifLevelUp(nouveauNiveau, goldReward)
 
   const levelInfo = await getLevelInfo(userId);
 

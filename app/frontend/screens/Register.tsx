@@ -108,8 +108,7 @@ export default function RegisterScreen() {
         return;
       }
 
-      await setUserId(dbUser.id_user) 
-
+setUserId(dbUser.id_user);
       setFullName("");
       setEmail("");
       setPassword("");

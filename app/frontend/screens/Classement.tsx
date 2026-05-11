@@ -16,6 +16,7 @@ import NotifIcone from "../components/NotifIcone";
 import SettingIcone from "../components/SettingIcone";
 import { supabase } from "../constants/supabase";
 import { COLORS, SHADOWS, SIZES } from "../constants/theme";
+import { useNotifCount } from "../constants/useNotifCount";
 import { useUser } from "../constants/UserContext";
 
 const { width, height } = Dimensions.get("window");
@@ -178,7 +179,7 @@ export default function ClassementScreen() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const confettiPieces = useConfetti(true);
-
+const { count, refresh } = useNotifCount()
   useEffect(() => { chargerClassement(); }, []);
 
   const chargerClassement = async () => {
@@ -245,8 +246,13 @@ export default function ClassementScreen() {
         <BackButton onPress={() => router.back()} />
         <Text style={styles.headerTitle}>{defi_nom}</Text>
         <View style={styles.headerActions}>
-          <NotifIcone onPress={() => {}} />
-          <SettingIcone onPress={() => {}} />
+<NotifIcone
+  count={count}
+  onPress={() => {
+    refresh()
+    router.push("/frontend/screens/NotificationsScreen")
+  }}
+/>          <SettingIcone onPress={() => {}} />
         </View>
       </View>
 

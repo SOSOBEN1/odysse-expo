@@ -81,45 +81,60 @@ export default function LoginScreen() {
     }
   };
 
-  // ── Sync profil après OAuth ──
+  // ── Sync profil après connexion email/password ──
   const syncProfileAndRedirect = async (authUserId: string) => {
     const { data, error } = await supabase
       .from("users")
       .select("id_user, avatar_url, username, prenom, nom")
       .eq("auth_id", authUserId)
-      .single();
+      .maybeSingle(); // ← maybeSingle pour ne pas planter si vide
 
-    if (error || !data) {
-      Alert.alert("Erreur Profil", error?.message ?? "data null");
+    if (error) {
+      Alert.alert("Erreur Profil", error.message);
       return;
     }
 
-    await supabase
-      .from("users")
-      .update({ dernier_login: new Date().toISOString() })
-      .eq("auth_id", authUserId);
+    // Profil existant → connexion normale
+    if (data) {
+      await supabase
+        .from("users")
+        .update({ dernier_login: new Date().toISOString() })
+        .eq("auth_id", authUserId);
 
-    const avatarKey = data.avatar_url ?? "avatar_1";
-    if (AVATAR_MAP[avatarKey]) setSelectedModel(AVATAR_MAP[avatarKey]);
+      const avatarKey = data.avatar_url ?? "avatar_1";
+      if (AVATAR_MAP[avatarKey]) setSelectedModel(AVATAR_MAP[avatarKey]);
 
-    setUserId(data.id_user);
-    setUsername(data.username ?? data.prenom ?? data.nom ?? "Joueur");
+      setUserId(data.id_user);
+      setUsername(data.username ?? data.prenom ?? data.nom ?? "Joueur");
 
-    const { data: statsData } = await supabase
-      .from("player_stats")
-      .select("last_periodic_questionnaire")
-      .eq("id_user", Number(data.id_user))
-      .maybeSingle();
+      const { data: statsData } = await supabase
+        .from("player_stats")
+        .select("last_periodic_questionnaire")
+        .eq("id_user", Number(data.id_user))
+        .maybeSingle();
 
-    const lastShown = statsData?.last_periodic_questionnaire;
-    const needsQuestionnaire =
-      !lastShown || Date.now() - new Date(lastShown).getTime() >= INTERVAL_MS;
+      const lastShown = statsData?.last_periodic_questionnaire;
+      const needsQuestionnaire =
+        !lastShown || Date.now() - new Date(lastShown).getTime() >= INTERVAL_MS;
 
-    if (needsQuestionnaire) {
-      router.push("/frontend/screens/QuestionPeriodicScreen");
-    } else {
-      router.push("/frontend/screens/Dashbord");
+      if (needsQuestionnaire) {
+        router.push("/frontend/screens/QuestionPeriodicScreen");
+      } else {
+        router.push("/frontend/screens/Dashbord");
+      }
+      return;
     }
+
+    // Pas de profil → nouvel utilisateur Google → inscription
+    const { data: { user } } = await supabase.auth.getUser();
+    router.push({
+      pathname: "/frontend/screens/Register",
+      params: {
+        fromGoogle:  "true",
+        authId:      authUserId,
+        emailGoogle: user?.email ?? "",
+      },
+    });
   };
 
   // ── Connexion email/password ──
@@ -167,68 +182,78 @@ export default function LoginScreen() {
 
   // ── Connexion Google OAuth ──
   const handleGoogleLogin = async () => {
-  try {
-    // Construis l'URL proxy manuellement
-const redirectUrl = "https://auth.expo.io/@aminatoun/odysse";    // ↑ Remplace par ton vrai username Expo et le slug de app.json
+    try {
+      const redirectUrl = "odysse://"; // scheme depuis app.json
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: redirectUrl },
-    });
-
-    if (error || !data?.url) {
-      Alert.alert("Erreur Google", error?.message ?? "URL manquante");
-      return;
-    }
-
-    const result = await WebBrowser.openAuthSessionAsync(
-      data.url,
-      redirectUrl
-    );
-
-    console.log("RESULT TYPE:", result.type);
-    console.log("RESULT URL:", result.url);
-
-    if (result.type !== "success" || !result.url) {
-      Alert.alert("Annulé", "Connexion Google annulée");
-      return;
-    }
-
-    const hashPart = result.url.split("#")[1] ?? result.url.split("?")[1] ?? "";
-    const params = Object.fromEntries(new URLSearchParams(hashPart));
-
-    if (params.access_token && params.refresh_token) {
-      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-        access_token: params.access_token,
-        refresh_token: params.refresh_token,
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo:          redirectUrl,
+          skipBrowserRedirect: true, // important !
+        },
       });
 
-      if (sessionError || !sessionData.session?.user) {
-        Alert.alert("Erreur", "Impossible d'établir la session");
+      if (error || !data?.url) {
+        Alert.alert("Erreur Google", error?.message ?? "URL manquante");
         return;
       }
 
-      await syncProfileAndRedirect(sessionData.session.user.id);
-    } else {
-      await new Promise(r => setTimeout(r, 1000));
-      const { data: fallback } = await supabase.auth.getSession();
-      if (fallback.session?.user) {
-        await syncProfileAndRedirect(fallback.session.user.id);
-      } else {
-        Alert.alert("Erreur", "Session introuvable");
-      }
-    }
+      const result = await WebBrowser.openAuthSessionAsync(
+        data.url,
+        redirectUrl
+      );
 
-  } catch (err) {
-    Alert.alert("Erreur", "Connexion Google échouée");
-  }
-};
+      if (result.type !== "success" || !result.url) {
+        Alert.alert("Annulé", "Connexion Google annulée");
+        return;
+      }
+
+      // Extraire les tokens de l'URL de retour
+      const url = result.url;
+      const params = new URLSearchParams(
+        url.includes("#") ? url.split("#")[1] : url.split("?")[1] ?? ""
+      );
+
+      const access_token  = params.get("access_token");
+      const refresh_token = params.get("refresh_token");
+
+      if (access_token && refresh_token) {
+        const { data: sessionData, error: sessionError } =
+          await supabase.auth.setSession({ access_token, refresh_token });
+
+        if (sessionError || !sessionData.session?.user) {
+          Alert.alert("Erreur", "Impossible d'établir la session");
+          return;
+        }
+
+        // syncProfileAndRedirect gère les deux cas :
+        // → profil existant : Dashboard
+        // → nouveau compte  : Register (étapes d'inscription complètes)
+        await syncProfileAndRedirect(sessionData.session.user.id);
+      } else {
+        // Fallback session
+        await new Promise(r => setTimeout(r, 1000));
+        const { data: fallback } = await supabase.auth.getSession();
+        if (fallback.session?.user) {
+          await syncProfileAndRedirect(fallback.session.user.id);
+        } else {
+          Alert.alert("Erreur", "Session introuvable");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Erreur", "Connexion Google échouée");
+    }
+  };
 
   return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
       <WaveBackground />
 
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.push("/frontend/screens/start")}>
+      <TouchableOpacity
+        style={styles.backBtn}
+        onPress={() => router.push("/frontend/screens/start")}
+      >
         <Ionicons name="arrow-back" size={20} color="#6949a8" />
       </TouchableOpacity>
 
@@ -242,14 +267,19 @@ const redirectUrl = "https://auth.expo.io/@aminatoun/odysse";    // ↑ Remplace
       <View style={styles.card}>
         <Text style={styles.label}>Email</Text>
         <UsernameInput
-          value={email} onChange={setEmail}
-          placeholder="Enter Email Address" icon="mail"
+          value={email}
+          onChange={setEmail}
+          placeholder="Enter Email Address"
+          icon="mail"
         />
 
         <Text style={[styles.label, { marginTop: 15 }]}>Password</Text>
         <UsernameInput
-          value={password} onChange={setPassword}
-          placeholder="Enter Password" icon="lock" secure
+          value={password}
+          onChange={setPassword}
+          placeholder="Enter Password"
+          icon="lock"
+          secure
         />
 
         <View style={styles.optionsRow}>
@@ -266,19 +296,29 @@ const redirectUrl = "https://auth.expo.io/@aminatoun/odysse";    // ↑ Remplace
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.buttonWrapper} onPress={handleLogin} disabled={loading}>
+        <TouchableOpacity
+          style={styles.buttonWrapper}
+          onPress={handleLogin}
+          disabled={loading}
+        >
           <LinearGradient
             colors={["#6949a8", "#9574e0", "#baaae7"]}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
             style={styles.button}
           >
-            <Text style={styles.buttonText}>{loading ? "Connexion..." : "Se connecter"}</Text>
+            <Text style={styles.buttonText}>
+              {loading ? "Connexion..." : "Se connecter"}
+            </Text>
           </LinearGradient>
         </TouchableOpacity>
 
         <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 15 }}>
           <Text style={styles.registerText}>Vous n'avez pas de compte ? </Text>
-          <Link href="/frontend/screens/Register" style={[styles.registerLink, { textDecorationLine: "underline" }]}>
+          <Link
+            href="/frontend/screens/Register"
+            style={[styles.registerLink, { textDecorationLine: "underline" }]}
+          >
             S'inscrire
           </Link>
         </View>
@@ -296,7 +336,10 @@ const redirectUrl = "https://auth.expo.io/@aminatoun/odysse";    // ↑ Remplace
       <View style={[styles.stars, { pointerEvents: "none" }]}>
         {stars.map((star, i) => (
           <MaterialIcons
-            key={i} name="auto-awesome" size={star.size} color="#fff"
+            key={i}
+            name="auto-awesome"
+            size={star.size}
+            color="#fff"
             style={{
               position: "absolute",
               ...(star.top    !== undefined ? { top: star.top }       : {}),

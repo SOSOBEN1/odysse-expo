@@ -6,6 +6,10 @@ import {
   TouchableOpacity, View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
+import {
+  annulerRappelsMission,
+  planifierRappelsMission,
+} from "../../../backend//models/NotificationService";
 import type { Mission, MissionTimer } from "../../../backend/models/mission.types";
 import {
   computeProgressPercent,
@@ -276,6 +280,28 @@ export default function MissionsScreen() {
     handleCancelExit,
   } = useMissions(userId !== null ? String(userId) : null);
 
+  // ── Planifier rappels quand les missions sont chargées ──
+  useEffect(() => {
+    if (!missions || missions.length === 0) return;
+
+    missions.forEach(async (mission) => {
+      const timer = getTimer(mission.id);
+      if (mission.dateLimite && timer.state !== "done" && timer.state !== "fail") {
+        await planifierRappelsMission(
+          mission.id,
+          mission.title,
+          new Date(mission.dateLimite)
+        );
+      }
+    });
+  }, [missions]);
+
+  // ── Finish avec annulation des rappels ──
+  const handleFinishWithNotif = async (id: number) => {
+    await annulerRappelsMission(id);
+    handleFinish(id);
+  };
+
   useFocusEffect(
     useCallback(() => {
       reloadMissionsOnly();
@@ -285,7 +311,7 @@ export default function MissionsScreen() {
   const filteredMissions = missions.filter((m) => {
     if (activeTab === "Urgent")         return m.urgent;
     if (activeTab === "Aujourd'hui")    return m.today;
-    if (activeTab === "Défis")          return m.idDefi !== null; // ← nouveau
+    if (activeTab === "Défis")          return m.idDefi !== null;
     if (activeTab === "Par Événements") return m.event !== null;
     return true;
   });
@@ -349,7 +375,7 @@ export default function MissionsScreen() {
             onEdit={handleEdit}
             onStart={handleStart}
             onPause={handlePause}
-            onFinish={handleFinish}
+            onFinish={handleFinishWithNotif}
           />
         ))}
 
@@ -431,13 +457,11 @@ const styles = StyleSheet.create({
   card:              { borderRadius: 20, paddingTop: 24, paddingBottom: 12, paddingHorizontal: 16, ...SHADOWS.medium },
   cardActionsBottom: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.cardDivider },
   actionIconBtn:     { width: 32, height: 32, borderRadius: 8, backgroundColor: COLORS.cardActionBg, alignItems: "center", justifyContent: "center" },
-  // ── Banners ──
   bannersRow:        { flexDirection: "row", gap: 8, marginBottom: 10 },
   urgentBanner:      { backgroundColor: COLORS.missionUrgentBg, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, alignSelf: "flex-start" },
   urgentText:        { color: COLORS.missionUrgentText, fontWeight: "700", fontSize: 12 },
   defiBanner:        { backgroundColor: "#ede9fe", borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, alignSelf: "flex-start" },
   defiText:          { color: "#6d28d9", fontWeight: "700", fontSize: 12 },
-  // ── Card content ──
   topRow:            { flexDirection: "row", gap: 12 },
   iconBox:           { width: 58, height: 58, borderRadius: 16, justifyContent: "center", alignItems: "center" },
   iconText:          { fontSize: 26 },

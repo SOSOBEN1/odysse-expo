@@ -1,44 +1,38 @@
-import { TouchableOpacity, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS, SHADOWS } from "../styles/theme";
 
 interface Props {
   onPress?: () => void;
-  hasNotification?: boolean;
+  count?: number;
 }
 
-export default function NotifIcone({ onPress, hasNotification = true }: Props) {
+export default function NotifIcone({ onPress, count = 0 }: Props) {
   return (
     <TouchableOpacity style={styles.button} onPress={onPress}>
       <Ionicons name="notifications-outline" size={20} color={COLORS.primary} />
-
-      {/* 🔴 badge */}
-      {hasNotification && <View style={styles.badge} />}
+      {count > 0 && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: COLORS.card,
-
-    justifyContent: "center",
-    alignItems: "center",
-
+    justifyContent: "center", alignItems: "center",
     ...SHADOWS.light,
   },
-
   badge: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    position: "absolute", top: 2, right: 2,
+    minWidth: 16, height: 16, borderRadius: 8,
     backgroundColor: "#FF3B30",
+    justifyContent: "center", alignItems: "center",
+    paddingHorizontal: 3,
   },
+  badgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
 });

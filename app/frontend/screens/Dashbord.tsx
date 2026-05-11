@@ -694,17 +694,18 @@ import Navbar from "../components/Navbar";
 import NotifIcone from "../components/NotifIcone";
 import PuzzleIcone from "../components/PuzzleIcone";
 import SettingIcone from "../components/SettingIcone";
+import SuggestedMissionsSection from "../components/Suggestedmissionssection";
 import WaveBackground from "../components/waveBackground";
-import SuggestedMissionsSection from "../components/Suggestedmissionssection"
 import { useAvatar } from "../constants/AvatarContext";
 import { useUser } from "../constants/UserContext";
 import { supabase } from "../constants/supabase";
+import { useNotifCount } from "../constants/useNotifCount";
+import { useDerivedStats } from "../hooks/useDerivedStats";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
-import { useDerivedStats } from "../hooks/useDerivedStats";
 // ✅ Import du hook périodique
 import { usePeriodicQuestionnaire } from "../hooks/usePeriodicQuestionnaire";
-import { useTodayMissions, TodayMission } from "../hooks/useTodayMissions";
+import { TodayMission, useTodayMissions } from "../hooks/useTodayMissions";
 
 
 function computeDerivedStats(base: any) {
@@ -839,7 +840,7 @@ const DashboardHeader = () => {
   const router                             = useRouter();
   const USER                               = useDashboardUser();
   const xpPercent = USER.maxXp > 0 ? (USER.xp / USER.maxXp) * 100 : 0;
-
+const { count, refresh } = useNotifCount()
   return (
     <View style={headerStyles.container}>
       <View style={headerStyles.topRow}>
@@ -849,9 +850,13 @@ const DashboardHeader = () => {
         </View>
         <View style={headerStyles.headerIcons}>
           <PuzzleIcone onPress={() => router.push("/frontend/screens/WorldsScreen")} />
-          <NotifIcone onPress={() => {
-  router.push("/frontend/screens/NotificationsScreen");
-}} /> 
+          <NotifIcone
+  count={count}
+  onPress={() => {
+    refresh()
+    router.push("/frontend/screens/NotificationsScreen")
+  }}
+/>
           <SettingIcone />
         </View>
       </View>

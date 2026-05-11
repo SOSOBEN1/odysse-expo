@@ -1,17 +1,50 @@
 {
-  "plugins": [
-    "expo-asset",
-    "expo-secure-store",
-    "expo-web-browser"
-  ],
-  "android": {
-    "package": "com.anonymous.odysse"
-  },
-  
   "expo": {
-    "scheme": "odysse",
+    "name": "Odyssée",
     "slug": "odysse",
     "owner": "aminatoun",
+    "version": "1.0.0",
+    "scheme": "odysse",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aminatoun.odysse"
+    },
+    "android": {
+      "package": "com.aminatoun.odysse",
+      "adaptiveIcon": {
+        "backgroundColor": "#6C3FC8"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-asset",
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+  "expo-notifications",
+  {
+    "color": "#6C3FC8",
+    "androidMode": "default",
+    "sounds": ["./app/frontend/assets/sounds/notification.wav"]
   }
-
+]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "379ad3f0-24de-457f-9c35-0b5eb8e53911"
+      }
+    }
+  }
 }

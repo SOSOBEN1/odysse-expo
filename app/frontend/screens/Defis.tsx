@@ -25,6 +25,7 @@ import NotifIcone from "../components/NotifIcone";
 import SettingIcone from "../components/SettingIcone";
 import { supabase } from "../constants/supabase";
 import { COLORS, SHADOWS, SIZES } from "../constants/theme";
+import { useNotifCount } from "../constants/useNotifCount";
 import { useUser } from "../constants/UserContext";
 
 const { width } = Dimensions.get("window");
@@ -920,7 +921,7 @@ export default function DefiScreen() {
   const [search,       setSearch]       = useState("");
   const [editingDefi,  setEditingDefi]  = useState<Defi | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-
+const { count, refresh } = useNotifCount()
   const headerAnim = useRef(new Animated.Value(0)).current;
 
   // Filtrage reactif via useMemo — pas de state "filtered" séparé
@@ -1059,10 +1060,13 @@ const getNbParticipants = async (id_defi: number): Promise<number> => {
         opacity:   headerAnim,
         transform: [{ translateY: headerAnim.interpolate({ inputRange: [0,1], outputRange: [-16,0] }) }],
       }]}>
-        <NotifIcone onPress={() => {
-  console.log("CLICK NOTIF");
-  router.push("/frontend/screens/NotificationsScreen");
-}} />
+        <NotifIcone
+  count={count}
+  onPress={() => {
+    refresh()
+    router.push("/frontend/screens/NotificationsScreen")
+  }}
+/>
         <SettingIcone onPress={() => console.log("Settings")} />
       </Animated.View>
 

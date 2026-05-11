@@ -291,26 +291,26 @@
 // screens/HomeScreen.tsx
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useState, useEffect } from "react";
-import SettingIcone from "../components/SettingIcone";
-import NotifIcone from "../components/NotifIcone";
+import { useEffect, useState } from "react";
 import {
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from "react-native";
+import { supabase } from "../../../app/frontend/constants/supabase";
+import type { MissionStats, RecentMission } from "../../../backend/models/mission.service";
+import { fetchMissionStats, fetchRecentMissions } from "../../../backend/models/mission.service";
 import AvatarCrd from "../components/AvatarCrd";
 import EventsTab from "../components/EventsTab";
 import MissionProgress from "../components/MissionProgress";
 import MissionsList from "../components/MissionsList";
 import Navbar from "../components/Navbar";
+import NotifIcone from "../components/NotifIcone";
+import SettingIcone from "../components/SettingIcone";
 import StatsBar from "../components/StatsBar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
+import { useNotifCount } from "../constants/useNotifCount";
 import { useUser } from "../constants/UserContext";
-import { supabase } from "../../../app/frontend/constants/supabase";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
-
-import { fetchMissionStats, fetchRecentMissions } from "../../../backend/models/mission.service";
-import type { MissionStats, RecentMission } from "../../../backend/models/mission.service";
 
 
 
@@ -351,7 +351,7 @@ export default function HomeScreen() {
   const { userId, username: ctxUsername, isLoading } = useUser();
   const { icon: timeIcon, text: timeText }  = getTimeGreeting();
   const { selectedModel, setSelectedModel } = useAvatar();
-
+const { count, refresh } = useNotifCount()
   const [userStats, setUserStats] = useState<UserStats>({
     userName: ctxUsername || "Joueur",
     level:    1,
@@ -450,9 +450,13 @@ const xpInCurrentLevel = xpTotal % 500;     // XP dans le niveau actuel (0..499)
             </View>
             
             <View style={styles.headerIcons}>
-              <NotifIcone onPress={() => {
-  router.push("/frontend/screens/NotificationsScreen");
-}} />
+              <NotifIcone
+  count={count}
+  onPress={() => {
+    refresh()
+    router.push("/frontend/screens/NotificationsScreen")
+  }}
+/>
               <SettingIcone onPress={() => console.log("Settings")} />
             </View>
           </View>
@@ -533,7 +537,7 @@ const xpInCurrentLevel = xpTotal % 500;     // XP dans le niveau actuel (0..499)
           
           </>
         ) : (
-          <EventsTab onViewAll={() => router.push("/EventsScreen")} />
+          <EventsTab onViewAll={() => router.push("/frontend/screens/EventsScreen")} />
         )}
       </ScrollView>
 

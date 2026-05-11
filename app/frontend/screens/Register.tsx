@@ -1,12 +1,13 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
   ScrollView,
   StyleSheet,
-  Text, TouchableOpacity,
+  Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import UsernameInput from "../components/UsernameInput";
@@ -18,11 +19,20 @@ export default function RegisterScreen() {
   const router = useRouter();
   const { setUserId } = useUser();
 
+  // ── Params Google OAuth ──
+  const { fromGoogle, authId, emailGoogle } = useLocalSearchParams<{
+    fromGoogle?: string;
+    authId?: string;
+    emailGoogle?: string;
+  }>();
+
+  const isGoogleFlow = fromGoogle === "true";
+
   const [fullName,        setFullName]        = useState("");
-  const [email,           setEmail]            = useState("");
-  const [password,        setPassword]         = useState("");
-  const [confirmPassword, setConfirmPassword]  = useState("");
-  const [loading,          setLoading]          = useState(false);
+  const [email,           setEmail]           = useState(emailGoogle ?? "");
+  const [password,        setPassword]        = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading,         setLoading]         = useState(false);
 
   const stars = [
     { top: 10,    left: 10,  size: 20, opacity: 0.6  },
@@ -32,80 +42,88 @@ export default function RegisterScreen() {
   ];
 
   const handleRegister = async () => {
-  if (!fullName || !email || !password) {
-    Alert.alert("Erreur", "Veuillez remplir tous les champs");
-    return;
-  }
-
-  const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
-  if (!gmailRegex.test(email)) {
-    Alert.alert("Erreur", "L'e-mail doit être une adresse Gmail valide (@gmail.com)");
-    return;
-  }
-
-  if (password !== confirmPassword) {
-    Alert.alert("Erreur", "Les mots de passe ne correspondent pas");
-    return;
-  }
-
-  if (password.length < 6) {
-    Alert.alert("Erreur", "Le mot de passe doit contenir au moins 6 caractères");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const parts  = fullName.trim().split(" ");
-    const nom    = parts[0];
-    const prenom = parts.slice(1).join(" ") || "";
-
-    // ETAPE 1 : Créer le compte dans Supabase Auth
-    const { data: authData, error: authError } =
-      await supabase.auth.signUp({ email, password });
-
-    if (authError || !authData.user) {
-      Alert.alert("Erreur", authError?.message ?? "Inscription échouée");
+    if (!fullName || (!isGoogleFlow && (!email || !password))) {
+      Alert.alert("Erreur", "Veuillez remplir tous les champs");
       return;
     }
 
-    // ETAPE 2 : Insérer dans la table users avec auth_id
-    const { data: dbUser, error: dbError } = await supabase
-      .from("users")
-      .insert([{
-        auth_id:       authData.user.id,
-        nom,
-        prenom,
-        email,
-        progression:   0,
-        gold:          0,
-        date_inscr:    new Date().toISOString().split("T")[0],
-        dernier_login: new Date().toISOString(),
-      }])
-      .select("id_user")
-      .single();
+    if (!isGoogleFlow) {
+      const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+      if (!gmailRegex.test(email)) {
+        Alert.alert("Erreur", "L'e-mail doit être une adresse Gmail valide (@gmail.com)");
+        return;
+      }
 
-    if (dbError) {
-      Alert.alert("Erreur", dbError.message);
-      return;
+      if (password !== confirmPassword) {
+        Alert.alert("Erreur", "Les mots de passe ne correspondent pas");
+        return;
+      }
+
+      if (password.length < 6) {
+        Alert.alert("Erreur", "Le mot de passe doit contenir au moins 6 caractères");
+        return;
+      }
     }
 
-    // ETAPE 3 : Sauvegarder l'id dans le contexte
-    setUserId(dbUser.id_user);
+    setLoading(true);
 
-    setFullName("");
-    setEmail("");
-    setPassword("");
-    setConfirmPassword("");
+    try {
+      const parts  = fullName.trim().split(" ");
+      const nom    = parts[0];
+      const prenom = parts.slice(1).join(" ") || "";
 
-    router.push("/frontend/screens/SetUpProfile");
+      let finalAuthId = authId;
 
-  } catch (err) {
-    Alert.alert("Erreur", "Une erreur inattendue est survenue");
-  } finally {
-    setLoading(false);
-  }
-};
+      // ── Flux normal email/password ──
+      if (!isGoogleFlow) {
+        const { data: authData, error: authError } =
+          await supabase.auth.signUp({ email, password });
+
+        if (authError || !authData.user) {
+          Alert.alert("Erreur", authError?.message ?? "Inscription échouée");
+          return;
+        }
+
+        finalAuthId = authData.user.id;
+      }
+
+      // ── Insertion dans users (commun aux deux flux) ──
+      const { data: dbUser, error: dbError } = await supabase
+        .from("users")
+        .insert([{
+          auth_id:       finalAuthId,
+          nom,
+          prenom,
+          email:         isGoogleFlow ? (emailGoogle ?? "") : email,
+          progression:   0,
+          gold:          0,
+          date_inscr:    new Date().toISOString().split("T")[0],
+          dernier_login: new Date().toISOString(),
+        }])
+        .select("id_user")
+        .single();
+
+      if (dbError) {
+        Alert.alert("Erreur", dbError.message);
+        return;
+      }
+
+      await setUserId(dbUser.id_user) 
+
+      setFullName("");
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
+
+      router.push("/frontend/screens/SetUpProfile");
+
+    } catch (err) {
+      Alert.alert("Erreur", "Une erreur inattendue est survenue");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <LinearGradient colors={["#ffffff", "#dcd2f9"]} style={styles.container}>
       <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
@@ -122,32 +140,90 @@ export default function RegisterScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Créer un compte</Text>
-          <Text style={styles.subtitle}>Inscrivez-vous pour commencer l'aventure</Text>
+          <Text style={styles.title}>
+            {isGoogleFlow ? "Complète ton profil" : "Créer un compte"}
+          </Text>
+          <Text style={styles.subtitle}>
+            {isGoogleFlow
+              ? "Juste un nom et c'est parti !"
+              : "Inscrivez-vous pour commencer l'aventure"}
+          </Text>
         </View>
+
+        {/* Badge Google si flux OAuth */}
+        {isGoogleFlow && (
+          <View style={styles.googleBadge}>
+            <MaterialIcons name="verified" size={16} color="#6949a8" />
+            <Text style={styles.googleBadgeText}>
+              Connecté avec Google · {emailGoogle}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.label}>Nom complet</Text>
-          <UsernameInput value={fullName} onChange={setFullName} placeholder="Entrez votre nom complet" icon="user" />
+          <UsernameInput
+            value={fullName}
+            onChange={setFullName}
+            placeholder="Entrez votre nom complet"
+            icon="user"
+          />
 
-          <Text style={styles.label}>E-mail</Text>
-          <UsernameInput value={email} onChange={setEmail} placeholder="nom@gmail.com" icon="mail" />
+          {/* Email — caché si Google */}
+          {!isGoogleFlow && (
+            <>
+              <Text style={styles.label}>E-mail</Text>
+              <UsernameInput
+                value={email}
+                onChange={setEmail}
+                placeholder="nom@gmail.com"
+                icon="mail"
+              />
+            </>
+          )}
 
-          <Text style={styles.label}>Mot de passe</Text>
-          <UsernameInput value={password} onChange={setPassword} placeholder="Créez un mot de passe" icon="lock" secure />
+          {/* Password — caché si Google */}
+          {!isGoogleFlow && (
+            <>
+              <Text style={styles.label}>Mot de passe</Text>
+              <UsernameInput
+                value={password}
+                onChange={setPassword}
+                placeholder="Créez un mot de passe"
+                icon="lock"
+                secure
+              />
 
-          <Text style={styles.label}>Confirmer le mot de passe</Text>
-          <UsernameInput value={confirmPassword} onChange={setConfirmPassword} placeholder="Répétez le mot de passe" icon="lock" secure />
+              <Text style={styles.label}>Confirmer le mot de passe</Text>
+              <UsernameInput
+                value={confirmPassword}
+                onChange={setConfirmPassword}
+                placeholder="Répétez le mot de passe"
+                icon="lock"
+                secure
+              />
+            </>
+          )}
         </View>
 
-        <TouchableOpacity style={styles.buttonWrapper} onPress={handleRegister} disabled={loading}>
+        <TouchableOpacity
+          style={styles.buttonWrapper}
+          onPress={handleRegister}
+          disabled={loading}
+        >
           <LinearGradient
             colors={["#6949a8", "#9574e0", "#baaae7"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.button}
           >
-            <Text style={styles.buttonText}>{loading ? "Création..." : "Créer mon compte"}</Text>
+            <Text style={styles.buttonText}>
+              {loading
+                ? "Création..."
+                : isGoogleFlow
+                ? "Commencer l'aventure 🚀"
+                : "Créer mon compte"}
+            </Text>
           </LinearGradient>
         </TouchableOpacity>
       </ScrollView>
@@ -185,6 +261,16 @@ const styles = StyleSheet.create({
   header:   { marginTop: 10, marginBottom: 20 },
   title:    { fontSize: 28, fontWeight: "700", color: "#000" },
   subtitle: { marginTop: 8, fontSize: 14, color: "#6949a8", fontWeight: "bold" },
+  googleBadge: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "#f1edff", borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 8,
+    marginBottom: 16, alignSelf: "flex-start",
+    borderWidth: 1, borderColor: "#d4c8f7",
+  },
+  googleBadgeText: {
+    fontSize: 12, color: "#6949a8", fontWeight: "600",
+  },
   card: {
     backgroundColor: "#fdfdff", borderRadius: 20,
     padding: 20, width: "100%", alignSelf: "center", opacity: 0.95,

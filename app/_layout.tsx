@@ -1,11 +1,16 @@
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect, useRef, useState } from "react";
+import { checkAndUnlockBadges } from "../backend/services/badgeEngine";
 import BadgeUnlockedModal from "./frontend/components/BadgeUnlockedModel";
 import LevelUpModal from "./frontend/components/LevelUpModal";
 import { AvatarProvider } from "./frontend/constants/AvatarContext";
 import { supabase } from "./frontend/constants/supabase";
+import { useNotifications } from './frontend/constants/UseNotifications';
 import { UserProvider, useUser } from "./frontend/constants/UserContext";
-import { checkAndUnlockBadges } from "../backend/services/badgeEngine";
+
+// ── Nécessaire pour fermer le browser OAuth proprement ───────
+WebBrowser.maybeCompleteAuthSession();
 
 // ── Badge meta (emoji) ────────────────────────────────────────
 const BADGE_EMOJI: Record<number, string> = {
@@ -16,7 +21,6 @@ const BADGE_EMOJI: Record<number, string> = {
   30:"🌟", 31:"💪", 32:"🛡️", 33:"👑", 34:"🦁", 35:"🔍", 36:"⚔️", 37:"💎",
 };
 
-// ── Même formule que levelService.ts : 500 XP = 1 niveau ─────
 const XP_PAR_NIVEAU = 500;
 function calcNiveauFromXP(xp: number): number {
   return Math.floor(xp / XP_PAR_NIVEAU) + 1;
@@ -29,24 +33,20 @@ function LevelUpWatcher() {
   const lastNiveauRef = useRef<number | null>(null);
 
   useEffect(() => {
-    console.log("[LevelUpWatcher] userId =", userId);
     if (!userId) return;
-
     let isMounted = true;
 
     const checkLevel = async () => {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("users")
           .select("xp")
           .eq("id_user", userId)
           .single();
 
-        console.log("[LevelUpWatcher] data =", data, "error =", error);
         if (!isMounted || !data) return;
 
         const niveauActuel = calcNiveauFromXP(data.xp ?? 0);
-        console.log("[LevelUpWatcher] xp =", data.xp, "→ niveau =", niveauActuel, "| last =", lastNiveauRef.current);
 
         if (lastNiveauRef.current === null) {
           lastNiveauRef.current = niveauActuel;
@@ -55,11 +55,10 @@ function LevelUpWatcher() {
 
         if (niveauActuel > lastNiveauRef.current) {
           lastNiveauRef.current = niveauActuel;
-          console.log("[LevelUpWatcher] 🎉 LEVEL UP → niveau", niveauActuel);
           setLevelUpModal({ visible: true, newLevel: niveauActuel });
         }
       } catch (e) {
-        console.error("[LevelUpWatcher] erreur :", e);
+        console.error("[LevelUpWatcher]", e);
       }
     };
 
@@ -80,13 +79,10 @@ function LevelUpWatcher() {
 // ── Détecteur global de badges ────────────────────────────────
 function BadgeWatcher() {
   const { userId } = useUser();
-
-  // File d'attente des badges à afficher un par un
   const [queue,        setQueue]        = useState<{ id: number; name: string }[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [current,      setCurrent]      = useState<{ id: number; name: string } | null>(null);
 
-  // Vérifie les badges toutes les 10 secondes
   useEffect(() => {
     if (!userId) return;
     let isMounted = true;
@@ -96,7 +92,6 @@ function BadgeWatcher() {
         const unlocked = await checkAndUnlockBadges(userId);
         if (!isMounted || unlocked.length === 0) return;
 
-        // On a besoin des IDs pour les emojis — on refetch les badges nouvellement obtenus
         const { data } = await supabase
           .from("badges")
           .select("id_badge, nom")
@@ -106,9 +101,7 @@ function BadgeWatcher() {
 
         const newBadges = data.map((b: any) => ({ id: b.id_badge, name: b.nom }));
         setQueue(prev => [...prev, ...newBadges]);
-      } catch (e) {
-        // Silencieux
-      }
+      } catch {}
     };
 
     check();
@@ -116,7 +109,6 @@ function BadgeWatcher() {
     return () => { isMounted = false; clearInterval(interval); };
   }, [userId]);
 
-  // Dépile la file : affiche un badge à la fois
   useEffect(() => {
     if (!modalVisible && queue.length > 0) {
       const [next, ...rest] = queue;
@@ -139,11 +131,57 @@ function BadgeWatcher() {
   );
 }
 
+// ── Gestionnaire OAuth deep link ──────────────────────────────
+// Écoute le retour de Google OAuth et redirige proprement
+function OAuthHandler() {
+  const router = useRouter();
+  const { setUserId, setUsername } = useUser();
+
+  useEffect(() => {
+    // Écoute les changements de session Supabase
+    // Quand Google OAuth réussit, onAuthStateChange se déclenche
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session?.user) {
+          const authUserId = session.user.id;
+
+          // Vérifie si le profil existe dans users
+          const { data } = await supabase
+            .from("users")
+            .select("id_user, username, prenom, nom")
+            .eq("auth_id", authUserId)
+            .maybeSingle();
+
+          if (!data) {
+            // Nouveau compte Google → inscription
+            router.push({
+              pathname: "/frontend/screens/Register",
+              params: {
+                fromGoogle:  "true",
+                authId:      authUserId,
+                emailGoogle: session.user.email ?? "",
+              },
+            });
+          }
+          // Si profil existe → Login.tsx gère déjà la redirection
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  return null;
+}
+
 // ── Layout racine ─────────────────────────────────────────────
 export default function RootLayout() {
+  useNotifications();
+
   return (
     <UserProvider>
       <AvatarProvider>
+        <OAuthHandler />
         <Stack screenOptions={{ headerShown: false }} />
         <LevelUpWatcher />
         <BadgeWatcher />

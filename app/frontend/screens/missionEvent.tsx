@@ -25,6 +25,8 @@ import CreateMissionModal from "../components/CreateMissionModal";
 import HibouGuide from "../components/ui/Hibou";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
+import { useStats } from "../constants/StatsContext";
+import { completeMission } from "../../../backend/services/Userstatsservice";
 
 const owlSuccess = require("../assets/Hibou/success.png");
 const { width } = Dimensions.get("window");
@@ -452,6 +454,7 @@ export default function MissionMapScreen() {
   const { eventId, eventTitle } = useLocalSearchParams<{ eventId: string; eventTitle: string }>();
   const router  = useRouter();
   const { userId } = useUser();
+  const { refreshStats } = useStats();
 
   const [missions,              setMissions]              = useState<Mission[]>([]);
   const [loading,               setLoading]               = useState(true);
@@ -643,6 +646,27 @@ export default function MissionMapScreen() {
         await supabase.from("mission_validation")
           .update({ date_fin: new Date().toISOString() })
           .eq("id_validation", selectedMission.validationId);
+      }
+
+      // ✅ Appliquer les gains de stats sur player_stats
+      try {
+        await completeMission(String(userId), {
+          id_mission:        selectedMission.id_mission,
+          titre:             selectedMission.titre,
+          description:       selectedMission.description ?? "",
+          duree_min:         selectedMission.duree_min ?? 0,
+          difficulte:        selectedMission.difficulte,
+          priorite:          selectedMission.priorite,
+          energie_cout:      selectedMission.energie_cout,
+          stress_gain:       selectedMission.stress_gain,
+          connaissance_gain: selectedMission.connaissance_gain,
+          organisation_gain: selectedMission.organisation_gain,
+          xp_gain:           selectedMission.xp_gain,
+        });
+        // ✅ Rafraîchir les stats dans le contexte global
+        refreshStats();
+      } catch (statsErr) {
+        console.warn("⚠️ Stats update failed (non-bloquant):", statsErr);
       }
 
       const updatedMissions = missions.map((m, i) => {

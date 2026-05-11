@@ -699,6 +699,7 @@ import { useDerivedStats } from "../hooks/useDerivedStats";
 // ✅ Import du hook périodique
 import { usePeriodicQuestionnaire } from "../hooks/usePeriodicQuestionnaire";
 import { useTodayMissions, TodayMission } from "../hooks/useTodayMissions";
+import { useStats } from "../constants/StatsContext";
 
 
 function computeDerivedStats(base: any) {
@@ -710,33 +711,9 @@ function computeDerivedStats(base: any) {
   };
 }
 
+// ✅ useAllStats maintenant délègue au contexte global (se met à jour après chaque mission)
 function useAllStats() {
-  const { userId } = useUser();
-  const [stats, setStats] = useState({
-    energie: 50, stress: 50, connaissance: 50, organisation: 50,
-  });
-
-  useEffect(() => {
-    if (!userId) return;
-    const load = async () => {
-      const { data, error } = await supabase
-        .from("player_stats")
-        .select("energie, stress, connaissance, organisation")
-        .eq("id_user", userId)
-        .maybeSingle();
-      if (!error && data) {
-        setStats({
-          energie:      data.energie      ?? 0,
-          stress:       data.stress       ?? 0,
-          connaissance: data.connaissance ?? 0,
-          organisation: data.organisation ?? 0,
-        });
-      }
-    };
-    load();
-  }, [userId]);
-
-  return stats;
+  return useStats().stats;
 }
 
 interface Stat         { label: string; percent: number; color: string; emoji: string; }

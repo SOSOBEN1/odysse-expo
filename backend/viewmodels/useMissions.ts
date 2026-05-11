@@ -503,6 +503,7 @@ import {
   startMissionSession,
 } from "../models/mission.service";
 import type { Mission, MissionTimer } from "../models/mission.types";
+import { failMission } from "../services/Userstatsservice";
 
 interface StatusModal {
   visible: boolean;
@@ -765,6 +766,33 @@ export function useMissions(userId: string | null) {
             updated[missionId] = { ...timer, state: "fail", startedAt: null };
             if (timer.validationId) {
               failMissionSession(timer.validationId).catch(() => {});
+            }
+            // ✅ Appliquer les malus de stats (fetch données complètes depuis DB)
+            if (userId) {
+              import("../../app/frontend/constants/supabase").then(({ supabase }) => {
+                supabase
+                  .from("mission")
+                  .select("id_mission, titre, description, duree_min, difficulte, priorite, energie_cout, stress_gain, connaissance_gain, organisation_gain, xp_gain")
+                  .eq("id_mission", missionId)
+                  .single()
+                  .then(({ data }) => {
+                    if (data) {
+                      failMission(userId, {
+                        id_mission:        data.id_mission,
+                        titre:             data.titre ?? "",
+                        description:       data.description ?? "",
+                        duree_min:         data.duree_min ?? 0,
+                        difficulte:        data.difficulte ?? 1,
+                        priorite:          data.priorite ?? 2,
+                        energie_cout:      data.energie_cout ?? 8,
+                        stress_gain:       data.stress_gain ?? null,
+                        connaissance_gain: data.connaissance_gain ?? 0,
+                        organisation_gain: data.organisation_gain ?? 0,
+                        xp_gain:           data.xp_gain ?? 0,
+                      }).catch(() => {});
+                    }
+                  });
+              });
             }
             playSound("missionEchouee").catch(() => {});
             setTimeout(() => {

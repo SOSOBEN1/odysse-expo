@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { COLORS } from "../styles/theme";
+import { useSounds } from "../hooks/useSounds";
 
 // ── Types ─────────────────────────────────────────────────────
 interface LevelUpModalProps {
@@ -30,6 +31,7 @@ function ConfettiPiece({ x, y, color, size, delay, rotation }: ConfettiPieceProp
   const opacity    = useRef(new Animated.Value(0)).current;
   const rotate     = useRef(new Animated.Value(0)).current;
   const scale      = useRef(new Animated.Value(0)).current;
+
 
   useEffect(() => {
     Animated.sequence([
@@ -142,11 +144,12 @@ export default function LevelUpModal({ visible, newLevel, onClose }: LevelUpModa
   const btnOpacity      = useRef(new Animated.Value(0)).current;
   const ringRotate      = useRef(new Animated.Value(0)).current;
   const confettiKey     = useRef(0);
+    const { playSound } = useSounds();
 
   useEffect(() => {
     if (!visible) return;
     confettiKey.current += 1;
-
+playSound("missionReussie");
     backdropOpacity.setValue(0); cardScale.setValue(0.3);  cardOpacity.setValue(0);
     titleSlide.setValue(-30);    levelScale.setValue(0);   glowOpacity.setValue(0);
     btnSlide.setValue(40);       btnOpacity.setValue(0);   levelPulse.setValue(1);

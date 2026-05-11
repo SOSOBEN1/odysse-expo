@@ -431,7 +431,8 @@ export default function DefierAmisScreen() {
     setSending(false);
     setSentCount(totalCount);
     setAlertVisible(true);
-playSound("missionCreee"); // 🔊
+    
+playSound("missionCreee").catch(() => {}); // 🔊
     // Rafraîchir la liste des déjà invités après envoi
       fetchAlreadyInvited();
     setSelected([]);

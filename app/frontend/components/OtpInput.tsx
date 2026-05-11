@@ -1,3 +1,6 @@
+
+
+
 import React, { useRef } from "react";
 import { View, TextInput, StyleSheet } from "react-native";
 
@@ -12,9 +15,21 @@ export default function OtpInput({ code, status, onChange }: OtpInputProps) {
 
   const handleChange = (text: string, index: number) => {
     onChange(text, index);
-    
     if (text && index < 5) {
       inputs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyPress = (e: any, index: number) => {
+    if (e.nativeEvent.key === "Backspace") {
+      if (code[index] === "" && index > 0) {
+        // Case vide → efface la précédente et recule
+        onChange("", index - 1);
+        inputs.current[index - 1]?.focus();
+      } else {
+        // Case pleine → efface juste cette case
+        onChange("", index);
+      }
     }
   };
 
@@ -23,18 +38,17 @@ export default function OtpInput({ code, status, onChange }: OtpInputProps) {
       {code.map((digit, index) => (
         <TextInput
           key={index}
-          ref={(ref) => {
-            inputs.current[index] = ref;
-          }}
+          ref={(ref) => { inputs.current[index] = ref; }}
           style={[
             styles.codeInput,
             status === "success" && styles.codeInputSuccess,
-            status === "error" && styles.codeInputError,
+            status === "error"   && styles.codeInputError,
           ]}
           keyboardType="number-pad"
           maxLength={1}
           value={digit}
           onChangeText={(text) => handleChange(text, index)}
+          onKeyPress={(e) => handleKeyPress(e, index)}
         />
       ))}
     </View>

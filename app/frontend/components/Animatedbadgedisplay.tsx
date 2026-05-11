@@ -1,11 +1,13 @@
 
+
+
+
 import LottieView from "lottie-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { COLORS } from "../styles/theme";
 
-// ── Mapping badge id → fichier Lottie ────────────────────────
 const LOTTIE_MAP: Record<number, any> = {
-  1:  null,
+  1:  require("../assets/lottie/premierPas.json"),
   2:  require("../assets/lottie/Fire Flame.json"),
   3:  require("../assets/lottie/Blinking Eye.json"),
   4:  require("../assets/lottie/Target Hit!.json"),
@@ -14,26 +16,21 @@ const LOTTIE_MAP: Record<number, any> = {
   7:  require("../assets/lottie/star.json"),
   8:  require("../assets/lottie/Heartbeat pulsing - loader.json"),
   9:  require("../assets/lottie/Graduation Hat.json"),
-  10: null,
+  10: require("../assets/lottie/marathon.json"),
   11: require("../assets/lottie/trophy.json"),
   12: require("../assets/lottie/Lotus Flower.json"),
 };
 
 const LOTTIE_SIZE: Record<number, number> = {
-  2: 200, 3: 170, 4: 180, 5: 170,
+  1: 180, 2: 200, 3: 170, 4: 180, 5: 170,
   6: 200, 7: 180, 8: 170, 9: 180,
-  11: 200, 12: 180,
+  10: 190, 11: 200, 12: 180,
 };
 
 const LOTTIE_SPEED: Record<number, number> = {
-  2: 1, 3: 0.8, 4: 1, 5: 1,
+  1: 1, 2: 1, 3: 0.8, 4: 1, 5: 1,
   6: 1.2, 7: 0.9, 8: 1, 9: 1,
-  11: 0.8, 12: 0.7,
-};
-
-const FALLBACK_EMOJI: Record<number, string> = {
-  1:  "👣",
-  10: "🏃",
+  10: 1.1, 11: 0.8, 12: 0.7,
 };
 
 export function AnimatedBadgeDisplay({
@@ -50,18 +47,8 @@ export function AnimatedBadgeDisplay({
   if (!source) {
     return (
       <View style={styles.fallbackContainer}>
-        <LottieView
-          source={require("../assets/lottie/star.json")}
-          autoPlay
-          loop
-          speed={0.5}
-          style={styles.fallbackBg}
-          resizeMode="cover"
-        />
         <View style={styles.fallbackCircle}>
-          <Text style={styles.fallbackEmoji}>
-            {FALLBACK_EMOJI[badgeId] ?? emoji}
-          </Text>
+          <Text style={styles.fallbackEmoji}>{emoji}</Text>
         </View>
       </View>
     );
@@ -92,17 +79,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  fallbackBg: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.3,
-  },
   fallbackCircle: {
     width: 110,
     height: 110,
     borderRadius: 55,
-    backgroundColor: `${COLORS.badgeGold}33`,   // badgeGold + 20% opacité
+    backgroundColor: `${COLORS.badgeGold}33`,
     borderWidth: 2,
-    borderColor: `${COLORS.badgeGold}66`,        // badgeGold + 40% opacité
+    borderColor: `${COLORS.badgeGold}66`,
     alignItems: "center",
     justifyContent: "center",
   },

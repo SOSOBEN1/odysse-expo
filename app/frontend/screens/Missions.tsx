@@ -34,7 +34,7 @@ import { useSounds } from "../hooks/useSounds";
 type Difficulty = "Difficile" | "Moyen" | "Facile";
 
 const TABS = ["Tout", "Urgent", "Aujourd'hui", "Défis", "Par Événements"] as const;
-const { playSound } = useSounds();
+
 type Tab = (typeof TABS)[number];
 
 // ─────────────────────────────────────────────────────────────
@@ -227,7 +227,7 @@ export default function MissionsScreen() {
   const [isEventModalVisible, setEventModalVisible]     = useState(false);
   const [selectedData, setSelectedData]                 = useState<any>(null);
   const { openCreate } = useLocalSearchParams();
-
+const { playSound } = useSounds();
   const { selectedModel, setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername }   = useUser();
 

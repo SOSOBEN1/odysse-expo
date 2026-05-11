@@ -1,5 +1,9 @@
-// viewmodels/useVerifyViewModel.ts
-import { useEffect, useState } from "react";
+
+
+
+
+import { useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 import { authService } from "../services/authService";
 
 const OTP_LENGTH  = 6;
@@ -12,12 +16,28 @@ export function useVerifyViewModel(email: string) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [timer, setTimer]       = useState(RESEND_SECS);
 
-  // Décompte timer
+  const backgroundedAt = useRef<number | null>(null); // ← timestamp quand l'app part en bg
+
+  // ── Décompte timer ──
   useEffect(() => {
     if (timer <= 0) return;
     const id = setInterval(() => setTimer((t) => t - 1), 1000);
     return () => clearInterval(id);
   }, [timer]);
+
+  // ── AppState : recalcule le temps passé en background ──
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "background" || nextState === "inactive") {
+        backgroundedAt.current = Date.now();
+      } else if (nextState === "active" && backgroundedAt.current !== null) {
+        const secondsPassed = Math.floor((Date.now() - backgroundedAt.current) / 1000);
+        backgroundedAt.current = null;
+        setTimer((t) => Math.max(0, t - secondsPassed));
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   const handleChange = async (text: string, index: number) => {
     const next = [...code];
@@ -31,7 +51,6 @@ export function useVerifyViewModel(email: string) {
       return;
     }
 
-    // Vérification réelle via Supabase dès que les 6 chiffres sont saisis
     setStatus("loading");
     setErrorMsg(null);
     const result = await authService.verifyOtp(email, full);
@@ -41,7 +60,6 @@ export function useVerifyViewModel(email: string) {
     } else {
       setErrorMsg(result.error ?? "Code invalide");
       setStatus("error");
-      // Reset les cases pour permettre une nouvelle saisie
       setCode(Array(OTP_LENGTH).fill(""));
     }
   };

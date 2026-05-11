@@ -492,6 +492,8 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert } from "react-native";
+import { supabase } from "../../app/frontend/constants/supabase";
 import { useSounds } from "../../app/frontend/hooks/useSounds";
 import {
   deleteMission,
@@ -764,7 +766,7 @@ export function useMissions(userId: string | null) {
           ) {
             updated[missionId] = { ...timer, state: "fail", startedAt: null };
             if (timer.validationId) {
-              failMissionSession(timer.validationId).catch(() => {});
+              failMissionSession(timer.validationId, userId ?? undefined, missionId).catch(() => {});
             }
             playSound("missionEchouee").catch(() => {});
             setTimeout(() => {
@@ -817,6 +819,29 @@ export function useMissions(userId: string | null) {
     async (missionId: number) => {
       if (!userId) return;
       const timer = timers[missionId];
+
+      // ── Vérifier l'énergie avant de démarrer ──
+      try {
+        const { data: ps } = await supabase
+          .from("player_stats")
+          .select("energie")
+          .eq("id_user", parseInt(userId, 10))
+          .maybeSingle();
+
+        const energie = ps?.energie ?? 100;
+        if (energie <= 0) {
+          Alert.alert(
+            "⚡ Énergie épuisée !",
+            "Tu n'as plus d'énergie pour démarrer une mission.\n\nDors (1x/jour) ou utilise une potion ⚡ depuis le Dashboard pour récupérer.",
+            [{ text: "OK", style: "default" }]
+          );
+          return;
+        }
+      } catch (e) {
+        // Erreur non bloquante — on laisse démarrer quand même
+        console.warn("⚠️ Energy check failed:", e);
+      }
+
       try {
         if (timer?.state === "paused" && timer.validationId) {
           await resumeMissionSession(timer.validationId);

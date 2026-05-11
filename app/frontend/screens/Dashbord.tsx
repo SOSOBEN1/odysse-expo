@@ -20,7 +20,7 @@
 // import { useUser } from "../constants/UserContext";
 // import { supabase } from "../constants/supabase";
 // import { COLORS, SHADOWS, SIZES } from "../styles/theme";
-// import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
+import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
 // import { useDerivedStats } from "../hooks/useDerivedStats";
 // // ✅ Import du hook périodique
 // import { usePeriodicQuestionnaire } from "../hooks/usePeriodicQuestionnaire";
@@ -677,8 +677,12 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
+  Alert,
+  Modal,
+  Pressable,
   ScrollView, StatusBar, StyleSheet, Text,
   TouchableOpacity, View,
 } from "react-native";
@@ -694,7 +698,7 @@ import { useAvatar } from "../constants/AvatarContext";
 import { useUser } from "../constants/UserContext";
 import { supabase } from "../constants/supabase";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
-import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
+import { sleepRestore, applyPassiveEnergyRecovery, useEnergyPotion, buyEnergyPotion, ENERGY_POTION } from "../../../backend/services/Userstatsservice";
 import { useDerivedStats } from "../hooks/useDerivedStats";
 // ✅ Import du hook périodique
 import { usePeriodicQuestionnaire } from "../hooks/usePeriodicQuestionnaire";
@@ -716,27 +720,34 @@ function useAllStats() {
     energie: 50, stress: 50, connaissance: 50, organisation: 50,
   });
 
-  useEffect(() => {
+  const load = useCallback(async (withPassive = false) => {
     if (!userId) return;
-    const load = async () => {
-      const { data, error } = await supabase
-        .from("player_stats")
-        .select("energie, stress, connaissance, organisation")
-        .eq("id_user", userId)
-        .maybeSingle();
-      if (!error && data) {
-        setStats({
-          energie:      data.energie      ?? 0,
-          stress:       data.stress       ?? 0,
-          connaissance: data.connaissance ?? 0,
-          organisation: data.organisation ?? 0,
-        });
-      }
-    };
-    load();
+    // Récupération passive au chargement
+    if (withPassive) {
+      try { await applyPassiveEnergyRecovery(userId); } catch {}
+    }
+    const { data, error } = await supabase
+      .from("player_stats")
+      .select("energie, stress, connaissance, organisation")
+      .eq("id_user", userId)
+      .maybeSingle();
+    if (!error && data) {
+      setStats({
+        energie:      data.energie      ?? 0,
+        stress:       data.stress       ?? 0,
+        connaissance: data.connaissance ?? 0,
+        organisation: data.organisation ?? 0,
+      });
+    }
   }, [userId]);
 
-  return stats;
+  // Charge au montage avec récupération passive
+  useEffect(() => { load(true); }, [load]);
+
+  // Rafraîchit aussi à chaque fois que le dashboard reprend le focus
+  useFocusEffect(useCallback(() => { load(false); }, [load]));
+
+  return { stats, refreshStats: () => load(false) };
 }
 
 interface Stat         { label: string; percent: number; color: string; emoji: string; }
@@ -936,7 +947,63 @@ const CircularProgress = ({ percent, color, size = 70, strokeWidth = 7 }: { perc
 
 // ─── StatsCard ────────────────────────────────────────────────────────────────
 const StatsCard = () => {
-  const stats = useAllStats();
+  const { userId } = useUser();
+  const { stats, refreshStats } = useAllStats();
+  const [potionQty, setPotionQty]         = useState(0);
+  const [potionModal, setPotionModal]     = useState(false);
+  const [sleeping, setSleeping]           = useState(false);
+  const [usingPotion, setUsingPotion]     = useState(false);
+  const [toastMsg, setToastMsg]           = useState<string | null>(null);
+
+  // Charger quantité de potions
+  const loadPotionQty = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase
+      .from("user_items")
+      .select("quantite")
+      .eq("id_user", userId)
+      .eq("id_item", ENERGY_POTION.itemId)
+      .maybeSingle();
+    setPotionQty(data?.quantite ?? 0);
+  }, [userId]);
+
+  useFocusEffect(useCallback(() => { loadPotionQty(); }, [loadPotionQty]));
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  // Bouton Dormir
+  const handleSleep = async () => {
+    if (!userId || sleeping) return;
+    setSleeping(true);
+    const result = await sleepRestore(String(userId));
+    setSleeping(false);
+    showToast(result.message);
+    if (result.success) refreshStats();
+  };
+
+  // Utiliser potion
+  const handleUsePotion = async () => {
+    if (!userId || usingPotion) return;
+    setUsingPotion(true);
+    const result = await useEnergyPotion(userId);
+    setUsingPotion(false);
+    showToast(result.message);
+    if (result.success) { refreshStats(); loadPotionQty(); }
+  };
+
+  // Acheter potion
+  const handleBuyPotion = async () => {
+    if (!userId) return;
+    const { data: user } = await supabase.from("users").select("gold").eq("id_user", userId).single();
+    const currentGold = user?.gold ?? 0;
+    const result = await buyEnergyPotion(userId, currentGold);
+    showToast(result.message);
+    if (result.success) loadPotionQty();
+    setPotionModal(false);
+  };
 
   const STATS: Stat[] = [
     { label: "Énergie",      percent: stats.energie      ?? 0, color: COLORS.statEnergie,      emoji: "⚡" },
@@ -959,17 +1026,91 @@ const StatsCard = () => {
           </View>
         ))}
       </View>
+
+      {/* ── Boutons énergie ── */}
+      <View style={statsStyles.energyBtns}>
+        {/* Bouton Dormir */}
+        <TouchableOpacity
+          style={[statsStyles.sleepBtn, sleeping && { opacity: 0.6 }]}
+          onPress={handleSleep}
+          disabled={sleeping}
+        >
+          <Text style={statsStyles.sleepBtnText}>
+            {sleeping ? "⏳ ..." : "😴 Dormir (1x/jour)"}
+          </Text>
+          <Text style={statsStyles.sleepBtnSub}>⚡ Énergie → 100 • 😰 Stress -20</Text>
+        </TouchableOpacity>
+
+        {/* Bouton Potion */}
+        <TouchableOpacity
+          style={statsStyles.potionBtn}
+          onPress={() => potionQty > 0 ? handleUsePotion() : setPotionModal(true)}
+        >
+          <Text style={statsStyles.potionBtnText}>
+            {potionQty > 0
+              ? `⚡ Potion (×${potionQty})`
+              : "🧪 Acheter potion"}
+          </Text>
+          <Text style={statsStyles.potionBtnSub}>
+            {potionQty > 0 ? `+${ENERGY_POTION.energyGain} énergie` : `${ENERGY_POTION.price} 🪙 gold`}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Toast message */}
+      {toastMsg && (
+        <View style={statsStyles.toast}>
+          <Text style={statsStyles.toastText}>{toastMsg}</Text>
+        </View>
+      )}
+
+      {/* Modal achat potion */}
+      <Modal visible={potionModal} transparent animationType="fade">
+        <Pressable style={statsStyles.overlay} onPress={() => setPotionModal(false)}>
+          <View style={statsStyles.modalBox}>
+            <Text style={statsStyles.modalTitle}>🧪 Potion d'énergie</Text>
+            <Text style={statsStyles.modalDesc}>{ENERGY_POTION.description}</Text>
+            <Text style={statsStyles.modalPrice}>Prix : {ENERGY_POTION.price} 🪙 gold</Text>
+            <TouchableOpacity style={statsStyles.modalBuyBtn} onPress={handleBuyPotion}>
+              <Text style={statsStyles.modalBuyText}>Acheter</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setPotionModal(false)}>
+              <Text style={statsStyles.modalCancel}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
 
 const statsStyles = StyleSheet.create({
-  card:     { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: 15, marginBottom: 20 },
-  row:      { flexDirection: "row", justifyContent: "space-between" },
-  item:     { alignItems: "center", gap: 4 },
-  labelRow: { flexDirection: "row", alignItems: "center", gap: 3 },
-  label:    { fontSize: 11, fontWeight: "700", color: COLORS.text },
-  sub:      { fontSize: 9, color: COLORS.statSubColor },
+  card:         { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: 15, marginBottom: 20 },
+  row:          { flexDirection: "row", justifyContent: "space-between" },
+  item:         { alignItems: "center", gap: 4 },
+  labelRow:     { flexDirection: "row", alignItems: "center", gap: 3 },
+  label:        { fontSize: 11, fontWeight: "700", color: COLORS.text },
+  sub:          { fontSize: 9, color: COLORS.statSubColor },
+  // Boutons énergie
+  energyBtns:   { flexDirection: "row", gap: 8, marginTop: 14 },
+  sleepBtn:     { flex: 1, backgroundColor: "#1a1a2e", borderRadius: 12, padding: 10, alignItems: "center" },
+  sleepBtnText: { color: "#fff", fontWeight: "800", fontSize: 12 },
+  sleepBtnSub:  { color: "#aaa", fontSize: 9, marginTop: 3 },
+  potionBtn:    { flex: 1, backgroundColor: "#2d1b69", borderRadius: 12, padding: 10, alignItems: "center" },
+  potionBtnText:{ color: "#fff", fontWeight: "800", fontSize: 12 },
+  potionBtnSub: { color: "#aaa", fontSize: 9, marginTop: 3 },
+  // Toast
+  toast:        { marginTop: 10, backgroundColor: "#1e293b", borderRadius: 10, padding: 10, alignItems: "center" },
+  toastText:    { color: "#fff", fontWeight: "700", fontSize: 13 },
+  // Modal
+  overlay:      { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
+  modalBox:     { backgroundColor: "#fff", borderRadius: 20, padding: 24, width: 280, alignItems: "center" },
+  modalTitle:   { fontSize: 20, fontWeight: "900", color: "#1e1b4b", marginBottom: 8 },
+  modalDesc:    { fontSize: 13, color: "#555", textAlign: "center", marginBottom: 6 },
+  modalPrice:   { fontSize: 15, fontWeight: "800", color: "#6d28d9", marginBottom: 16 },
+  modalBuyBtn:  { backgroundColor: "#6d28d9", borderRadius: 14, paddingVertical: 12, paddingHorizontal: 40, marginBottom: 10 },
+  modalBuyText: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  modalCancel:  { color: "#888", fontSize: 13 },
 });
 
 // ─── MissionCard ──────────────────────────────────────────────────────────────

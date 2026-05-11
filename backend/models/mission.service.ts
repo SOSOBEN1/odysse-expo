@@ -1,5 +1,5 @@
 import { supabase } from "../../app/frontend/constants/supabase";
-import { completeMission } from "../services/Userstatsservice";
+import { completeMission, failMission, fetchMission } from "../services/Userstatsservice";
 import { checkAndUnlockBadges } from "../services/badgeEngine";
 import { checkAndUpdateLevel } from "../services/levelService";
 import type {
@@ -293,7 +293,7 @@ export const finishMissionSession = async (
       .single();
 
     if (fullMission) {
-      await completeMission(String(userIdInt), {
+      const result = await completeMission(String(userIdInt), {
         id_mission:        fullMission.id_mission,
         titre:             fullMission.titre,
         description:       fullMission.description ?? "",
@@ -306,9 +306,16 @@ export const finishMissionSession = async (
         organisation_gain: fullMission.organisation_gain,
         xp_gain:           fullMission.xp_gain,
       });
+      if (result) {
+        console.log("✅ player_stats mis à jour:", result.newStats);
+      } else {
+        console.error("❌ completeMission a retourné null — stats NON mises à jour");
+      }
+    } else {
+      console.error("❌ Mission introuvable en base, id:", missionId);
     }
   } catch (e) {
-    console.warn("⚠️ Stats update failed (non-bloquant):", e);
+    console.error("❌ Stats update FAILED:", e);
   }
 
   try {
@@ -331,8 +338,25 @@ export const finishMissionSession = async (
 //  failMissionSession
 // ─────────────────────────────────────────────────────────────
 
-export const failMissionSession = async (validationId: number): Promise<void> => {
+export const failMissionSession = async (
+  validationId: number,
+  userId?: string,
+  missionId?: number,
+): Promise<void> => {
   await updateValidationStatut(validationId, "fail");
+
+  // Appliquer les pénalités de stats en cas d'échec
+  if (userId && missionId) {
+    try {
+      const mission = await fetchMission(missionId);
+      if (mission) {
+        await failMission(userId, mission);
+        console.log(`✅ failMissionSession — stats pénalisées pour user ${userId}, mission ${missionId}`);
+      }
+    } catch (e) {
+      console.warn("⚠️ Stat penalty on fail failed (non-bloquant):", e);
+    }
+  }
 };
 
 // ─────────────────────────────────────────────────────────────

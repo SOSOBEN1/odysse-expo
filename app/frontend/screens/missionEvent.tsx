@@ -25,6 +25,7 @@ import CreateMissionModal from "../components/CreateMissionModal";
 import HibouGuide from "../components/ui/Hibou";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
+import { completeMission, failMission, fetchMission } from "../../../backend/services/Userstatsservice";
 
 const owlSuccess = require("../assets/Hibou/success.png");
 const { width } = Dimensions.get("window");
@@ -615,6 +616,25 @@ export default function MissionMapScreen() {
   // ─── Actions ─────────────────────────────────────────────────────────────
   const handleStart = async () => {
     if (!selectedMission || !userId) return;
+
+    // ── Vérifier l'énergie avant de démarrer ──
+    try {
+      const { data: ps } = await supabase
+        .from("player_stats")
+        .select("energie")
+        .eq("id_user", userId)
+        .maybeSingle();
+
+      if ((ps?.energie ?? 100) <= 0) {
+        Alert.alert(
+          "⚡ Énergie épuisée !",
+          "Tu n'as plus d'énergie pour démarrer une mission.\n\nDors (1x/jour) ou utilise une potion ⚡ depuis le Dashboard.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+    } catch {}
+
     try {
       const newValidationId = await upsertValidation(selectedMission.id_mission, selectedMission.validationId, "running");
       const updated: Mission = { ...selectedMission, localStatus: "in_progress", validationId: newValidationId, validationStatut: "running" };
@@ -643,6 +663,26 @@ export default function MissionMapScreen() {
         await supabase.from("mission_validation")
           .update({ date_fin: new Date().toISOString() })
           .eq("id_validation", selectedMission.validationId);
+      }
+
+      // ── Mise à jour des stats player_stats directement depuis la mission ──
+      try {
+        await completeMission(String(userId), {
+          id_mission:        selectedMission.id_mission,
+          titre:             selectedMission.titre,
+          description:       selectedMission.description ?? "",
+          duree_min:         selectedMission.duree_min ?? 30,
+          difficulte:        selectedMission.difficulte,
+          priorite:          selectedMission.priorite,
+          energie_cout:      selectedMission.energie_cout,
+          stress_gain:       selectedMission.stress_gain,
+          connaissance_gain: selectedMission.connaissance_gain,
+          organisation_gain: selectedMission.organisation_gain,
+          xp_gain:           selectedMission.xp_gain,
+        });
+        console.log(`✅ handleComplete (event) — stats mises à jour pour mission ${id}`);
+      } catch (e) {
+        console.warn("⚠️ Stats update failed (non-bloquant):", e);
       }
 
       const updatedMissions = missions.map((m, i) => {

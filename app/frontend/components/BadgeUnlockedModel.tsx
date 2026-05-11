@@ -24,6 +24,7 @@ interface BadgeUnlockedModalProps {
   badgeId?: number;
   badgeName?: string;
   badgeEmoji?: string;
+  goldReward?: number;
   onClose: () => void;
 }
 
@@ -129,6 +130,7 @@ export default function BadgeUnlockedModal({
   badgeId    = 0,
   badgeName  = "Badge",
   badgeEmoji = "🏅",
+  goldReward = 30,
   onClose,
 }: BadgeUnlockedModalProps) {
   const backdropOpacity = useRef(new Animated.Value(0)).current;
@@ -229,7 +231,7 @@ export default function BadgeUnlockedModal({
               opacity: coinOpacity,
               transform: [{ translateY: coinBounce }],
             }]}>
-              <Text style={styles.coinText}>🪙 +10</Text>
+              <Text style={styles.coinText}>🪙 +{goldReward}</Text>
             </Animated.View>
           </View>
 

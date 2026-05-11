@@ -14,9 +14,11 @@ import { useSounds } from "../hooks/useSounds";
 
 // ── Types ─────────────────────────────────────────────────────
 interface LevelUpModalProps {
-  visible:  boolean;
-  newLevel: number;
-  onClose:  () => void;
+  visible:    boolean;
+  newLevel:   number;
+  goldBonus:  number;
+  getsPotion: boolean;
+  onClose:    () => void;
 }
 
 // ── Confetti ──────────────────────────────────────────────────
@@ -132,7 +134,7 @@ function getLevelTitle(level: number): string {
 }
 
 // ── Modal ─────────────────────────────────────────────────────
-export default function LevelUpModal({ visible, newLevel, onClose }: LevelUpModalProps) {
+export default function LevelUpModal({ visible, newLevel, goldBonus, getsPotion, onClose }: LevelUpModalProps) {
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const cardScale       = useRef(new Animated.Value(0.3)).current;
   const cardOpacity     = useRef(new Animated.Value(0)).current;
@@ -262,6 +264,20 @@ playSound("missionReussie");
           <Text style={styles.levelDesc}>
             Tu es maintenant niveau {newLevel} !{"\n"}Continue comme ça 🚀
           </Text>
+
+          {/* ── Récompenses ── */}
+          <View style={styles.rewardsRow}>
+            {goldBonus > 0 && (
+              <View style={styles.rewardChip}>
+                <Text style={styles.rewardChipText}>🪙 +{goldBonus} gold</Text>
+              </View>
+            )}
+            {getsPotion && (
+              <View style={[styles.rewardChip, { backgroundColor: "#1e3a2a" }]}>
+                <Text style={styles.rewardChipText}>🧪 +1 potion</Text>
+              </View>
+            )}
+          </View>
 
           {/* Bouton */}
           <Animated.View style={{
@@ -404,8 +420,28 @@ const styles = StyleSheet.create({
     color: COLORS.tertiary,
     textAlign: "center",
     lineHeight: 20,
-    marginBottom: 22,
+    marginBottom: 14,
     opacity: 0.9,
+  },
+  rewardsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 20,
+    flexWrap: "wrap",
+    justifyContent: "center",
+  },
+  rewardChip: {
+    backgroundColor: "#1a0a3a",
+    borderWidth: 1.5,
+    borderColor: COLORS.badgeGold,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  rewardChipText: {
+    color: COLORS.badgeGold,
+    fontWeight: "800",
+    fontSize: 14,
   },
   btn: {
     backgroundColor: COLORS.badgeGold,

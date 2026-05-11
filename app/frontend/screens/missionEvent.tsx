@@ -462,6 +462,7 @@ export default function MissionMapScreen() {
   const [editData,              setEditData]              = useState<any>(null);
   const [continueModalVisible,  setContinueModalVisible]  = useState(false);
   const [rewardModal,           setRewardModal]           = useState({ visible: false, totalXP: 0, totalGold: 0 });
+  const [isEventClosed,         setIsEventClosed]         = useState(false);
 
   const hibouMsg = missions.length === 0
     ? "Crée ta\npremière\nmission !"
@@ -529,6 +530,15 @@ export default function MissionMapScreen() {
       });
 
       setMissions(withStatus);
+
+      // Vérifier si l'événement est déjà clôturé
+      const { data: bossData } = await supabase
+        .from("boss_events")
+        .select("completed_at")
+        .eq("id_boss", Number(eventId))
+        .maybeSingle();
+      setIsEventClosed(!!bossData?.completed_at);
+
     } catch (err: any) {
       Alert.alert("Erreur", err.message);
     } finally {
@@ -590,6 +600,7 @@ export default function MissionMapScreen() {
       }
 
       setRewardModal({ visible: true, totalXP, totalGold });
+      setIsEventClosed(true);
 
     } catch (err: any) {
       console.error("❌ finishEvent:", err.message);
@@ -831,10 +842,17 @@ export default function MissionMapScreen() {
 
       {/* ── CTA ── */}
       <View style={styles.ctaBar}>
-        <TouchableOpacity style={styles.ctaBtn} onPress={() => { setEditData({ id_boss: Number(eventId) }); setCreateModalVisible(true); }}>
-          <Ionicons name="add" size={22} color="#fff" />
-          <Text style={styles.ctaBtnText}>Créer une mission</Text>
-        </TouchableOpacity>
+        {isEventClosed ? (
+          <View style={[styles.ctaBtn, { backgroundColor: "#9ca3af", opacity: 0.7 }]}>
+            <Ionicons name="lock-closed" size={18} color="#fff" />
+            <Text style={styles.ctaBtnText}>Événement clôturé</Text>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.ctaBtn} onPress={() => { setEditData({ id_boss: Number(eventId) }); setCreateModalVisible(true); }}>
+            <Ionicons name="add" size={22} color="#fff" />
+            <Text style={styles.ctaBtnText}>Créer une mission</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* ── Modals ── */}

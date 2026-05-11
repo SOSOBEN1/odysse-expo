@@ -433,6 +433,49 @@ const BADGE_CONDITIONS: Record<string, (s: ExtendedSnapshot) => boolean> = {
  * @param userId  - id_user (number)
  * @returns noms des badges nouvellement débloqués (pour afficher une notif)
  */
+// ─── Récompense gold par badge (rareté) ──────────────────────────────────────
+// Commun : 25 🪙 | Rare : 50 🪙 | Épique : 100 🪙 | Légendaire : 200 🪙
+const BADGE_GOLD_REWARD: Record<number, number> = {
+  // Communs — premiers accomplissements
+  1:  25,   // Premiers Pas
+  3:  25,   // Vision Master
+  5:  25,   // Organisé(e)
+  6:  25,   // Concentration Pro
+  8:  25,   // Stressed? Non!
+  20: 25,   // Lecteur assidu
+  25: 25,   // Planificateur
+  // Rares — effort soutenu
+  2:  50,   // Série de 7 jours
+  4:  50,   // Missionnaire (10 missions)
+  7:  50,   // Discipline (7j orga 90%)
+  12: 50,   // Zen Attitude (7j stress<20%)
+  13: 50,   // Respirateur
+  14: 50,   // Méditation
+  17: 50,   // Sportif
+  21: 50,   // Érudit
+  26: 50,   // Pomodoro Master
+  // Épiques — haut niveau
+  9:  100,  // Expert (niveau 10)
+  10: 100,  // Marathonien (30 missions)
+  15: 100,  // Santé parfaite
+  16: 100,  // Dormeur d'or
+  22: 100,  // Génie
+  23: 100,  // Explorateur
+  27: 100,  // Stratège
+  28: 100,  // Fusée
+  // Légendaires — excellence totale
+  11: 200,  // Légende (100% compétences)
+  19: 150,  // Équilibre parfait
+  24: 150,  // Académicien
+  29: 150,  // Architecte
+  30: 200,  // Superstar
+  33: 200,  // Royauté
+  34: 200,  // Prédateur
+  37: 200,  // Diamant
+};
+
+const DEFAULT_BADGE_GOLD = 30; // fallback pour tout badge non listé
+
 export async function checkAndUnlockBadges(userId: number): Promise<string[]> {
   try {
     // 1. Badges déjà obtenus par ce joueur
@@ -473,6 +516,22 @@ export async function checkAndUnlockBadges(userId: number): Promise<string[]> {
         if (!error) {
           unlocked.push(badge.nom);
           console.log(`🏅 Badge débloqué pour user ${userId}: ${badge.nom}`);
+
+          // ── Attribuer le gold de récompense ──────────────────────────────
+          const goldReward = BADGE_GOLD_REWARD[badge.id_badge] ?? DEFAULT_BADGE_GOLD;
+          const { data: userData } = await supabase
+            .from("users")
+            .select("gold")
+            .eq("id_user", userId)
+            .maybeSingle();
+
+          const newGold = (userData?.gold ?? 0) + goldReward;
+          await supabase
+            .from("users")
+            .update({ gold: newGold })
+            .eq("id_user", userId);
+
+          console.log(`🪙 +${goldReward} gold pour badge "${badge.nom}" → total: ${newGold}`);
         }
       }
     }

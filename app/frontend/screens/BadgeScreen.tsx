@@ -213,13 +213,9 @@ function Badge3DLocked({ emoji, uid }: { emoji: string; uid: string }) {
 }
 
 // ── Carte badge débloqué ─────────────────────────────────────
-function UnlockedBadge({ id, emoji, label, date, bg, color, onPress }: UnlockedBadgeProps) {
+function UnlockedBadge({ id, emoji, label, date, bg, color }: Omit<UnlockedBadgeProps, "onPress">) {
   return (
-    <TouchableOpacity
-      style={[unlockedStyles.card, { backgroundColor: bg }]}
-      activeOpacity={0.85}
-      onPress={onPress}
-    >
+    <View style={[unlockedStyles.card, { backgroundColor: bg }]}>
       <Text style={unlockedStyles.label} numberOfLines={1}>{label}</Text>
       <Badge3DUnlocked emoji={emoji} color={color} uid={`u${id}`} />
       <Text style={unlockedStyles.obtained}>Obtenu le</Text>
@@ -228,7 +224,7 @@ function UnlockedBadge({ id, emoji, label, date, bg, color, onPress }: UnlockedB
           day: "numeric", month: "long", year: "numeric",
         })}
       </Text>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -281,24 +277,6 @@ export default function BadgesScreen() {
   );
 
   const [activeModule, setActiveModule] = useState<ModuleFilter>("tous");
-  const [modalVisible, setModalVisible]   = useState(false);
-  const [selectedBadge, setSelectedBadge] = useState<{
-    id: number; label: string; emoji: string;
-  }>({ id: 0, label: "", emoji: "" });
-
-  useEffect(() => {
-    if (newlyUnlocked.length > 0) {
-      const first = newlyUnlocked[0];
-      const meta  = getBadgeMeta(first.id);
-      setSelectedBadge({ id: first.id, label: first.label, emoji: meta.emoji });
-      setModalVisible(true);
-    }
-  }, [newlyUnlocked]);
-
-  const openModal = (id: number, label: string, emoji: string) => {
-    setSelectedBadge({ id, label, emoji });
-    setModalVisible(true);
-  };
 
   // Filtrer par module
   const filteredUnlocked = activeModule === "tous"
@@ -433,7 +411,6 @@ export default function BadgesScreen() {
                 color={meta.color}
                 bg={meta.bg}
                 date={b.dateObtention ?? new Date().toISOString()}
-                onPress={() => openModal(b.id, b.label, meta.emoji)}
               />
             );
           })}
@@ -474,17 +451,6 @@ export default function BadgesScreen() {
       </ScrollView>
 
       <Navbar active="badges" onChange={() => {}} />
-
-      <BadgeUnlockedModal
-        visible={modalVisible}
-        badgeId={selectedBadge.id}
-        badgeName={selectedBadge.label}
-        badgeEmoji={selectedBadge.emoji}
-        onClose={() => {
-          setModalVisible(false);
-          clearNewlyUnlocked();
-        }}
-      />
     </LinearGradient>
   );
 }

@@ -5,6 +5,7 @@ import LevelUpModal from "./frontend/components/LevelUpModal";
 import { AvatarProvider } from "./frontend/constants/AvatarContext";
 import { supabase } from "./frontend/constants/supabase";
 import { UserProvider, useUser } from "./frontend/constants/UserContext";
+import { StatsProvider } from "./frontend/constants/StatsContext";
 import { checkAndUnlockBadges } from "../backend/services/badgeEngine";
 
 // ── Badge meta (emoji) ────────────────────────────────────────
@@ -144,9 +145,11 @@ export default function RootLayout() {
   return (
     <UserProvider>
       <AvatarProvider>
-        <Stack screenOptions={{ headerShown: false }} />
-        <LevelUpWatcher />
-        <BadgeWatcher />
+        <StatsProvider>
+          <Stack screenOptions={{ headerShown: false }} />
+          <LevelUpWatcher />
+          <BadgeWatcher />
+        </StatsProvider>
       </AvatarProvider>
     </UserProvider>
   );

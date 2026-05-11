@@ -11,6 +11,7 @@ import {
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import { COLORS, SHADOWS } from "../styles/theme";
+import { useSounds } from "../hooks/useSounds";
 
 type Props = {
   visible: boolean;
@@ -30,6 +31,8 @@ const PRIORITIES: { label: string; value: number }[] = [
   { label: "Haute",   value: 3 },
   { label: "Urgente", value: 4 },
 ];
+
+const { playSound } = useSounds();
 
 function Dropdown({ label, value, options, onSelect }: {
   label: string;
@@ -210,6 +213,7 @@ if (initialData?.id_mission) {
     .single();
   if (error) throw error;
   result = data;
+ playSound("missionCreee");
 }
 
       onSave(result);
@@ -266,8 +270,8 @@ if (initialData?.id_mission) {
             />
 
             {/* DURÉE + DIFFICULTÉ */}
-            <View style={[modalStyles.row, { zIndex: 20 }]}>
-              <View style={[modalStyles.half, { zIndex: 20 }]}>
+            <View style={modalStyles.row}>
+              <View style={modalStyles.half}>
                 <Text style={modalStyles.label}>Durée (min)</Text>
                 <TextInput
                   style={modalStyles.input}
@@ -284,12 +288,9 @@ if (initialData?.id_mission) {
               </View>
             </View>
 
-           
-          {/* PRIORITÉ */}
-<View style={{ zIndex: 10, marginTop: 14 }}>
-  <Text style={modalStyles.label}>Priorité *</Text>
-  <Dropdown label="Priorité" value={priority} options={PRIORITIES} onSelect={setPriority} />
-</View>
+            {/* PRIORITÉ */}
+            <Text style={[modalStyles.label, { marginTop: 14 }]}>Priorité *</Text>
+            <Dropdown label="Priorité" value={priority} options={PRIORITIES} onSelect={setPriority} />
 
             {/* ✅ DATE LIMITE */}
             <Text style={[modalStyles.label, { marginTop: 14 }]}>Date limite</Text>

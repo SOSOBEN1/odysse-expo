@@ -501,6 +501,7 @@ export async function sleepRestore(userId: string): Promise<{ success: boolean; 
 
     const newStress = clamp((ps?.stress ?? 50) - 20);
 
+    // Mettre à jour player_stats (source principale)
     const { error: updateErr } = await supabase
       .from("player_stats")
       .upsert({
@@ -514,6 +515,12 @@ export async function sleepRestore(userId: string): Promise<{ success: boolean; 
       console.error("[sleepRestore] update error:", updateErr.message);
       return { success: false, message: "Erreur lors de la sauvegarde." };
     }
+
+    // Synchroniser aussi users.energie pour les écrans qui lisent cette colonne
+    await supabase
+      .from("users")
+      .update({ energie: 100 })
+      .eq("id_user", userIdInt);
 
     // Sauvegarder la date en local
     await AsyncStorage.setItem(storageKey, new Date().toISOString());
@@ -610,7 +617,7 @@ export async function useEnergyPotion(
 
   const newEnergie = clamp((ps?.energie ?? 50) + ENERGY_POTION.energyGain);
 
-  // Mettre à jour énergie
+  // Mettre à jour player_stats (source principale)
   await supabase
     .from("player_stats")
     .upsert({
@@ -618,6 +625,12 @@ export async function useEnergyPotion(
       energie:  newEnergie,
       date_maj: new Date().toISOString(),
     }, { onConflict: "id_user" });
+
+  // Synchroniser aussi users.energie
+  await supabase
+    .from("users")
+    .update({ energie: newEnergie })
+    .eq("id_user", userId);
 
   // Décrémenter quantité
   const newQty = (item.quantite ?? 1) - 1;

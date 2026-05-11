@@ -3,9 +3,10 @@ import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
 import {
-  ScrollView, StatusBar, StyleSheet, Text,
+  Alert, ScrollView, StatusBar, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from "react-native";
+import { useStats } from "../constants/StatsContext";
 import Svg, { Path } from "react-native-svg";
 import type { Mission, MissionTimer } from "../../../backend/models/mission.types";
 import {
@@ -392,6 +393,22 @@ export default function MissionsScreen() {
 
   const { selectedModel, setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername }   = useUser();
+  const { stats: playerStats, refreshStats } = useStats();
+
+  // ── Vérification énergie avant démarrer une mission ──────────
+  const ENERGY_THRESHOLD = 16;
+
+  const checkEnergyAndStart = (id: number) => {
+    if (playerStats.energie < ENERGY_THRESHOLD) {
+      Alert.alert(
+        "⚡ Énergie insuffisante",
+        `Tu as seulement ${Math.round(playerStats.energie)}% d'énergie.\n\nIl te faut au minimum ${ENERGY_THRESHOLD}% pour démarrer une mission.\n\n💡 Va sur le Dashboard pour dormir ou utiliser une potion d'énergie !`,
+        [{ text: "OK", style: "default" }]
+      );
+      return;
+    }
+    handleStart(id);
+  };
 
   const [displayName, setDisplayName] = useState<string>(ctxUsername || "...");
 
@@ -492,6 +509,17 @@ export default function MissionsScreen() {
           </View>
         </View>
 
+        {/* ── Bandeau énergie faible ── */}
+        {playerStats.energie < ENERGY_THRESHOLD && (
+          <View style={styles.lowEnergyBanner}>
+            <Text style={styles.lowEnergyIcon}>⚡</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.lowEnergyTitle}>Énergie insuffisante ({Math.round(playerStats.energie)}%)</Text>
+              <Text style={styles.lowEnergyDesc}>Il te faut min. {ENERGY_THRESHOLD}% pour démarrer. Va dormir ou utilise une potion sur le Dashboard !</Text>
+            </View>
+          </View>
+        )}
+
         {/* ── Barre de recherche ── */}
         <View style={styles.searchWrapper}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -545,7 +573,7 @@ export default function MissionsScreen() {
             timer={getTimer(m.id)}
             onDelete={handleDelete}
             onEdit={handleEdit}
-            onStart={handleStart}
+            onStart={checkEnergyAndStart}
             onPause={handlePause}
             onFinish={handleFinish}
           />
@@ -682,4 +710,9 @@ const styles = StyleSheet.create({
   searchIcon:        { fontSize: 16, marginRight: 8 },
   searchInput:       { flex: 1, fontSize: 14, color: COLORS.missionHeading, padding: 0 },
   searchClear:       { fontSize: 13, color: COLORS.missionDuration, fontWeight: "700", marginLeft: 8 },
+  // ── Bandeau énergie faible ──
+  lowEnergyBanner:   { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#fff3cd", borderRadius: 14, padding: 12, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: "#f59e0b" },
+  lowEnergyIcon:     { fontSize: 22 },
+  lowEnergyTitle:    { fontWeight: "800", fontSize: 13, color: "#92400e", marginBottom: 2 },
+  lowEnergyDesc:     { fontSize: 11, color: "#a16207", lineHeight: 16 },
 });

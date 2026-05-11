@@ -1,994 +1,349 @@
-// screens/MissionMapScreen.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { COLORS, SHADOWS } from "../styles/theme";
-
+import { useState, useEffect } from "react";
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+  Alert, ScrollView, StatusBar, StyleSheet, Text,
+  TextInput, TouchableOpacity, View,
 } from "react-native";
-import { BlurView } from "expo-blur";
-import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Circle, Ellipse, Path } from "react-native-svg";
-import CreateMissionModal from "../components/CreateMissionModal";
-import HibouGuide from "../components/ui/Hibou";
+import { useRouter } from "expo-router";
+import Navbar from "../components/Navbar";
+import WaveBackground from "../components/waveBackground";
+import { COLORS, SHADOWS, SIZES } from "../styles/theme";
+import CreateEventModal from "../components/CreateEventModal";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
-import { completeMission, failMission, fetchMission } from "../../../backend/services/Userstatsservice";
+import { useAvatar } from "../constants/AvatarContext";
+import { useStats } from "../constants/StatsContext";
 
-const owlSuccess = require("../assets/Hibou/success.png");
-const { width } = Dimensions.get("window");
+type EventType = "projet" | "examen" | "soutenance";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type MissionStatus = "locked" | "active" | "in_progress" | "paused" | "done";
-
-interface Mission {
-  id_mission:         number;
-  titre:              string;
-  description:        string | null;
-  duree_min:          number | null;
-  difficulte:         number;
-  priorite:           number;
-  xp_gain:            number;
-  energie_cout:       number;
-  stress_gain:        number;
-  connaissance_gain:  number;
-  organisation_gain:  number;
-  date_limite:        string | null;
-  id_boss:            number;
-  validationId:       number | null;
-  validationStatut:   string | null;
-  localStatus:        MissionStatus;
+interface BossEvent {
+  id_boss: number;
+  nom: string;
+  type_boss: EventType;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const DIFF_LABELS: Record<number, string> = { 1: "Facile", 2: "Moyen", 3: "Difficile" };
-const DIFF_ICONS:  Record<number, string>  = { 1: "⚡", 2: "🔥", 3: "💀" };
-const MAP_STEP = 150;
+const TABS = ["Tout", "Projet", "Examen", "Soutenance"] as const;
+type Tab = typeof TABS[number];
 
-const computeGold = (difficulte: number, priorite: number) =>
-  difficulte * 10 + priorite * 5;
-
-const dbStatusToLocal = (statut: string | null): MissionStatus => {
-  switch (statut) {
-    case "done":    return "done";
-    case "running": return "in_progress";
-    case "paused":  return "paused";
-    case "fail":    return "locked";
-    default:        return "active";
-  }
+const typeConfig: Record<string, { icon: string; color: string; bg: string }> = {
+  projet:     { icon: "💻", color: "#6c3fcb", bg: "#ede9fe" },
+  examen:     { icon: "📝", color: "#e84393", bg: "#fff0f7" },
+  soutenance: { icon: "🎓", color: "#5ab4e5", bg: "#eaf6ff" },
 };
 
-const getNodePosition = (index: number): { top: number; isLeft: boolean } => ({
-  top:    80 + index * MAP_STEP,
-  isLeft: index % 2 === 0,
-});
+const getConfig = (type: string) =>
+  typeConfig[type?.toLowerCase()] ?? { icon: "📌", color: "#6c3fcb", bg: "#ede9fe" };
 
-const STATUS_CONFIG: Record<MissionStatus, { color: string; bg: string; border: string; icon: string; label: string }> = {
-  locked:      { color: "#9CA3AF", bg: "#F3F4F6", border: "#E5E7EB", icon: "🔒", label: "Verrouillée" },
-  active:      { color: "#7C3AED", bg: "#EDE9FE", border: "#C4B5FD", icon: "⭐", label: "Disponible"  },
-  in_progress: { color: "#F59E0B", bg: "#FEF3C7", border: "#FCD34D", icon: "⚡", label: "En cours"    },
-  paused:      { color: "#3B82F6", bg: "#EFF6FF", border: "#BFDBFE", icon: "⏸️", label: "En pause"    },
-  done:        { color: "#10B981", bg: "#D1FAE5", border: "#6EE7B7", icon: "✅", label: "Terminée"    },
-};
+export default function EventsScreen() {
+  const router = useRouter();
+  const [activeTab, setActiveTab]       = useState<Tab>("Tout");
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [selectedData, setSelectedData] = useState<any>(null);
+  const [events, setEvents]             = useState<BossEvent[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [searchQuery, setSearchQuery]   = useState("");
+  const [displayName, setDisplayName]   = useState<string>("...");
 
-// ─── SVG Trail ────────────────────────────────────────────────────────────────
-const TrailPath = ({ count }: { count: number }) => {
-  if (count === 0) return null;
-  let d = "";
-  for (let i = 0; i < count; i++) {
-    const { top, isLeft } = getNodePosition(i);
-    const x = isLeft ? width * 0.28 : width * 0.72;
-    if (i === 0) {
-      d += `M ${x} ${top + 30}`;
-    } else {
-      const { top: prevTop, isLeft: prevLeft } = getNodePosition(i - 1);
-      const prevX = prevLeft ? width * 0.28 : width * 0.72;
-      const midY  = (prevTop + top) / 2;
-      d += ` C ${prevX} ${midY}, ${x} ${midY}, ${x} ${top + 30}`;
+  const { userId, username: ctxUsername } = useUser();
+  const { selectedModel, setSelectedModel } = useAvatar();
+  const { stats: playerStats } = useStats();
+
+  const ENERGY_THRESHOLD = 16;
+
+  const navigateToEventMissions = (eventId: string, eventTitle: string) => {
+    if (playerStats.energie < ENERGY_THRESHOLD) {
+      Alert.alert(
+        "⚡ Énergie insuffisante",
+        `Tu as seulement ${Math.round(playerStats.energie)}% d'énergie.\n\nIl te faut au minimum ${ENERGY_THRESHOLD}% pour accéder aux missions d'événement.\n\n💡 Va sur le Dashboard pour dormir ou utiliser une potion d'énergie !`,
+        [{ text: "OK", style: "default" }]
+      );
+      return;
     }
-  }
-  const mapH = 80 + count * MAP_STEP + 120;
-  const sparkles: { x: number; y: number }[] = [];
-  for (let i = 0; i < count - 1; i++) {
-    const { top: t1, isLeft: l1 } = getNodePosition(i);
-    const { top: t2 }             = getNodePosition(i + 1);
-    sparkles.push({ x: l1 ? width * 0.28 : width * 0.72, y: (t1 + t2) / 2 });
-  }
-  return (
-    <Svg width={width} height={mapH} style={StyleSheet.absoluteFillObject} pointerEvents="none">
-      <Path d={d} stroke="#C4B5E8" strokeWidth={22} strokeLinecap="round" fill="none" opacity={0.35} />
-      <Path d={d} stroke="#E9D5FF" strokeWidth={13} strokeLinecap="round" fill="none" strokeDasharray="2 22" />
-      {sparkles.map((s, i) => (
-        <React.Fragment key={i}>
-          <Circle cx={s.x} cy={s.y} r={3.5} fill="#fff" opacity={0.75} />
-          <Circle cx={s.x} cy={s.y} r={8}   fill="#fff" opacity={0.12} />
-        </React.Fragment>
-      ))}
-    </Svg>
-  );
-};
+    router.push({
+      pathname: "/frontend/screens/missionEvent",
+      params: { eventId, eventTitle },
+    });
+  };
 
-// ─── Progress Bar ─────────────────────────────────────────────────────────────
-const ProgressBar = ({ progress }: { progress: number }) => {
-  const anim = useRef(new Animated.Value(0)).current;
+  // ── Fetch user profile (nom + avatar) ──
   useEffect(() => {
-    Animated.timing(anim, { toValue: progress, duration: 900, useNativeDriver: false }).start();
-  }, [progress]);
-  const barWidth = anim.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] });
-  return (
-    <View style={styles.progressTrack}>
-      <Animated.View style={[styles.progressFill, { width: barWidth }]} />
-    </View>
-  );
-};
+    if (!userId) return;
+    const fetchUserProfile = async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("username, prenom, nom, avatar_url")
+        .eq("id_user", userId)
+        .single();
 
-// ─── Mission Node ─────────────────────────────────────────────────────────────
-const MissionNode = ({ mission, index, onPress, onEdit, onDelete }: {
-  mission:  Mission;
-  index:    number;
-  onPress:  () => void;
-  onEdit:   () => void;
-  onDelete: () => void;
-}) => {
-  const { top, isLeft } = getNodePosition(index);
-  const cfg      = STATUS_CONFIG[mission.localStatus];
-  const anim     = useRef(new Animated.Value(0)).current;
-  const pulse    = useRef(new Animated.Value(1)).current;
-  const isLocked = mission.localStatus === "locked";
+      if (error || !data) return;
 
+      const name = data.username ?? data.prenom ?? data.nom ?? ctxUsername ?? "Joueur";
+      setDisplayName(name);
+      if (data.avatar_url) setSelectedModel(data.avatar_url);
+    };
+    fetchUserProfile();
+  }, [userId, ctxUsername]);
+
+  // ── Fetch events ──
   useEffect(() => {
-    Animated.spring(anim, {
-      toValue: 1, delay: index * 100, useNativeDriver: true, tension: 60, friction: 8,
-    }).start();
-    if (mission.localStatus === "in_progress" || mission.localStatus === "active") {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, { toValue: 1.07, duration: 850, useNativeDriver: true }),
-          Animated.timing(pulse, { toValue: 1,    duration: 850, useNativeDriver: true }),
-        ])
-      ).start();
-    }
-  }, [mission.localStatus]);
+    if (userId) fetchEvents();
+  }, [userId]);
 
-  return (
-    <Animated.View style={[
-      styles.nodeWrapper,
-      isLeft ? styles.nodeLeft : styles.nodeRight,
-      {
-        top,
-        opacity: anim,
-        transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }],
-      },
-    ]}>
-      <TouchableOpacity onPress={onPress} disabled={isLocked} activeOpacity={0.85}>
-        <Animated.View style={{ transform: [{ scale: pulse }] }}>
-          {isLocked ? (
-            <View style={styles.lockNode}>
-              <Svg width={38} height={44} viewBox="0 0 42 50">
-                <Ellipse cx={21} cy={17} rx={9} ry={9} stroke="#C4B5E8" strokeWidth={5} fill="none" />
-                <Path d="M8 24 Q8 44 21 44 Q34 44 34 24 Z" fill="#C4B5E8" />
-                <Circle cx={21} cy={34} r={4} fill="#fff" opacity={0.8} />
-                <Path d="M21 34 V39" stroke="#fff" strokeWidth={2.5} strokeLinecap="round" />
-              </Svg>
-              <Text style={styles.lockLabel} numberOfLines={2}>{mission.titre}</Text>
-            </View>
-          ) : (
-            <View style={styles.nodeGroup}>
-              <View style={[styles.statusPill, { backgroundColor: cfg.color }]}>
-                <Text style={styles.statusPillText}>{cfg.label}</Text>
-              </View>
-              <View style={[styles.avatarCircle, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
-                <Text style={styles.avatarIcon}>{cfg.icon}</Text>
-                {mission.localStatus === "active" && (
-                  <View style={styles.coinBadge}>
-                    <Svg width={22} height={22} viewBox="0 0 24 24">
-                      <Circle cx={12} cy={12} r={11} fill="#D97706" />
-                      <Circle cx={12} cy={12} r={8}  fill="#F59E0B" />
-                      <Circle cx={12} cy={12} r={5}  fill="#FDE68A" opacity={0.6} />
-                    </Svg>
-                  </View>
-                )}
-              </View>
-              <Text style={[styles.nodeTitle, { color: cfg.color }]} numberOfLines={2}>
-                {mission.titre}
-              </Text>
-              {mission.date_limite && (
-                <Text style={styles.deadlineChip}>
-                  📅 {new Date(mission.date_limite).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
-                </Text>
-              )}
-              <View style={styles.gainsRow}>
-                <Text style={styles.gainChip}>🏆 +{mission.xp_gain} XP</Text>
-                {mission.duree_min != null && (
-                  <Text style={styles.gainChip}>⏱ {mission.duree_min}m</Text>
-                )}
-                <Text style={styles.gainChip}>{DIFF_ICONS[mission.difficulte]} {DIFF_LABELS[mission.difficulte]}</Text>
-              </View>
-              <View style={styles.nodeActions}>
-                <TouchableOpacity style={styles.actionBtn} onPress={onEdit}>
-                  <Ionicons name="pencil-outline" size={13} color="#7C3AED" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} onPress={onDelete}>
-                  <Ionicons name="trash-outline" size={13} color="#EF4444" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </Animated.View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
-
-// ─── Mission Detail Modal ─────────────────────────────────────────────────────
-const MissionDetailModal = ({ mission, visible, onClose, onStart, onPause, onComplete }: {
-  mission:    Mission | null;
-  visible:    boolean;
-  onClose:    () => void;
-  onStart:    () => void;
-  onPause:    () => void;
-  onComplete: () => void;
-}) => {
-  if (!mission) return null;
-  const cfg = STATUS_CONFIG[mission.localStatus];
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={detailStyles.overlay}>
-        <View style={detailStyles.container}>
-          <View style={detailStyles.handle} />
-          <View style={[detailStyles.header, { backgroundColor: cfg.color + "22" }]}>
-            <Text style={detailStyles.headerIcon}>{cfg.icon}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={detailStyles.title}>{mission.titre}</Text>
-              <View style={[detailStyles.statusPill, { backgroundColor: cfg.color }]}>
-                <Text style={detailStyles.statusPillText}>{cfg.label}</Text>
-              </View>
-            </View>
-            <TouchableOpacity onPress={onClose} style={detailStyles.closeBtn}>
-              <Ionicons name="close" size={20} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView contentContainerStyle={detailStyles.body} showsVerticalScrollIndicator={false}>
-            {mission.description && (
-              <View style={detailStyles.section}>
-                <Text style={detailStyles.sectionTitle}>📋 Description</Text>
-                <Text style={detailStyles.desc}>{mission.description}</Text>
-              </View>
-            )}
-            <View style={detailStyles.infoGrid}>
-              {[
-                { emoji: DIFF_ICONS[mission.difficulte], label: "Difficulté", val: DIFF_LABELS[mission.difficulte] },
-                { emoji: "🏆", label: "XP",   val: `+${mission.xp_gain}` },
-                { emoji: "🪙", label: "Gold", val: `+${computeGold(mission.difficulte, mission.priorite)}` },
-                ...(mission.duree_min   ? [{ emoji: "⏱",  label: "Durée",  val: `${mission.duree_min} min` }] : []),
-                ...(mission.date_limite ? [{ emoji: "📅", label: "Limite", val: new Date(mission.date_limite).toLocaleDateString("fr-FR") }] : []),
-                { emoji: "📚", label: "Connaissance", val: `+${mission.connaissance_gain}` },
-                { emoji: "📋", label: "Organisation", val: `+${mission.organisation_gain}` },
-              ].map(g => (
-                <View key={g.label} style={detailStyles.infoCard}>
-                  <Text style={detailStyles.infoEmoji}>{g.emoji}</Text>
-                  <Text style={detailStyles.infoLabel}>{g.label}</Text>
-                  <Text style={detailStyles.infoVal}>{g.val}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={detailStyles.rewardNote}>
-              <Ionicons name="information-circle-outline" size={16} color="#7C3AED" />
-              <Text style={detailStyles.rewardNoteText}>
-                XP et gold crédités à la complétion de l'événement 🎁
-              </Text>
-            </View>
-
-            <View style={detailStyles.ctaGroup}>
-              {mission.localStatus === "active" && (
-                <TouchableOpacity style={[detailStyles.ctaBtn, { backgroundColor: "#7C3AED" }]} onPress={onStart}>
-                  <Ionicons name="play" size={18} color="#fff" />
-                  <Text style={detailStyles.ctaBtnText}>Commencer</Text>
-                </TouchableOpacity>
-              )}
-              {mission.localStatus === "in_progress" && (
-                <>
-                  <TouchableOpacity style={[detailStyles.ctaBtn, { backgroundColor: "#3B82F6" }]} onPress={onPause}>
-                    <Ionicons name="pause" size={18} color="#fff" />
-                    <Text style={detailStyles.ctaBtnText}>Mettre en pause</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[detailStyles.ctaBtn, { backgroundColor: "#10B981" }]} onPress={onComplete}>
-                    <Ionicons name="checkmark-done" size={18} color="#fff" />
-                    <Text style={detailStyles.ctaBtnText}>Terminer ✅</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-              {mission.localStatus === "paused" && (
-                <>
-                  <TouchableOpacity style={[detailStyles.ctaBtn, { backgroundColor: "#7C3AED" }]} onPress={onStart}>
-                    <Ionicons name="play" size={18} color="#fff" />
-                    <Text style={detailStyles.ctaBtnText}>Reprendre</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[detailStyles.ctaBtn, { backgroundColor: "#10B981" }]} onPress={onComplete}>
-                    <Ionicons name="checkmark-done" size={18} color="#fff" />
-                    <Text style={detailStyles.ctaBtnText}>Terminer quand même</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-              {mission.localStatus === "done" && (
-                <View style={[detailStyles.ctaBtn, { backgroundColor: "#D1FAE5" }]}>
-                  <Ionicons name="trophy" size={18} color="#10B981" />
-                  <Text style={[detailStyles.ctaBtnText, { color: "#10B981" }]}>Mission accomplie 🎉</Text>
-                </View>
-              )}
-            </View>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
-// ─── Continue or Finish Modal ─────────────────────────────────────────────────
-const ContinueOrFinishModal = ({ visible, onContinue, onFinish }: {
-  visible:    boolean;
-  onContinue: () => void;
-  onFinish:   () => void;
-}) => (
-  <Modal visible={visible} transparent animationType="fade">
-    <View style={continueStyles.overlay}>
-      <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="dark" pointerEvents="none" />
-      <LinearGradient colors={["#D4C5F2", "#C2B4DE", "#9075C4"]} style={continueStyles.modalGradient}>
-        <View style={continueStyles.container}>
-
-          {/* ── Status frame ── */}
-          <View style={continueStyles.statusFrame}>
-            <Image source={owlSuccess} style={continueStyles.owlImage} resizeMode="contain" />
-            <View style={continueStyles.statusBadge}>
-              <Text style={continueStyles.badgeEmoji}>🎉</Text>
-            </View>
-            <View style={continueStyles.textContent}>
-              <Text style={continueStyles.mainTitle}>Missions complètes !</Text>
-              <Text style={continueStyles.subText}>
-                Tu as terminé toutes les missions de cet événement.{"\n"}
-                Que veux-tu faire ?
-              </Text>
-            </View>
-          </View>
-
-          {/* ── Info chips ── */}
-          <View style={continueStyles.chipsCol}>
-            <View style={continueStyles.chip}>
-              <Ionicons name="add-circle-outline" size={15} color="#7C3AED" />
-              <Text style={continueStyles.chipText}>Ajouter d'autres missions</Text>
-            </View>
-            <Text style={continueStyles.chipSep}>ou</Text>
-            <View style={continueStyles.chip}>
-              <Ionicons name="trophy-outline" size={15} color="#10B981" />
-              <Text style={continueStyles.chipText}>Clôturer et recevoir tes récompenses</Text>
-            </View>
-          </View>
-
-          {/* ── Action pill ── */}
-          <View style={continueStyles.actionPill}>
-            <TouchableOpacity style={continueStyles.tabFlex} onPress={onContinue}>
-              <Text style={continueStyles.inactiveTabText}>➕ Continuer</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={continueStyles.tabFlex} onPress={onFinish}>
-              <View style={continueStyles.whiteStrokeWrapper}>
-                <LinearGradient colors={["#765EFF", "#D4BAF9"]} style={continueStyles.activeTabBtnGradient}>
-                  <Text style={continueStyles.activeTabText}>🏆 Terminer l'événement</Text>
-                </LinearGradient>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-        </View>
-      </LinearGradient>
-    </View>
-  </Modal>
-);
-
-// ─── Event Reward Modal ───────────────────────────────────────────────────────
-const EventRewardModal = ({ visible, eventTitle, totalXP, totalGold, onClose }: {
-  visible:    boolean;
-  eventTitle: string;
-  totalXP:    number;
-  totalGold:  number;
-  onClose:    () => void;
-}) => (
-  <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-    <View style={rewardStyles.overlay}>
-      <View style={rewardStyles.container}>
-        <Text style={rewardStyles.emoji}>🏆</Text>
-        <Text style={rewardStyles.title}>Événement complété !</Text>
-        <Text style={rewardStyles.subtitle}>{eventTitle}</Text>
-
-        <View style={rewardStyles.rewardsRow}>
-          <View style={rewardStyles.rewardCard}>
-            <Text style={rewardStyles.rewardEmoji}>⭐</Text>
-            <Text style={rewardStyles.rewardVal}>+{totalXP}</Text>
-            <Text style={rewardStyles.rewardLabel}>XP</Text>
-          </View>
-          <View style={rewardStyles.rewardCard}>
-            <Text style={rewardStyles.rewardEmoji}>🪙</Text>
-            <Text style={rewardStyles.rewardVal}>+{totalGold}</Text>
-            <Text style={rewardStyles.rewardLabel}>Gold</Text>
-          </View>
-        </View>
-
-        <Text style={rewardStyles.congrats}>
-          Félicitations ! Tu as terminé toutes les missions 🎉
-        </Text>
-
-        <TouchableOpacity style={rewardStyles.closeBtn} onPress={onClose}>
-          <Text style={rewardStyles.closeBtnText}>Super ! 🚀</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </Modal>
-);
-
-// ─── Speech Bubble ────────────────────────────────────────────────────────────
-const SpeechBubble = ({ message }: { message: string }) => (
-  <View style={styles.bubbleWrapper}>
-    <View style={styles.bubble}>
-      <Text style={styles.bubbleText}>{message}</Text>
-    </View>
-    <View style={styles.bubbleArrow} />
-  </View>
-);
-
-// ─── Main Screen ──────────────────────────────────────────────────────────────
-export default function MissionMapScreen() {
-  const { eventId, eventTitle } = useLocalSearchParams<{ eventId: string; eventTitle: string }>();
-  const router  = useRouter();
-  const { userId } = useUser();
-
-  const [missions,              setMissions]              = useState<Mission[]>([]);
-  const [loading,               setLoading]               = useState(true);
-  const [selectedMission,       setSelectedMission]       = useState<Mission | null>(null);
-  const [detailVisible,         setDetailVisible]         = useState(false);
-  const [createModalVisible,    setCreateModalVisible]    = useState(false);
-  const [editData,              setEditData]              = useState<any>(null);
-  const [continueModalVisible,  setContinueModalVisible]  = useState(false);
-  const [rewardModal,           setRewardModal]           = useState({ visible: false, totalXP: 0, totalGold: 0 });
-
-  const hibouMsg = missions.length === 0
-    ? "Crée ta\npremière\nmission !"
-    : missions.every(m => m.localStatus === "done")
-      ? "Bravo !\nToutes les\nmissions faites 🎉"
-      : "Continue\ncomme ça ! 💪";
-
-  // ─── Fetch ───────────────────────────────────────────────────────────────
-  const fetchMissions = useCallback(async () => {
-    if (!eventId || !userId) return;
+  const fetchEvents = async () => {
     try {
       setLoading(true);
+      if (!userId) return;
 
-      const { data: missionsData, error: errM } = await supabase
-        .from("mission")
-        .select(`
-          id_mission, titre, description, duree_min,
-          difficulte, priorite, xp_gain, energie_cout,
-          stress_gain, connaissance_gain, organisation_gain,
-          date_limite, id_boss
-        `)
-        .eq("id_boss", Number(eventId))
-        .eq("id_user", String(userId));
+      const { data, error } = await supabase
+        .from("boss_events")
+        .select("id_boss, nom, type_boss")
+        .eq("id_creator", userId)
+        .order("id_boss", { ascending: false });
 
-      if (errM) throw errM;
-
-      const missionIds = (missionsData ?? []).map(m => m.id_mission);
-      let validationMap: Record<number, { id_validation: number; statut: string }> = {};
-
-      if (missionIds.length > 0) {
-        const { data: validations } = await supabase
-          .from("mission_validation")
-          .select("id_validation, id_mission, statut")
-          .eq("id_user", String(userId))
-          .in("id_mission", missionIds);
-
-        (validations ?? []).forEach(v => {
-          validationMap[v.id_mission] = { id_validation: v.id_validation, statut: v.statut };
-        });
-      }
-
-      const sorted = [...(missionsData ?? [])].sort((a, b) => {
-        if (!a.date_limite && !b.date_limite) return 0;
-        if (!a.date_limite) return 1;
-        if (!b.date_limite) return -1;
-        return new Date(a.date_limite).getTime() - new Date(b.date_limite).getTime();
-      });
-
-      let firstUnlockedFound = false;
-      const withStatus: Mission[] = sorted.map((m) => {
-        const validation       = validationMap[m.id_mission];
-        const validationStatut = validation?.statut ?? null;
-        const dbLocal          = dbStatusToLocal(validationStatut);
-
-        if (dbLocal === "done" || dbLocal === "in_progress" || dbLocal === "paused") {
-          return { ...m, validationId: validation?.id_validation ?? null, validationStatut, localStatus: dbLocal };
-        }
-
-        if (!firstUnlockedFound) {
-          firstUnlockedFound = true;
-          return { ...m, validationId: validation?.id_validation ?? null, validationStatut, localStatus: "active" as MissionStatus };
-        }
-
-        return { ...m, validationId: null, validationStatut: null, localStatus: "locked" as MissionStatus };
-      });
-
-      setMissions(withStatus);
+      if (error) throw error;
+      setEvents(data ?? []);
     } catch (err: any) {
-      Alert.alert("Erreur", err.message);
+      console.error("Erreur fetch boss_events:", err.message);
     } finally {
       setLoading(false);
     }
-  }, [eventId, userId]);
-
-  useEffect(() => { fetchMissions(); }, [fetchMissions]);
-
-  // ─── Upsert validation ────────────────────────────────────────────────────
-  const upsertValidation = async (missionId: number, validationId: number | null, statut: string): Promise<number> => {
-    if (validationId) {
-      const { error } = await supabase.from("mission_validation").update({ statut }).eq("id_validation", validationId);
-      if (error) throw error;
-      return validationId;
-    } else {
-      const { data, error } = await supabase
-        .from("mission_validation")
-        .insert({ id_user: String(userId), id_mission: missionId, date_debut: new Date().toISOString(), statut })
-        .select("id_validation")
-        .single();
-      if (error) throw error;
-      return data.id_validation;
-    }
   };
 
-  // ─── Terminer l'événement et créditer récompenses ─────────────────────────
-  const finishEvent = async (updatedMissions: Mission[]) => {
-    try {
-      const { data: eventData } = await supabase
-        .from("boss_events")
-        .select("completed_at")
-        .eq("id_boss", Number(eventId))
-        .single();
+  // ── Filtrage tab + recherche ──
+  const filtered = events
+    .filter(e => {
+      if (activeTab === "Tout") return true;
+      return e.type_boss?.toLowerCase() === activeTab.toLowerCase();
+    })
+    .filter(e => {
+      if (!searchQuery.trim()) return true;
+      return e.nom?.toLowerCase().includes(searchQuery.toLowerCase());
+    });
 
-      if (eventData?.completed_at) return;
-
-      const totalXP   = updatedMissions.reduce((acc, m) => acc + (m.xp_gain ?? 0), 0);
-      const totalGold = updatedMissions.reduce((acc, m) => acc + computeGold(m.difficulte, m.priorite), 0);
-
-      await supabase
-        .from("boss_events")
-        .update({ completed_at: new Date().toISOString() })
-        .eq("id_boss", Number(eventId));
-
-      const userIdInt = parseInt(String(userId), 10);
-      const { error: errRpc } = await supabase.rpc("increment_user_rewards", {
-        p_user_id: userIdInt,
-        p_xp:      totalXP,
-        p_gold:    totalGold,
-      });
-
-      if (errRpc) {
-        const { data: userData } = await supabase.from("users").select("xp, gold").eq("id_user", userIdInt).single();
-        await supabase.from("users").update({
-          xp:   (userData?.xp   ?? 0) + totalXP,
-          gold: (userData?.gold ?? 0) + totalGold,
-        }).eq("id_user", userIdInt);
-      }
-
-      setRewardModal({ visible: true, totalXP, totalGold });
-
-    } catch (err: any) {
-      console.error("❌ finishEvent:", err.message);
-    }
-  };
-
-  // ─── Vérifier complétion → afficher modale choix ──────────────────────────
-  const checkEventCompletion = async (updatedMissions: Mission[]) => {
-    if (!updatedMissions.length || !userId || !eventId) return;
-    const allDone = updatedMissions.every(m => m.localStatus === "done");
-    if (!allDone) return;
-
-    const { data: eventData } = await supabase
-      .from("boss_events")
-      .select("completed_at")
-      .eq("id_boss", Number(eventId))
-      .single();
-
-    if (eventData?.completed_at) return;
-
-    setContinueModalVisible(true);
-  };
-
-  // ─── Actions ─────────────────────────────────────────────────────────────
-  const handleStart = async () => {
-    if (!selectedMission || !userId) return;
-
-    // ── Vérifier l'énergie avant de démarrer ──
-    try {
-      const { data: ps } = await supabase
-        .from("player_stats")
-        .select("energie")
-        .eq("id_user", userId)
-        .maybeSingle();
-
-      if ((ps?.energie ?? 100) <= 0) {
-        Alert.alert(
-          "⚡ Énergie épuisée !",
-          "Tu n'as plus d'énergie pour démarrer une mission.\n\nDors (1x/jour) ou utilise une potion ⚡ depuis le Dashboard.",
-          [{ text: "OK" }]
-        );
-        return;
-      }
-    } catch {}
-
-    try {
-      const newValidationId = await upsertValidation(selectedMission.id_mission, selectedMission.validationId, "running");
-      const updated: Mission = { ...selectedMission, localStatus: "in_progress", validationId: newValidationId, validationStatut: "running" };
-      setMissions(prev => prev.map(m => m.id_mission === selectedMission.id_mission ? updated : m));
-      setSelectedMission(updated);
-    } catch (err: any) { Alert.alert("Erreur", err.message); }
-  };
-
-  const handlePause = async () => {
-    if (!selectedMission || !userId) return;
-    try {
-      await upsertValidation(selectedMission.id_mission, selectedMission.validationId, "paused");
-      const updated: Mission = { ...selectedMission, localStatus: "paused", validationStatut: "paused" };
-      setMissions(prev => prev.map(m => m.id_mission === selectedMission.id_mission ? updated : m));
-      setSelectedMission(updated);
-    } catch (err: any) { Alert.alert("Erreur", err.message); }
-  };
-
-  const handleComplete = async () => {
-    if (!selectedMission || !userId) return;
-    const id = selectedMission.id_mission;
-    try {
-      await upsertValidation(id, selectedMission.validationId, "done");
-
-      if (selectedMission.validationId) {
-        await supabase.from("mission_validation")
-          .update({ date_fin: new Date().toISOString() })
-          .eq("id_validation", selectedMission.validationId);
-      }
-
-      // ── Mise à jour des stats player_stats directement depuis la mission ──
-      try {
-        await completeMission(String(userId), {
-          id_mission:        selectedMission.id_mission,
-          titre:             selectedMission.titre,
-          description:       selectedMission.description ?? "",
-          duree_min:         selectedMission.duree_min ?? 30,
-          difficulte:        selectedMission.difficulte,
-          priorite:          selectedMission.priorite,
-          energie_cout:      selectedMission.energie_cout,
-          stress_gain:       selectedMission.stress_gain,
-          connaissance_gain: selectedMission.connaissance_gain,
-          organisation_gain: selectedMission.organisation_gain,
-          xp_gain:           selectedMission.xp_gain,
-        });
-        console.log(`✅ handleComplete (event) — stats mises à jour pour mission ${id}`);
-      } catch (e) {
-        console.warn("⚠️ Stats update failed (non-bloquant):", e);
-      }
-
-      const updatedMissions = missions.map((m, i) => {
-        const idx = missions.findIndex(x => x.id_mission === id);
-        if (m.id_mission === id)
-          return { ...m, localStatus: "done" as MissionStatus, validationStatut: "done" };
-        if (i === idx + 1 && m.localStatus === "locked")
-          return { ...m, localStatus: "active" as MissionStatus };
-        return m;
-      });
-
-      setMissions(updatedMissions);
-      setDetailVisible(false);
-
-      await checkEventCompletion(updatedMissions);
-
-    } catch (err: any) { Alert.alert("Erreur", err.message); }
-  };
-
-  const handleDelete = (mission: Mission) => {
-    Alert.alert("Supprimer", `Supprimer "${mission.titre}" ?`, [
+  const handleDelete = (id_boss: number) => {
+    Alert.alert("Supprimer", "Supprimer cet événement ?", [
       { text: "Annuler", style: "cancel" },
       {
         text: "Supprimer", style: "destructive",
         onPress: async () => {
-          const { error } = await supabase.from("mission").delete().eq("id_mission", mission.id_mission);
-          if (error) { Alert.alert("Erreur", error.message); return; }
-          setMissions(prev => prev.filter(m => m.id_mission !== mission.id_mission));
+          const { error } = await supabase
+            .from("boss_events")
+            .delete()
+            .eq("id_boss", id_boss);
+          if (error) Alert.alert("Erreur", error.message);
+          else setEvents(prev => prev.filter(e => e.id_boss !== id_boss));
         },
       },
     ]);
   };
 
-  const handleEdit = (mission: Mission) => {
-    setEditData({
-      id_mission:  mission.id_mission,
-      titre:       mission.titre,
-      description: mission.description,
-      duree_min:   mission.duree_min,
-      difficulte:  mission.difficulte,
-      priorite:    mission.priorite,
-      date_limite: mission.date_limite,
-      id_boss:     mission.id_boss,
-    });
-    setCreateModalVisible(true);
+  const handleEdit = (ev: BossEvent) => {
+    setSelectedData({ id_boss: ev.id_boss, nom: ev.nom, type_boss: ev.type_boss });
+    setModalVisible(true);
   };
 
-  // ─── Stats ────────────────────────────────────────────────────────────────
-  const doneCount      = missions.filter(m => m.localStatus === "done").length;
-  const progress       = missions.length > 0 ? doneCount / missions.length : 0;
-  const totalXPDisplay = missions.reduce((acc, m) => acc + m.xp_gain, 0);
-  const mapH           = Math.max(80 + missions.length * MAP_STEP + 220, 600);
-
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 50, friction: 8 }).start();
-  }, []);
-
   return (
-    <View style={styles.screen}>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+    <View style={styles.container}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+      <WaveBackground />
 
-      {/* ── HEADER ── */}
-      <Animated.View style={[styles.header, {
-        opacity: headerAnim,
-        transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) }],
-      }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={COLORS.primary} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.projectTitle} numberOfLines={1}>{eventTitle ?? "Missions"}</Text>
-          <ProgressBar progress={progress} />
-          <Text style={styles.progressLabel}>
-            {doneCount}/{missions.length} missions · {totalXPDisplay} XP total
-          </Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+
+        {/* ── Section title (même style que MissionsScreen) ── */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Événements</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>{filtered.length}</Text>
+          </View>
         </View>
-        <View style={styles.xpBadge}>
-          <Text style={styles.xpBadgeText}>🏆 {totalXPDisplay}</Text>
-        </View>
-      </Animated.View>
 
-      {/* ── MAP ── */}
-      {loading ? (
-        <View style={styles.loader}>
-          <Text style={styles.loaderEmoji}>🗺️</Text>
-          <Text style={styles.loaderText}>Chargement de la carte...</Text>
-        </View>
-      ) : (
-        <ScrollView style={styles.mapScroll} contentContainerStyle={{ height: mapH + 140, paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
-          <View style={{ height: mapH, width }}>
-            <Svg width={width} height={mapH} style={StyleSheet.absoluteFillObject} pointerEvents="none">
-              {Array.from({ length: 20 }, (_, i) => (
-                <Circle key={i} cx={10 + ((i * 73) % (width - 20))} cy={10 + ((i * 137) % (mapH - 20))} r={1 + (i % 3)} fill="#fff" opacity={0.4 + (i % 3) * 0.1} />
-              ))}
-            </Svg>
-
-            <View style={styles.chestWrapper}>
-              <View style={styles.chest}>
-                <Svg width={48} height={42} viewBox="0 0 52 46">
-                  <Path d="M4 4 Q26 0 48 4 L48 20 Q26 16 4 20 Z" fill="#D97706" />
-                  <Path d="M4 4 Q26 0 48 4 L48 10 Q26 6 4 10 Z" fill="#F59E0B" opacity={0.7} />
-                  <Path d="M4 20 L4 44 Q26 48 48 44 L48 20 Q26 24 4 20 Z" fill="#D97706" />
-                  <Path d="M4 20 L4 30 Q26 34 48 30 L48 20 Q26 24 4 20 Z" fill="#F59E0B" opacity={0.5} />
-                  <Circle cx={26} cy={32} r={5} fill="#fff" opacity={0.8} />
-                  <Circle cx={26} cy={32} r={3} fill="#D97706" />
-                </Svg>
-              </View>
-            </View>
-
-            {missions.length === 0 ? (
-              <View style={styles.emptyMap}>
-                <Text style={styles.emptyEmoji}>🌟</Text>
-                <Text style={styles.emptyText}>Aucune mission pour cet événement</Text>
-                <Text style={styles.emptySubText}>Crée ta première mission !</Text>
-              </View>
-            ) : (
-              <>
-                <TrailPath count={missions.length} />
-                {missions.map((mission, index) => (
-                  <MissionNode
-                    key={mission.id_mission}
-                    mission={mission}
-                    index={index}
-                    onPress={() => { setSelectedMission(mission); setDetailVisible(true); }}
-                    onEdit={() => handleEdit(mission)}
-                    onDelete={() => handleDelete(mission)}
-                  />
-                ))}
-                {doneCount === missions.length && missions.length > 0 && (
-                  <View style={[styles.trophyWrapper, { top: mapH - 110 }]}>
-                    <Text style={styles.trophyEmoji}>🏆</Text>
-                    <Text style={styles.trophyText}>Événement complété !</Text>
-                  </View>
-                )}
-              </>
-            )}
-
-            <View style={styles.hibouArea}>
-              <SpeechBubble message={hibouMsg} />
-              <HibouGuide emotion="confused" message="" size={110} />
+        {/* ── Bandeau énergie faible ── */}
+        {playerStats.energie < ENERGY_THRESHOLD && (
+          <View style={styles.lowEnergyBanner}>
+            <Text style={styles.lowEnergyIcon}>⚡</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.lowEnergyTitle}>Énergie insuffisante ({Math.round(playerStats.energie)}%)</Text>
+              <Text style={styles.lowEnergyDesc}>Il te faut min. {ENERGY_THRESHOLD}% pour accéder aux missions. Va dormir ou utilise une potion sur le Dashboard !</Text>
             </View>
           </View>
+        )}
+
+        {/* ── Barre de recherche ── */}
+        <View style={styles.searchWrapper}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Rechercher un événement..."
+            placeholderTextColor="#9b8bbf"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery("")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.searchClear}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* ── Stats ── */}
+        <View style={styles.statRow}>
+          {[
+            { val: events.length, label: "Total", color: COLORS.primary },
+            { val: events.filter(e => e.type_boss?.toLowerCase() === "examen").length,    label: "Examens", color: "#e84393" },
+            { val: events.filter(e => e.type_boss?.toLowerCase() === "projet").length,    label: "Projets",  color: "#6c3fcb" },
+            { val: events.filter(e => e.type_boss?.toLowerCase() === "soutenance").length, label: "Souten.", color: "#5ab4e5" },
+          ].map(s => (
+            <View key={s.label} style={styles.statCard}>
+              <Text style={[styles.statVal, { color: s.color }]}>{s.val}</Text>
+              <Text style={styles.statLabel}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* ── Tabs ── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContainer}>
+          {TABS.map(tab => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              style={[styles.tab, activeTab === tab && styles.tabActive]}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
-      )}
 
-      {/* ── CTA ── */}
-      <View style={styles.ctaBar}>
-        <TouchableOpacity style={styles.ctaBtn} onPress={() => { setEditData({ id_boss: Number(eventId) }); setCreateModalVisible(true); }}>
-          <Ionicons name="add" size={22} color="#fff" />
-          <Text style={styles.ctaBtnText}>Créer une mission</Text>
+        {/* ── Cards ── */}
+        {loading ? (
+          <Text style={styles.empty}>Chargement...</Text>
+        ) : filtered.length === 0 ? (
+          <Text style={styles.empty}>Aucun événement trouvé</Text>
+        ) : filtered.map(ev => {
+          const cfg = getConfig(ev.type_boss);
+          return (
+            <View key={ev.id_boss} style={styles.cardWrapper}>
+              <View style={[styles.eventBadge, { backgroundColor: cfg.color }]}>
+                <Text style={styles.eventBadgeText}>{ev.type_boss}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.card, { backgroundColor: cfg.bg }]}
+                activeOpacity={0.88}
+                onPress={() => navigateToEventMissions(String(ev.id_boss), ev.nom)}
+              >
+                <View style={styles.topRow}>
+                  <View style={[styles.iconBox, { backgroundColor: cfg.color }]}>
+                    <Text style={styles.iconText}>{cfg.icon}</Text>
+                  </View>
+                  <View style={styles.infoBox}>
+                    <Text style={styles.eventTitle} numberOfLines={2}>{ev.nom}</Text>
+                    <Text style={[styles.typePill, { color: cfg.color }]}>
+                      {ev.type_boss?.charAt(0).toUpperCase() + ev.type_boss?.slice(1)}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Footer */}
+                <View style={styles.cardFooter}>
+                  <TouchableOpacity
+                    style={[styles.seeMissionsBtn, { backgroundColor: cfg.color }]}
+                    onPress={() => navigateToEventMissions(String(ev.id_boss), ev.nom)}
+                  >
+                    <Text style={styles.seeMissionsText}>Voir les missions →</Text>
+                  </TouchableOpacity>
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => handleEdit(ev)}>
+                      <Ionicons name="pencil-outline" size={16} color="#6c3fcb" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => handleDelete(ev.id_boss)}>
+                      <Ionicons name="trash-outline" size={16} color="#e84393" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+
+        <TouchableOpacity
+          style={styles.createBtn}
+          onPress={() => { setSelectedData(null); setModalVisible(true); }}
+        >
+          <Text style={styles.createBtnText}>＋  Créer événement</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
-      {/* ── Modals ── */}
-      <MissionDetailModal
-        mission={selectedMission} visible={detailVisible}
-        onClose={() => setDetailVisible(false)}
-        onStart={handleStart} onPause={handlePause} onComplete={handleComplete}
-      />
-      <CreateMissionModal
-        visible={createModalVisible}
-        onClose={() => { setCreateModalVisible(false); setEditData(null); }}
-        onSave={() => { fetchMissions(); setCreateModalVisible(false); setEditData(null); }}
-        initialData={editData}
+      <CreateEventModal
+        visible={isModalVisible}
+        onClose={() => { setModalVisible(false); setSelectedData(null); }}
+        onCreate={() => { fetchEvents(); setModalVisible(false); setSelectedData(null); }}
+        initialData={selectedData}
       />
 
-      {/* ── Modale Continuer ou Terminer ── */}
-      <ContinueOrFinishModal
-        visible={continueModalVisible}
-        onContinue={() => {
-          setContinueModalVisible(false);
-          setEditData({ id_boss: Number(eventId) });
-          setCreateModalVisible(true);
-        }}
-        onFinish={() => {
-          setContinueModalVisible(false);
-          finishEvent(missions);
-        }}
-      />
-
-      {/* ── Modale Récompense ── */}
-      <EventRewardModal
-        visible={rewardModal.visible}
-        eventTitle={eventTitle ?? ""}
-        totalXP={rewardModal.totalXP}
-        totalGold={rewardModal.totalGold}
-        onClose={() => setRewardModal(prev => ({ ...prev, visible: false }))}
-      />
+      <Navbar active="events" onChange={() => {}} />
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  screen:         { flex: 1, backgroundColor: "#F5F3FF" },
-  header:         { flexDirection: "row", alignItems: "center", paddingTop: Platform.OS === "android" ? 44 : 56, paddingHorizontal: 16, paddingBottom: 14, backgroundColor: "#fff", borderBottomLeftRadius: 24, borderBottomRightRadius: 24, ...SHADOWS.medium, zIndex: 10 },
-  backBtn:        { width: 38, height: 38, borderRadius: 19, backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center" },
-  headerCenter:   { flex: 1, alignItems: "center", paddingHorizontal: 10 },
-  projectTitle:   { fontSize: 18, fontWeight: "800", color: "#2D1A5E", marginBottom: 8 },
-  progressTrack:  { width: "100%", height: 8, backgroundColor: "#E9D5FF", borderRadius: 4, overflow: "hidden" },
-  progressFill:   { height: "100%", backgroundColor: "#7C3AED", borderRadius: 4 },
-  progressLabel:  { fontSize: 12, color: "#7C3AED", marginTop: 4, fontWeight: "600" },
-  xpBadge:        { backgroundColor: "#FEF3C7", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1.5, borderColor: "#F59E0B" },
-  xpBadgeText:    { fontSize: 13, fontWeight: "800", color: "#92400E" },
-  mapScroll:      { flex: 1 },
-  loader:         { flex: 1, alignItems: "center", justifyContent: "center" },
-  loaderEmoji:    { fontSize: 48, marginBottom: 12 },
-  loaderText:     { fontSize: 16, color: "#7C3AED", fontWeight: "600" },
-  chestWrapper:   { position: "absolute", top: 12, left: 16, zIndex: 5 },
-  chest:          { backgroundColor: "#FFF8E1", borderRadius: 12, padding: 6, ...SHADOWS.light },
-  nodeWrapper:    { position: "absolute", zIndex: 4, maxWidth: width * 0.46 },
-  nodeLeft:       { left: 10 },
-  nodeRight:      { right: 10 },
-  lockNode:       { width: 70, alignItems: "center", backgroundColor: "#F3F4F6", borderRadius: 18, borderWidth: 2, borderColor: "#E5E7EB", padding: 10, ...SHADOWS.light },
-  lockLabel:      { fontSize: 10, fontWeight: "600", color: "#9CA3AF", textAlign: "center", marginTop: 6 },
-  nodeGroup:      { alignItems: "center", width: width * 0.42 },
-  statusPill:     { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, marginBottom: 6, alignSelf: "center" },
-  statusPillText: { color: "#fff", fontSize: 10, fontWeight: "700" },
-  avatarCircle:   { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", borderWidth: 2.5, ...SHADOWS.medium, position: "relative" },
-  avatarIcon:     { fontSize: 26 },
-  coinBadge:      { position: "absolute", top: -12, right: -6 },
-  nodeTitle:      { fontSize: 12, fontWeight: "800", textAlign: "center", marginTop: 8, maxWidth: width * 0.38 },
-  deadlineChip:   { fontSize: 10, fontWeight: "700", color: "#F59E0B", backgroundColor: "#FEF3C7", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, marginTop: 4 },
-  gainsRow:       { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 6, justifyContent: "center" },
-  gainChip:       { fontSize: 10, fontWeight: "600", color: "#4C1D95", backgroundColor: "rgba(124,58,237,0.08)", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
-  nodeActions:    { flexDirection: "row", gap: 6, marginTop: 8 },
-  actionBtn:      { width: 26, height: 26, borderRadius: 8, backgroundColor: "rgba(124,58,237,0.08)", alignItems: "center", justifyContent: "center" },
-  trophyWrapper:  { position: "absolute", left: 0, right: 0, alignItems: "center", zIndex: 5 },
-  trophyEmoji:    { fontSize: 52 },
-  trophyText:     { fontSize: 16, fontWeight: "800", color: "#92400E", marginTop: 4 },
-  emptyMap:       { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 120 },
-  emptyEmoji:     { fontSize: 56, marginBottom: 12 },
-  emptyText:      { fontSize: 17, fontWeight: "800", color: "#4C1D95", textAlign: "center" },
-  emptySubText:   { fontSize: 14, color: "#7C3AED", marginTop: 6 },
-  hibouArea:      { position: "absolute", bottom: 10, left: 10, width: 170, zIndex: 6, alignItems: "flex-start" },
-  bubbleWrapper:  { alignItems: "center", marginLeft: 10, marginBottom: 0 },
-  bubble:         { backgroundColor: "#fff", borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12, maxWidth: 150, ...SHADOWS.light, borderWidth: 1.5, borderColor: "#C4B5E8" },
-  bubbleText:     { fontSize: 12, fontWeight: "600", color: "#2D1A5E", textAlign: "center", lineHeight: 18 },
-  bubbleArrow:    { width: 0, height: 0, borderLeftWidth: 9, borderRightWidth: 9, borderTopWidth: 11, borderLeftColor: "transparent", borderRightColor: "transparent", borderTopColor: "#fff", marginTop: -1 },
-  ctaBar:         { position: "absolute", bottom: 0, left: 0, right: 0, paddingBottom: Platform.OS === "ios" ? 30 : 18, paddingTop: 14, paddingHorizontal: 20, backgroundColor: "rgba(245,243,255,0.97)", borderTopLeftRadius: 24, borderTopRightRadius: 24, ...SHADOWS.medium },
-  ctaBtn:         { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#7C3AED", paddingVertical: 15, borderRadius: 50, gap: 8, ...SHADOWS.medium },
-  ctaBtnText:     { color: "#fff", fontSize: 16, fontWeight: "800" },
-});
+  container:      { flex: 1, backgroundColor: "#f5f3ff" },
+  scrollContent:  { paddingTop: 60, paddingHorizontal: SIZES.padding, paddingBottom: 120 },
 
-const continueStyles = StyleSheet.create({
-  overlay:              { flex: 1, justifyContent: "center", alignItems: "center" },
-  modalGradient:        { width: width * 0.92, borderRadius: 35, borderWidth: 2, borderColor: "#644979", padding: 2 },
-  container:            { padding: 20, alignItems: "center" },
-  statusFrame:          { backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 30, borderWidth: 2, borderColor: "white", paddingTop: 44, paddingBottom: 20, paddingHorizontal: 15, position: "relative", marginBottom: 16, width: "100%" },
-  owlImage:             { position: "absolute", top: -35, left: 15, width: 65, height: 65, zIndex: 10 },
-  statusBadge:          { position: "absolute", top: -18, alignSelf: "center", backgroundColor: "white", borderRadius: 20, paddingHorizontal: 6, paddingVertical: 2 },
-  badgeEmoji:           { fontSize: 26 },
-  textContent:          { alignItems: "center" },
-  mainTitle:            { fontSize: 22, fontWeight: "900", color: "#5A4C91", marginBottom: 5 },
-  subText:              { textAlign: "center", color: "#333", fontSize: 13, fontWeight: "bold", lineHeight: 18 },
-  chipsCol:             { width: "100%", alignItems: "center", gap: 6, marginBottom: 16 },
-  chip:                 { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.4)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, width: "100%", justifyContent: "center" },
-  chipText:             { fontSize: 12, fontWeight: "700", color: "#4C1D95" },
-  chipSep:              { fontSize: 12, fontWeight: "600", color: "#7C5DB0" },
-  actionPill:           { flexDirection: "row", backgroundColor: "rgba(0,0,0,0.1)", borderRadius: 30, padding: 5, width: "100%", alignItems: "center" },
-  tabFlex:              { flex: 1, alignItems: "center", justifyContent: "center" },
-  whiteStrokeWrapper:   { width: "100%", borderRadius: 25, borderWidth: 1.5, borderColor: "white" },
-  activeTabBtnGradient: { width: "100%", paddingVertical: 10, borderRadius: 25, alignItems: "center", justifyContent: "center" },
-  activeTabText:        { color: "white", fontWeight: "bold", fontSize: 11, textAlign: "center" },
-  inactiveTabText:      { color: "#5A4C91", fontWeight: "bold", fontSize: 11, textAlign: "center" },
-});
+  // ── Section title ──
+  sectionRow:     { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  sectionTitle:   { fontWeight: "800", fontSize: 20, color: "#2d1a5e" },
+  countBadge:     { backgroundColor: "#6c3fcb", borderRadius: 12, paddingHorizontal: 9, paddingVertical: 2 },
+  countText:      { color: "#fff", fontWeight: "800", fontSize: 13 },
 
-const detailStyles = StyleSheet.create({
-  overlay:        { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
-  container:      { backgroundColor: "#F5F3FF", borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "88%", paddingTop: 8 },
-  handle:         { width: 40, height: 4, backgroundColor: "#D1D5DB", borderRadius: 2, alignSelf: "center", marginBottom: 12 },
-  header:         { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 14, marginHorizontal: 16, borderRadius: 16, marginBottom: 8 },
-  headerIcon:     { fontSize: 36 },
-  title:          { fontSize: 18, fontWeight: "800", color: "#2D1A5E", flex: 1 },
-  statusPill:     { alignSelf: "flex-start", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, marginTop: 4 },
-  statusPillText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  closeBtn:       { width: 32, height: 32, borderRadius: 16, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", ...SHADOWS.light },
-  body:           { paddingHorizontal: 20, paddingBottom: 40 },
-  section:        { marginBottom: 16 },
-  sectionTitle:   { fontSize: 14, fontWeight: "800", color: "#4C1D95", marginBottom: 8 },
-  desc:           { fontSize: 14, color: "#374151", lineHeight: 22, backgroundColor: "#fff", borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: "#E9D5FF" },
-  infoGrid:       { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16 },
-  infoCard:       { flex: 1, minWidth: 80, backgroundColor: "#fff", borderRadius: 14, padding: 12, alignItems: "center", borderWidth: 1.5, borderColor: "#E9D5FF" },
-  infoEmoji:      { fontSize: 22, marginBottom: 4 },
-  infoLabel:      { fontSize: 10, color: "#9CA3AF", fontWeight: "600" },
-  infoVal:        { fontSize: 13, fontWeight: "800", color: "#2D1A5E", marginTop: 2 },
-  rewardNote:     { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#EDE9FE", borderRadius: 12, padding: 12, marginBottom: 16 },
-  rewardNoteText: { fontSize: 12, color: "#7C3AED", fontWeight: "600", flex: 1 },
-  ctaGroup:       { gap: 10, marginTop: 4 },
-  ctaBtn:         { flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 50, paddingVertical: 15, gap: 8 },
-  ctaBtnText:     { color: "#fff", fontSize: 16, fontWeight: "800" },
-});
+  // ── Search bar ──
+  searchWrapper:  { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, ...SHADOWS.light },
+  searchIcon:     { fontSize: 16, marginRight: 8 },
+  searchInput:    { flex: 1, fontSize: 14, color: "#2d1a5e", padding: 0 },
+  searchClear:    { fontSize: 13, color: "#9b8bbf", fontWeight: "700", marginLeft: 8 },
 
-const rewardStyles = StyleSheet.create({
-  overlay:      { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center" },
-  container:    { backgroundColor: "#F5F3FF", borderRadius: 28, padding: 28, width: "85%", alignItems: "center", ...SHADOWS.medium },
-  emoji:        { fontSize: 64, marginBottom: 12 },
-  title:        { fontSize: 24, fontWeight: "800", color: "#2D1A5E", marginBottom: 4, textAlign: "center" },
-  subtitle:     { fontSize: 15, color: "#7C3AED", fontWeight: "600", marginBottom: 24, textAlign: "center" },
-  rewardsRow:   { flexDirection: "row", gap: 16, marginBottom: 20 },
-  rewardCard:   { backgroundColor: "#fff", borderRadius: 20, padding: 20, alignItems: "center", flex: 1, borderWidth: 2, borderColor: "#E9D5FF", ...SHADOWS.light },
-  rewardEmoji:  { fontSize: 32, marginBottom: 8 },
-  rewardVal:    { fontSize: 26, fontWeight: "800", color: "#2D1A5E" },
-  rewardLabel:  { fontSize: 13, color: "#9CA3AF", fontWeight: "600", marginTop: 2 },
-  congrats:     { fontSize: 14, color: "#4C1D95", textAlign: "center", marginBottom: 24, lineHeight: 20 },
-  closeBtn:     { backgroundColor: "#7C3AED", borderRadius: 50, paddingVertical: 14, paddingHorizontal: 40 },
-  closeBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  // ── Stats ──
+  statRow:        { flexDirection: "row", gap: 8, marginBottom: 20 },
+  statCard:       { flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 10, alignItems: "center", ...SHADOWS.light },
+  statVal:        { fontSize: 18, fontWeight: "800" },
+  statLabel:      { fontSize: 10, color: "#9b8bbf", fontWeight: "600", marginTop: 2 },
+
+  // ── Tabs ──
+  tabsContainer:  { gap: 8, marginBottom: 24 },
+  tab:            { borderRadius: 20, borderWidth: 2, borderColor: "#c0a8f0", paddingVertical: 7, paddingHorizontal: 14 },
+  tabActive:      { backgroundColor: "#6c3fcb", borderWidth: 0 },
+  tabText:        { color: "#6c3fcb", fontWeight: "700", fontSize: 13 },
+  tabTextActive:  { color: "#fff" },
+
+  // ── Empty ──
+  empty:          { textAlign: "center", color: "#9b8bbf", marginTop: 40, fontSize: 15 },
+
+  // ── Cards ──
+  cardWrapper:    { marginBottom: 24 },
+  eventBadge:     { alignSelf: "flex-start", borderRadius: 20, paddingVertical: 6, paddingHorizontal: 22, marginLeft: 14, marginBottom: -14, zIndex: 2, ...SHADOWS.light },
+  eventBadgeText: { color: "#fff", fontWeight: "700", fontSize: 12, textTransform: "capitalize" },
+  card:           { borderRadius: 20, paddingTop: 24, paddingBottom: 14, paddingHorizontal: 16, ...SHADOWS.medium },
+  topRow:         { flexDirection: "row", gap: 12, alignItems: "center" },
+  iconBox:        { width: 58, height: 58, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+  iconText:       { fontSize: 26 },
+  infoBox:        { flex: 1 },
+  eventTitle:     { fontWeight: "800", fontSize: 17, color: "#2d1a5e" },
+  typePill:       { fontSize: 13, fontWeight: "600", marginTop: 4, textTransform: "capitalize" },
+  cardFooter:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.06)" },
+  seeMissionsBtn: { borderRadius: 20, paddingVertical: 7, paddingHorizontal: 14 },
+  seeMissionsText:{ color: "#fff", fontWeight: "700", fontSize: 13 },
+  cardActions:    { flexDirection: "row", gap: 10 },
+  iconBtn:        { width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(120,90,180,0.08)", alignItems: "center", justifyContent: "center" },
+
+  // ── Create button ──
+  createBtn:      { backgroundColor: "#4b2fa0", borderRadius: 30, paddingVertical: 15, alignItems: "center", marginTop: 8 },
+  createBtnText:  { color: "#fff", fontWeight: "800", fontSize: 17 },
+  // ── Bandeau énergie faible ──
+  lowEnergyBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#fff3cd", borderRadius: 14, padding: 12, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: "#f59e0b" },
+  lowEnergyIcon:   { fontSize: 22 },
+  lowEnergyTitle:  { fontWeight: "800", fontSize: 13, color: "#92400e", marginBottom: 2 },
+  lowEnergyDesc:   { fontSize: 11, color: "#a16207", lineHeight: 16 },
 });

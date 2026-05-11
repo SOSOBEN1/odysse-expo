@@ -697,6 +697,7 @@ import SuggestedMissionsSection from "../components/Suggestedmissionssection"
 import { useAvatar } from "../constants/AvatarContext";
 import { useUser } from "../constants/UserContext";
 import { supabase } from "../constants/supabase";
+import { useStats } from "../constants/StatsContext";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 import { sleepRestore, applyPassiveEnergyRecovery, useEnergyPotion, buyEnergyPotion, ENERGY_POTION } from "../../../backend/services/Userstatsservice";
 import { useDerivedStats } from "../hooks/useDerivedStats";
@@ -948,9 +949,13 @@ const CircularProgress = ({ percent, color, size = 70, strokeWidth = 7 }: { perc
 // ─── StatsCard ────────────────────────────────────────────────────────────────
 const StatsCard = () => {
   const { userId } = useUser();
-  const { stats, refreshStats } = useAllStats();
+  // ✅ On utilise le contexte global — mis à jour partout dans l'app
+  const { stats, refreshStats } = useStats();
   const [potionQty, setPotionQty]         = useState(0);
   const [potionModal, setPotionModal]     = useState(false);
+  const [sleepModal, setSleepModal]       = useState(false);
+  const [sleepCountdown, setSleepCountdown] = useState(3);
+  const [sleepReady, setSleepReady]       = useState(false);
   const [sleeping, setSleeping]           = useState(false);
   const [usingPotion, setUsingPotion]     = useState(false);
   const [toastMsg, setToastMsg]           = useState<string | null>(null);
@@ -974,9 +979,26 @@ const StatsCard = () => {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  // Bouton Dormir
+  // Bouton Dormir — ouvre le modal de confirmation
+  const openSleepModal = () => {
+    setSleepCountdown(3);
+    setSleepReady(false);
+    setSleepModal(true);
+    // Compte à rebours : 3 → 2 → 1 → Prêt
+    let count = 3;
+    const interval = setInterval(() => {
+      count -= 1;
+      setSleepCountdown(count);
+      if (count <= 0) {
+        clearInterval(interval);
+        setSleepReady(true);
+      }
+    }, 1000);
+  };
+
   const handleSleep = async () => {
     if (!userId || sleeping) return;
+    setSleepModal(false);
     setSleeping(true);
     const result = await sleepRestore(String(userId));
     setSleeping(false);
@@ -1032,28 +1054,49 @@ const StatsCard = () => {
         {/* Bouton Dormir */}
         <TouchableOpacity
           style={[statsStyles.sleepBtn, sleeping && { opacity: 0.6 }]}
-          onPress={handleSleep}
+          onPress={openSleepModal}
           disabled={sleeping}
         >
-          <Text style={statsStyles.sleepBtnText}>
-            {sleeping ? "⏳ ..." : "😴 Dormir (1x/jour)"}
-          </Text>
-          <Text style={statsStyles.sleepBtnSub}>⚡ Énergie → 100 • 😰 Stress -20</Text>
+          <View style={statsStyles.sleepBtnRow}>
+            <Text style={statsStyles.sleepBtnEmoji}>{sleeping ? "⏳" : "😴"}</Text>
+            <View>
+              <Text style={statsStyles.sleepBtnText}>
+                {sleeping ? "En cours..." : "Dormir"}
+              </Text>
+              <Text style={statsStyles.sleepBtnSub}>1× par jour</Text>
+            </View>
+          </View>
+          <View style={statsStyles.sleepBtnEffects}>
+            <View style={statsStyles.effectChip}>
+              <Text style={statsStyles.effectChipText}>⚡ +100</Text>
+            </View>
+            <View style={[statsStyles.effectChip, { backgroundColor: "#2d1b4e" }]}>
+              <Text style={statsStyles.effectChipText}>😰 −20</Text>
+            </View>
+          </View>
         </TouchableOpacity>
 
         {/* Bouton Potion */}
         <TouchableOpacity
-          style={statsStyles.potionBtn}
+          style={[statsStyles.potionBtn, potionQty > 0 && { backgroundColor: "#1e3a1e" }]}
           onPress={() => potionQty > 0 ? handleUsePotion() : setPotionModal(true)}
         >
-          <Text style={statsStyles.potionBtnText}>
-            {potionQty > 0
-              ? `⚡ Potion (×${potionQty})`
-              : "🧪 Acheter potion"}
-          </Text>
-          <Text style={statsStyles.potionBtnSub}>
-            {potionQty > 0 ? `+${ENERGY_POTION.energyGain} énergie` : `${ENERGY_POTION.price} 🪙 gold`}
-          </Text>
+          <View style={statsStyles.sleepBtnRow}>
+            <Text style={statsStyles.sleepBtnEmoji}>🧪</Text>
+            <View>
+              <Text style={statsStyles.sleepBtnText}>
+                {potionQty > 0 ? `Potion ×${potionQty}` : "Acheter potion"}
+              </Text>
+              <Text style={statsStyles.sleepBtnSub}>
+                {potionQty > 0 ? "Appuyer pour utiliser" : `${ENERGY_POTION.price} 🪙 gold`}
+              </Text>
+            </View>
+          </View>
+          <View style={statsStyles.sleepBtnEffects}>
+            <View style={[statsStyles.effectChip, { backgroundColor: "rgba(255,255,255,0.15)" }]}>
+              <Text style={statsStyles.effectChipText}>⚡ +{ENERGY_POTION.energyGain}</Text>
+            </View>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -1080,6 +1123,42 @@ const StatsCard = () => {
           </View>
         </Pressable>
       </Modal>
+
+      {/* Modal confirmation sommeil */}
+      <Modal visible={sleepModal} transparent animationType="slide">
+        <View style={statsStyles.overlay}>
+          <View style={[statsStyles.modalBox, { paddingBottom: 28 }]}>
+            <Text style={{ fontSize: 52, marginBottom: 8 }}>😴</Text>
+            <Text style={statsStyles.modalTitle}>Prêt à dormir ?</Text>
+            <Text style={[statsStyles.modalDesc, { marginBottom: 20 }]}>
+              En dormant, ton énergie remonte à 100% et ton stress baisse de 20.{"\n"}
+              Cette action est utilisable 1 fois par jour.
+            </Text>
+
+            {/* Compte à rebours animé */}
+            {!sleepReady ? (
+              <View style={statsStyles.sleepCountdownBox}>
+                <Text style={statsStyles.sleepCountdownNum}>{sleepCountdown}</Text>
+                <Text style={statsStyles.sleepCountdownLabel}>Prépare-toi...</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[statsStyles.modalBuyBtn, { backgroundColor: "#1a1a2e", width: "100%" }]}
+                onPress={handleSleep}
+              >
+                <Text style={statsStyles.modalBuyText}>✅ Confirmer le sommeil</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              onPress={() => setSleepModal(false)}
+              style={{ marginTop: 16 }}
+            >
+              <Text style={statsStyles.modalCancel}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1093,10 +1172,15 @@ const statsStyles = StyleSheet.create({
   sub:          { fontSize: 9, color: COLORS.statSubColor },
   // Boutons énergie
   energyBtns:   { flexDirection: "row", gap: 8, marginTop: 14 },
-  sleepBtn:     { flex: 1, backgroundColor: "#1a1a2e", borderRadius: 12, padding: 10, alignItems: "center" },
-  sleepBtnText: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  sleepBtnSub:  { color: "#aaa", fontSize: 9, marginTop: 3 },
-  potionBtn:    { flex: 1, backgroundColor: "#2d1b69", borderRadius: 12, padding: 10, alignItems: "center" },
+  sleepBtn:     { flex: 1, backgroundColor: "#1a1a2e", borderRadius: 14, padding: 12, gap: 8 },
+  sleepBtnRow:  { flexDirection: "row", alignItems: "center", gap: 8 },
+  sleepBtnEmoji:{ fontSize: 22 },
+  sleepBtnText: { color: "#fff", fontWeight: "800", fontSize: 13 },
+  sleepBtnSub:  { color: "#9ca3af", fontSize: 10, marginTop: 1 },
+  sleepBtnEffects: { flexDirection: "row", gap: 6 },
+  effectChip:   { backgroundColor: "#2d2b5e", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  effectChipText: { color: "#c4b5fd", fontWeight: "700", fontSize: 11 },
+  potionBtn:    { flex: 1, backgroundColor: "#2d1b69", borderRadius: 14, padding: 12, gap: 8 },
   potionBtnText:{ color: "#fff", fontWeight: "800", fontSize: 12 },
   potionBtnSub: { color: "#aaa", fontSize: 9, marginTop: 3 },
   // Toast
@@ -1111,6 +1195,10 @@ const statsStyles = StyleSheet.create({
   modalBuyBtn:  { backgroundColor: "#6d28d9", borderRadius: 14, paddingVertical: 12, paddingHorizontal: 40, marginBottom: 10 },
   modalBuyText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   modalCancel:  { color: "#888", fontSize: 13 },
+  // Sleep countdown
+  sleepCountdownBox:   { width: 90, height: 90, borderRadius: 45, backgroundColor: "#1a1a2e", justifyContent: "center", alignItems: "center", marginBottom: 16 },
+  sleepCountdownNum:   { color: "#c4b5fd", fontSize: 38, fontWeight: "900" },
+  sleepCountdownLabel: { color: "#9ca3af", fontSize: 11, marginTop: 2 },
 });
 
 // ─── MissionCard ──────────────────────────────────────────────────────────────

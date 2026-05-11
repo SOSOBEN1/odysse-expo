@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Audio } from 'expo-av'
 import * as Notifications from 'expo-notifications'
 import { useRouter } from 'expo-router'
@@ -33,6 +34,10 @@ export default function NotificationsScreen() {
   useEffect(() => {
     const sub = Notifications.addNotificationReceivedListener(async () => {
       charger()
+
+      const reminders = await AsyncStorage.getItem('pref_reminders')
+      if (reminders === 'false') return
+
       try {
         const { sound } = await Audio.Sound.createAsync(
           require('../assets/sounds/notification.wav')
@@ -61,8 +66,13 @@ export default function NotificationsScreen() {
   const handleAccepter = async (notif: any) => {
     setActionId(notif.id_notification)
     await accepterInvitation(notif.id_notification, notif.id_defi, userId ?? 0)
-    await planifierRappelDefi(notif.id_defi, notif.titre, 60)
-    await envoyerMotivation()
+
+    const notifsPref = await AsyncStorage.getItem('pref_notifications')
+    if (notifsPref !== 'false') {
+      await planifierRappelDefi(notif.id_defi, notif.titre, 60)
+      await envoyerMotivation()
+    }
+
     await charger()
     setActionId(null)
     router.push({
@@ -82,7 +92,6 @@ export default function NotificationsScreen() {
     const isInvitation = item.type === 'invitation_defi'
     const isLoading = actionId === item.id_notification
 
-    // Icône selon le type de notif
     const getIcon = () => {
       if (item.type === 'invitation_defi') return '⚔️'
       if (item.type === 'mission_reminder') return '📅'

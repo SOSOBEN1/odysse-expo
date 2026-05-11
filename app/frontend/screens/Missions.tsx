@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -6,10 +7,6 @@ import {
   TouchableOpacity, View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import {
-  annulerRappelsMission,
-  planifierRappelsMission,
-} from "../../../backend//models/NotificationService";
 import type { Mission, MissionTimer } from "../../../backend/models/mission.types";
 import {
   computeProgressPercent,
@@ -17,6 +14,10 @@ import {
   formatElapsed,
   getDeadlineColor,
 } from "../../../backend/models/mission.utils";
+import {
+  annulerRappelsMission,
+  planifierRappelsMission,
+} from "../../../backend/models/NotificationService";
 import { useMissions } from "../../../backend/viewmodels/useMissions";
 import AvatarCrd from "../components/AvatarCrd";
 import CreateEventModal from "../components/CreateEventModal";
@@ -29,7 +30,6 @@ import { useAvatar } from "../constants/AvatarContext";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
-
 // ─────────────────────────────────────────────────────────────
 //  Constants
 // ─────────────────────────────────────────────────────────────
@@ -281,8 +281,13 @@ export default function MissionsScreen() {
   } = useMissions(userId !== null ? String(userId) : null);
 
   // ── Planifier rappels quand les missions sont chargées ──
-  useEffect(() => {
-    if (!missions || missions.length === 0) return;
+ useEffect(() => {
+  if (!missions || missions.length === 0) return;
+
+  const planifier = async () => {
+    const notifs = await AsyncStorage.getItem('pref_notifications')
+    const reminders = await AsyncStorage.getItem('pref_reminders')
+    if (notifs === 'false' || reminders === 'false') return
 
     missions.forEach(async (mission) => {
       const timer = getTimer(mission.id);
@@ -294,7 +299,10 @@ export default function MissionsScreen() {
         );
       }
     });
-  }, [missions]);
+  }
+
+  planifier()
+}, [missions]);
 
   // ── Finish avec annulation des rappels ──
   const handleFinishWithNotif = async (id: number) => {

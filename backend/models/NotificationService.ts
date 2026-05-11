@@ -3,13 +3,13 @@ import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 Notifications.setNotificationHandler({
-  handleNotification: async () => {
+  handleNotification: async (): Promise<Notifications.NotificationBehavior> => {
     const sound = await AsyncStorage.getItem('pref_sound')
-    const notifs = await AsyncStorage.getItem('pref_notifications')
+    const reminders = await AsyncStorage.getItem('pref_reminders')
 
     return {
-      shouldShowAlert: notifs !== 'false',
-      shouldPlaySound: sound !== 'false',
+      shouldShowAlert: true,
+      shouldPlaySound: sound !== 'false' && reminders !== 'false',
       shouldSetBadge: true,
     } as Notifications.NotificationBehavior
   },
@@ -94,13 +94,25 @@ export async function envoyerMotivation() {
   })
 }
 
+const RAPPELS_QUOTIDIENS = [
+  { title: '🌅 Une nouvelle journée, une nouvelle victoire !', body: 'Approche-toi de ton objectif, chaque effort compte !' },
+  { title: '💪 Fais une journée productive !', body: 'Les grands résultats viennent des petites actions quotidiennes.' },
+  { title: '🎯 Tu es plus proche que hier !', body: 'Continue sur ta lancée, ton objectif est à portée de main !' },
+  { title: '🔥 C\'est parti pour aujourd\'hui !', body: 'Une journée de plus pour devenir la meilleure version de toi !' },
+  { title: '⚡ Ta progression t\'attend !', body: 'Ouvre Odyssée et avance vers tes objectifs !' },
+  { title: '🌟 Chaque jour compte !', body: 'Les héros se forgent dans la régularité. À toi de jouer !' },
+]
+
 export async function planifierRappelQuotidien(heure = 9, minute = 0) {
   await Notifications.cancelScheduledNotificationAsync('rappel-quotidien').catch(() => {})
+
+  const msg = RAPPELS_QUOTIDIENS[Math.floor(Math.random() * RAPPELS_QUOTIDIENS.length)]
+
   await Notifications.scheduleNotificationAsync({
     identifier: 'rappel-quotidien',
     content: {
-      title: '🎯 Ton défi t\'attend !',
-      body: 'Ouvre Odyssée et relève ton défi du jour !',
+      title: msg.title,
+      body: msg.body,
       sound: 'notification.wav',
       data: { type: 'rappel' },
       ...(Platform.OS === 'android' && { channelId: 'odyssee_v2' }),

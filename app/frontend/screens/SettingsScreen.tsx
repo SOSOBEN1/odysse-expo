@@ -6,8 +6,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Dimensions, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import {
-    demanderPermission,
-    planifierRappelQuotidien
+  demanderPermission
 } from "../../../backend/models/NotificationService";
 import ChangePasswordModal from "../components/ChangePasswordModal";
 import WaveBackground from "../components/waveBackground";
@@ -62,16 +61,10 @@ export default function SettingsScreen() {
 
   // ── Activer/désactiver les rappels ──
   const handleReminders = async (value: boolean) => {
-    setReminders(value)
-    await AsyncStorage.setItem('pref_reminders', String(value))
-
-    if (value) {
-      await planifierRappelQuotidien(9, 0)
-    } else {
-      await Notifications.cancelScheduledNotificationAsync('rappel-quotidien').catch(() => {})
-      await Notifications.cancelScheduledNotificationAsync('rappel-inactivite').catch(() => {})
-    }
-  }
+  setReminders(value)
+  await AsyncStorage.setItem('pref_reminders', String(value))
+  // juste sauvegarder la préférence son — pas d'annulation
+}
 
   const stars = [
     { top: 50, left: 30, size: 20, opacity: 0.6 },
@@ -163,6 +156,23 @@ export default function SettingsScreen() {
           <Ionicons name="chevron-forward" size={20} color="#6949a8" />
         </TouchableOpacity>
 
+
+// Bouton test
+<TouchableOpacity onPress={async () => {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: '🌅 Une nouvelle journée, une nouvelle victoire !',
+      body: 'Approche-toi de ton objectif, chaque effort compte !',
+      sound: true,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: 10,
+    },
+  })
+}}>
+  <Text>Test notif 10s</Text>
+</TouchableOpacity>
         <TouchableOpacity
           style={localStyles.logoutBtn}
           onPress={() => router.replace('/frontend/screens/Login')}

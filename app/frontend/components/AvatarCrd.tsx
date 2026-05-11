@@ -20,7 +20,6 @@ export default function AvatarCrd({ model, bgColor = "#ffffff", isTransparent = 
         const asset = Asset.fromModule(model);
         await asset.downloadAsync();
 
-        // ✅ Fix: localUri peut être invalide (ex: "/avatar_1" sans extension)
         let uri = asset.localUri;
 
         if (!uri || !uri.includes('.')) {
@@ -71,35 +70,69 @@ export default function AvatarCrd({ model, bgColor = "#ffffff", isTransparent = 
               scene = new THREE.Scene();
               if(${!isTransparent}) scene.background = new THREE.Color(${threeBg});
 
-              camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+              camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
               renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
               renderer.setSize(window.innerWidth, window.innerHeight);
               renderer.setPixelRatio(window.devicePixelRatio);
+              // ✅ Activer le tone mapping pour des couleurs plus vives
+              renderer.outputEncoding = THREE.sRGBEncoding;
+              renderer.toneMapping = THREE.ACESFilmicToneMapping;
+              renderer.toneMappingExposure = 1.1;
               document.body.appendChild(renderer.domElement);
 
-              const light = new THREE.AmbientLight(0xffffff, 2.5);
-              scene.add(light);
-              const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-              dirLight.position.set(2, 2, 5);
-              scene.add(dirLight);
+              // Lumière ambiante modérée
+              const ambientLight = new THREE.AmbientLight(0xffffff, 2.2);
+              scene.add(ambientLight);
+
+              // Lumière directionnelle principale (face avant)
+              const frontLight = new THREE.DirectionalLight(0xffffff, 1.6);
+              frontLight.position.set(0, 2, 5);
+              scene.add(frontLight);
+
+              // Lumière de remplissage légère
+              const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
+              fillLight.position.set(-3, 1, 2);
+              scene.add(fillLight);
+
+              // Lumière de contour douce
+              const rimLight = new THREE.DirectionalLight(0xffffff, 0.4);
+              rimLight.position.set(2, 3, -4);
+              scene.add(rimLight);
 
               const bytes = new Uint8Array(atob("${base64}").split('').map(c => c.charCodeAt(0)));
               new THREE.GLTFLoader().parse(bytes.buffer, '', (gltf) => {
                 modelAnim = gltf.scene;
+
+                // ✅ Forcer sRGB sur toutes les textures du modèle
+                modelAnim.traverse((child) => {
+                  if (child.isMesh && child.material) {
+                    const mats = Array.isArray(child.material) ? child.material : [child.material];
+                    mats.forEach(mat => {
+                      if (mat.map) mat.map.encoding = THREE.sRGBEncoding;
+                      // Augmenter légèrement la luminosité des matériaux sombres
+
+                    });
+                  }
+                });
+
                 const box = new THREE.Box3().setFromObject(modelAnim);
                 const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());
-                modelAnim.position.sub(center);
+
+                // ✅ Centrer légèrement vers le haut pour voir le visage
+                modelAnim.position.set(-center.x, -center.y + size.y * 0.05, -center.z);
                 scene.add(modelAnim);
+
+                // ✅ Caméra plus proche (1.8 au lieu de 2.5) + légèrement vers le haut
                 const maxDim = Math.max(size.x, size.y, size.z);
-                camera.position.z = maxDim * 2.5;
-                camera.lookAt(0, 0, 0);
+                camera.position.set(0, size.y * 0.1, maxDim * 1.8);
+                camera.lookAt(0, size.y * 0.05, 0);
               });
               animate();
             }
             function animate() {
               requestAnimationFrame(animate);
-              if (modelAnim) modelAnim.rotation.y += 0.015;
+              if (modelAnim) modelAnim.rotation.y += 0.012;
               renderer.render(scene, camera);
             }
             init();

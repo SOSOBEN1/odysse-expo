@@ -266,8 +266,8 @@ if (initialData?.id_mission) {
             />
 
             {/* DURÉE + DIFFICULTÉ */}
-            <View style={modalStyles.row}>
-              <View style={modalStyles.half}>
+            <View style={[modalStyles.row, { zIndex: 20 }]}>
+              <View style={[modalStyles.half, { zIndex: 20 }]}>
                 <Text style={modalStyles.label}>Durée (min)</Text>
                 <TextInput
                   style={modalStyles.input}
@@ -284,9 +284,12 @@ if (initialData?.id_mission) {
               </View>
             </View>
 
-            {/* PRIORITÉ */}
-            <Text style={[modalStyles.label, { marginTop: 14 }]}>Priorité *</Text>
-            <Dropdown label="Priorité" value={priority} options={PRIORITIES} onSelect={setPriority} />
+           
+          {/* PRIORITÉ */}
+<View style={{ zIndex: 10, marginTop: 14 }}>
+  <Text style={modalStyles.label}>Priorité *</Text>
+  <Dropdown label="Priorité" value={priority} options={PRIORITIES} onSelect={setPriority} />
+</View>
 
             {/* ✅ DATE LIMITE */}
             <Text style={[modalStyles.label, { marginTop: 14 }]}>Date limite</Text>

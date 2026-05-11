@@ -11,6 +11,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ViewStyle,
 } from "react-native";
 import AvatarCrd from "../components/AvatarCrd";
 import BackButton from "../components/BackButton";
@@ -20,6 +21,7 @@ import { useAvatar } from "../constants/AvatarContext";
 import { useUser } from "../constants/UserContext";
 import { supabase } from "../constants/supabase";
 import { AVATAR_MAP, resolveAvatarModel } from "../constants/avatarMap";
+import { useSounds } from "../hooks/useSounds";
 
 const BASE_AVATARS_BY_GENDER: Record<"Feminin" | "Masculin", string[]> = {
   Feminin: ["avatar_1", "avatar_2"],
@@ -183,7 +185,7 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const { setSelectedModel } = useAvatar();
   const { userId, gender } = useUser();
-
+ const { playSound } = useSounds();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [nom, setNom] = useState("");
@@ -301,6 +303,7 @@ export default function EditProfileScreen() {
       }
 
       setSelectedModel(resolveAvatarModel(avatarKey));
+      playSound("changerMDP"); // 🔊
       setShowSuccess(true);
     } catch {
       setError("Une erreur inattendue est survenue");

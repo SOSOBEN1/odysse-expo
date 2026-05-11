@@ -378,7 +378,7 @@ export default function ZoneScreen() {
     markDone,
     updatePuzzle,
     acceptSuggestion,
-  } = useZoneMissions(userId, Number(zoneId), puzzle?.total_pieces ?? 3);
+  } =useZoneMissions(String(userId), Number(zoneId), 3);
 
   const totalPieces = puzzle?.total_pieces ?? 3;
   const piecesEarned = puzzle?.pieces_earned ?? 0;

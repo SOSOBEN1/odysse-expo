@@ -1,3 +1,4 @@
+// 
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import {
@@ -13,6 +14,7 @@ import {
 import Svg, { Circle, G, Path } from "react-native-svg";
 import Logo from "../assets/images/logo.svg";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
+import { useSounds } from "../hooks/useSounds";
 
 const { width, height } = Dimensions.get("screen");
 
@@ -208,6 +210,7 @@ const CTAButton = ({ onPress }: { onPress: () => void }) => {
 // ─── StartScreen ──────────────────────────────────────────────────────────────
 const StartScreen = () => {
   const router = useRouter();
+  const { playSound } = useSounds();
 
   // Animations d'entrée
   const logoAnim = useRef(new Animated.Value(0)).current;
@@ -252,6 +255,9 @@ const StartScreen = () => {
     floating(deco3, 1900, 200);
     floating(deco4, 2500, 600);
     floating(deco5, 2100, 300);
+
+    // Son d'accueil via le hook
+    playSound("acceuil", 0.7);
   }, []);
 
   const y1 = deco1.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });

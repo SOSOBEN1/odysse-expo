@@ -340,6 +340,88 @@ export async function completeMission(
   };
 }
 
+// ─── Fail Mission ─────────────────────────────────────────────────────────────
+
+/**
+ * Call this when a user FAILS a mission (deadline passed or manual abandon).
+ *
+ * Malus appliqués :
+ *   - Énergie  : -energie_cout  (la mission a quand même coûté de l'énergie)
+ *   - Stress   : +difficulte * 5  (l'échec génère du stress)
+ *   - Connaissance : -5  (on n'a pas appris, léger recul)
+ *   - Organisation : -difficulte * 3  (objectif manqué)
+ *   - Sérenité : calculée depuis le nouveau stress
+ *   - Concentration : recalculée depuis la nouvelle énergie
+ *   - Discipline : pénalité pour mission ratée (0 réalisée / 1 totale / 1 oubliée)
+ */
+export async function failMission(
+  userId: string,
+  mission: MissionData
+): Promise<void> {
+  // 1. Fetch current stats
+  const { data: statsData, error: statsError } = await supabase
+    .from("player_stats")
+    .select("energie, stress, connaissance, organisation, serenite, concentration, discipline")
+    .eq("id_user", userId)
+    .maybeSingle();
+
+  if (statsError || !statsData) {
+    console.error("[failMission] Failed to fetch player_stats:", statsError?.message);
+    return;
+  }
+
+  const current: PlayerStats = {
+    energie:       statsData.energie       ?? 50,
+    stress:        statsData.stress        ?? 50,
+    connaissance:  statsData.connaissance  ?? 50,
+    organisation:  statsData.organisation  ?? 50,
+    serenite:      statsData.serenite      ?? 50,
+    concentration: statsData.concentration ?? 70,
+    discipline:    statsData.discipline    ?? 50,
+  };
+
+  // 2. Calculer les malus
+  // Énergie : coût dépensé quand même
+  const newEnergie = clamp(current.energie - mission.energie_cout);
+
+  // Stress : augmente en fonction de la difficulté
+  const stressPenalty = mission.difficulte * 5;
+  const newStress = clamp(current.stress + stressPenalty);
+
+  // Connaissance : légère perte
+  const newConnaissance = clamp(current.connaissance - 5);
+
+  // Organisation : pénalité selon difficulté (objectif manqué)
+  const orgaPenalty = mission.difficulte * 3;
+  const newOrganisation = clamp(current.organisation - orgaPenalty);
+
+  // Stats dérivées recalculées après malus
+  const newSerenite      = clamp(100 - newStress);
+  const newConcentration = clamp(current.concentration + 0 - (100 - newEnergie) * 0.1);
+  const newDiscipline    = computeDisciplineFromRatio(current.discipline, 0, 1, 1);
+
+  // 3. Sauvegarder en BDD
+  const { error: updateError } = await supabase
+    .from("player_stats")
+    .upsert({
+      id_user:       userId,
+      energie:       newEnergie,
+      stress:        newStress,
+      connaissance:  newConnaissance,
+      organisation:  newOrganisation,
+      serenite:      newSerenite,
+      concentration: newConcentration,
+      discipline:    newDiscipline,
+      date_maj:      new Date().toISOString(),
+    }, { onConflict: "id_user" });
+
+  if (updateError) {
+    console.error("[failMission] Failed to upsert player_stats:", updateError.message);
+  } else {
+    console.log("[failMission] ✅ Malus appliqués pour la mission", mission.id_mission);
+  }
+}
+
 // ─── Fetch mission from DB ────────────────────────────────────────────────────
 
 /**

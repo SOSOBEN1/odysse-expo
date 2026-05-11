@@ -1,36 +1,41 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
+
 type Props = {
-  active: string;
+  active?: string; // optionnel maintenant
   onChange: (key: string) => void;
-  onBeforeNavigate?: (onConfirm: () => void) => void; // ✅ nouveau
+  onBeforeNavigate?: (onConfirm: () => void) => void;
 };
 
 const items = [
-  { key: "home",     label: "Accueil",  icon: "home-outline",   route: "/frontend/screens//Dashbord" },
-  { key: "missions", label: "Missions", icon: "flag-outline",    route: "/frontend/screens//Homescreen" },
-  { key: "shop",     label: "Boutique", icon: "cart-outline",    route: "/frontend/screens//BoutiqueScreen" },
-  { key: "badges",   label: "Badges",   icon: "ribbon-outline",  route: "/frontend/screens//BadgeScreen" },
-  { key: "defis",    label: "Defis",    icon: "trophy-outline",  route: "/frontend/screens//Defis" },
-  { key: "profile",  label: "Profil",   icon: "person-outline",  route: "/frontend/screens//ProfileScreen" },
+  { key: "home",     label: "Accueil",  icon: "home-outline",   route: "/frontend/screens//Dashbord",       aliases: ["dashbord"] },
+  { key: "missions", label: "Missions", icon: "flag-outline",    route: "/frontend/screens//Homescreen",     aliases: ["homescreen", "missions", "missionevent", "createeventmodal"] },
+  { key: "shop",     label: "Boutique", icon: "cart-outline",    route: "/frontend/screens//BoutiqueScreen", aliases: ["boutiquescreen"] },
+  { key: "badges",   label: "Badges",   icon: "ribbon-outline",  route: "/frontend/screens//BadgeScreen",    aliases: ["badgescreen"] },
+  { key: "defis",    label: "Defis",    icon: "trophy-outline",  route: "/frontend/screens//Defis",          aliases: ["defis"] },
+  { key: "profile",  label: "Profil",   icon: "person-outline",  route: "/frontend/screens//ProfileScreen",  aliases: ["profilescreen"] },
 ];
 
-export default function Navbar({ active, onChange, onBeforeNavigate }: Props) {
-  const router = useRouter();
+export default function Navbar({ onChange, onBeforeNavigate }: Props) {
+  const router   = useRouter();
+  const pathname = usePathname();
+
+  // ✅ Détecte l'onglet actif depuis la route courante, pas depuis une prop figée
+ const active = items.find((item) =>
+  item.aliases.some((alias) => pathname.toLowerCase().includes(alias))
+)?.key ?? "home";
 
   const handlePress = (item: typeof items[0]) => {
-    if (item.key === active) return; // déjà sur cet onglet
-    
+    if (item.key === active) return;
 
     const navigate = () => {
       onChange(item.key);
-      router.push(item.route);
+      router.push(item.route as any);
     };
 
-    // ✅ Si on est sur missions et qu'il y a une mission en cours → intercepter
     if (active === "missions" && onBeforeNavigate) {
       onBeforeNavigate(navigate);
     } else {
@@ -40,14 +45,9 @@ export default function Navbar({ active, onChange, onBeforeNavigate }: Props) {
 
   return (
     <View style={styles.wrapper}>
-      <Svg
-        width="100%"
-        height={180}
-        viewBox="0 0 400 180"
-        style={styles.wave}
-      >
+      <Svg width="100%" height={180} viewBox="0 0 400 180" style={styles.wave}>
         <Path
-          d="M0,60 C100,0 300,180 400,50 L400,170 L0,200 Z"
+          d="M0,60 C100,0 300,180 400,40 L400,210 L0,200 Z"
           fill="rgba(255, 255, 255, 0.62)"
           transform="translate(0,20)"
         />

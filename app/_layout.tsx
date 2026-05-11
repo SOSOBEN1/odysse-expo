@@ -5,6 +5,7 @@ import { checkAndUnlockBadges } from "../backend/services/badgeEngine";
 import BadgeUnlockedModal from "./frontend/components/BadgeUnlockedModel";
 import LevelUpModal from "./frontend/components/LevelUpModal";
 import { AvatarProvider } from "./frontend/constants/AvatarContext";
+import { StatsProvider } from "./frontend/constants/StatsContext";
 import { supabase } from "./frontend/constants/supabase";
 import { useNotifications } from './frontend/constants/UseNotifications';
 import { UserProvider, useUser } from "./frontend/constants/UserContext";
@@ -181,10 +182,12 @@ export default function RootLayout() {
   return (
     <UserProvider>
       <AvatarProvider>
-        <OAuthHandler />
-        <Stack screenOptions={{ headerShown: false }} />
-        <LevelUpWatcher />
-        <BadgeWatcher />
+        <StatsProvider>
+          <OAuthHandler />
+          <Stack screenOptions={{ headerShown: false }} />
+          <LevelUpWatcher />
+          <BadgeWatcher />
+        </StatsProvider>
       </AvatarProvider>
     </UserProvider>
   );

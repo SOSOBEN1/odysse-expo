@@ -13,7 +13,7 @@ import Navbar from "../components/Navbar";
 import { supabase } from "../constants/supabase";
 import { COLORS, SHADOWS, SIZES } from "../constants/theme";
 import { useUser } from "../constants/UserContext";
-
+import { useSounds } from "../hooks/useSounds";
 const { width, height } = Dimensions.get("window");
 
 interface User {
@@ -317,6 +317,7 @@ export default function DefierAmisScreen() {
   const [emailCounter,   setEmailCounter]   = useState(1);
   const [alertVisible,   setAlertVisible]   = useState(false);
   const [sentCount,      setSentCount]      = useState(0);
+  const { playSound } = useSounds();
 
   const titleAnim = useRef(new Animated.Value(0)).current;
 
@@ -430,9 +431,9 @@ export default function DefierAmisScreen() {
     setSending(false);
     setSentCount(totalCount);
     setAlertVisible(true);
-
+playSound("missionCreee"); // 🔊
     // Rafraîchir la liste des déjà invités après envoi
-    fetchAlreadyInvited();
+      fetchAlreadyInvited();
     setSelected([]);
     setEmailEntries([]);
   };

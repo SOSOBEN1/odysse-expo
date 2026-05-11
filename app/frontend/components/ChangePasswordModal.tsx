@@ -10,14 +10,14 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
+import { useSounds } from "../hooks/useSounds";
 import UsernameInput from "./UsernameInput";
-
 const { width } = Dimensions.get("window");
-const owlIcon   = require("../assets/Hibou/cool.png");
+const owlIcon = require("../assets/Hibou/cool.png");
 
 export default function ChangePasswordModal({
   visible,
@@ -28,23 +28,31 @@ export default function ChangePasswordModal({
 }) {
   const { userId } = useUser();
 
-  const [oldPass,     setOldPass]     = useState("");
-  const [newPass,     setNewPass]     = useState("");
+  const [oldPass, setOldPass] = useState("");
+  const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
-  const [loading,     setLoading]     = useState(false);
-  const [error,       setError]       = useState<string | null>(null);
-  const [success,     setSuccess]     = useState(false);
-
-  const owlShake   = useRef(new Animated.Value(0)).current;
-  const owlY       = useRef(new Animated.Value(40)).current;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const { playSound } = useSounds();
+  const owlShake = useRef(new Animated.Value(0)).current;
+  const owlY = useRef(new Animated.Value(40)).current;
   const owlOpacity = useRef(new Animated.Value(0)).current;
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(owlOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.spring(owlY,       { toValue: 0, friction: 6,   useNativeDriver: true }),
+        Animated.timing(owlOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(owlY, {
+          toValue: 0,
+          friction: 6,
+          useNativeDriver: true,
+        }),
       ]).start();
     } else {
       owlOpacity.setValue(0);
@@ -56,21 +64,122 @@ export default function ChangePasswordModal({
     setter(val);
     setError(null);
     Animated.parallel([
-      Animated.spring(owlY, { toValue: -15, friction: 4, useNativeDriver: true }),
+      Animated.spring(owlY, {
+        toValue: -15,
+        friction: 4,
+        useNativeDriver: true,
+      }),
       Animated.sequence([
-        Animated.timing(owlShake, { toValue: 2,  duration: 50, useNativeDriver: true }),
-        Animated.timing(owlShake, { toValue: -2, duration: 50, useNativeDriver: true }),
-        Animated.timing(owlShake, { toValue: 0,  duration: 50, useNativeDriver: true }),
+        Animated.timing(owlShake, {
+          toValue: 2,
+          duration: 50,
+          useNativeDriver: true,
+        }),
+        Animated.timing(owlShake, {
+          toValue: -2,
+          duration: 50,
+          useNativeDriver: true,
+        }),
+        Animated.timing(owlShake, {
+          toValue: 0,
+          duration: 50,
+          useNativeDriver: true,
+        }),
       ]),
     ]).start();
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      Animated.spring(owlY, { toValue: 0, friction: 5, useNativeDriver: true }).start();
+      Animated.spring(owlY, {
+        toValue: 0,
+        friction: 5,
+        useNativeDriver: true,
+      }).start();
     }, 1500);
   };
 
+  // const handleSubmit = async () => {
+  //   // ── Validation ──────────────────────────────────────────────────
+  //   if (!oldPass || !newPass || !confirmPass) {
+  //     setError("Tous les champs sont obligatoires");
+  //     return;
+  //   }
+  //   if (newPass !== confirmPass) {
+  //     setError("Les mots de passe ne correspondent pas");
+  //     return;
+  //   }
+  //   if (newPass.length < 6) {
+  //     setError("Minimum 6 caractères");
+  //     return;
+  //   }
+  //   if (newPass.length > 20) {
+  //     setError("Maximum 20 caractères");
+  //     return;
+  //   }
+  //   if (newPass === oldPass) {
+  //     setError("Le nouveau mot de passe doit être différent");
+  //     return;
+  //   }
+
+  //   if (!userId) {
+  //     setError("Utilisateur introuvable. Reconnecte-toi.");
+  //     return;
+  //   }
+
+  //   setLoading(true);
+  //   setError(null);
+
+  //   try {
+  //     // ── Étape 1 : Vérifier l'ancien mot de passe dans la table users ──
+  //     const { data: user, error: fetchErr } = await supabase
+  //       .from("users")
+  //       .select("password")
+  //       .eq("id_user", userId)
+  //       .single();
+
+  //     if (fetchErr || !user) {
+  //       setError("Utilisateur introuvable.");
+  //       setLoading(false);
+  //       return;
+  //     }
+
+  //     if (user.password !== oldPass) {
+  //       setError("Mot de passe actuel incorrect");
+  //       setLoading(false);
+  //       return;
+  //     }
+
+  //     // ── Étape 2 : Mettre à jour le mot de passe dans la table users ──
+  //     const { error: updateErr } = await supabase
+  //       .from("users")
+  //       .update({ password: newPass })
+  //       .eq("id_user", userId);
+
+  //     if (updateErr) {
+  //       setError(updateErr.message);
+  //       setLoading(false);
+  //       return;
+  //     }
+
+  //     // ── Succès ────────────────────────────────────────────────────
+  //     await playSound("changerMDP");
+  //     setSuccess(true);
+  //     setOldPass("");
+  //     setNewPass("");
+  //     setConfirmPass("");
+
+  //     setTimeout(() => {
+  //       setSuccess(false);
+  //       onClose();
+  //     }, 2000);
+
+  //   } catch (err) {
+  //     setError("Une erreur inattendue est survenue");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
   const handleSubmit = async () => {
-    // ── Validation ──────────────────────────────────────────────────
     if (!oldPass || !newPass || !confirmPass) {
       setError("Tous les champs sont obligatoires");
       return;
@@ -83,17 +192,8 @@ export default function ChangePasswordModal({
       setError("Minimum 6 caractères");
       return;
     }
-    if (newPass.length > 20) {
-      setError("Maximum 20 caractères");
-      return;
-    }
     if (newPass === oldPass) {
       setError("Le nouveau mot de passe doit être différent");
-      return;
-    }
-
-    if (!userId) {
-      setError("Utilisateur introuvable. Reconnecte-toi.");
       return;
     }
 
@@ -101,48 +201,49 @@ export default function ChangePasswordModal({
     setError(null);
 
     try {
-      // ── Étape 1 : Vérifier l'ancien mot de passe dans la table users ──
-      const { data: user, error: fetchErr } = await supabase
+      // ── Étape 1 : Récupérer l'email de l'user ──
+      const { data: userData, error: userErr } = await supabase
         .from("users")
-        .select("password")
+        .select("email")
         .eq("id_user", userId)
         .single();
 
-      if (fetchErr || !user) {
+      if (userErr || !userData?.email) {
         setError("Utilisateur introuvable.");
-        setLoading(false);
         return;
       }
 
-      if (user.password !== oldPass) {
+      // ── Étape 2 : Vérifier l'ancien mdp via signIn ──
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: userData.email,
+        password: oldPass,
+      });
+
+      if (signInErr) {
         setError("Mot de passe actuel incorrect");
-        setLoading(false);
         return;
       }
 
-      // ── Étape 2 : Mettre à jour le mot de passe dans la table users ──
-      const { error: updateErr } = await supabase
-        .from("users")
-        .update({ password: newPass })
-        .eq("id_user", userId);
+      // ── Étape 3 : Mettre à jour le mdp via Supabase Auth ──
+      const { error: updateErr } = await supabase.auth.updateUser({
+        password: newPass,
+      });
 
       if (updateErr) {
         setError(updateErr.message);
-        setLoading(false);
         return;
       }
 
-      // ── Succès ────────────────────────────────────────────────────
+      // ── Succès ──
       setSuccess(true);
       setOldPass("");
       setNewPass("");
       setConfirmPass("");
-
+      playSound("changerMDP"); // 🔊
       setTimeout(() => {
         setSuccess(false);
         onClose();
-      }, 2000);
-
+      }, 1000);
     } catch (err) {
       setError("Une erreur inattendue est survenue");
     } finally {
@@ -165,16 +266,27 @@ export default function ChangePasswordModal({
         <BlurView intensity={20} style={StyleSheet.absoluteFill} tint="dark" />
 
         <View style={styles.modalWrapper}>
-          <Animated.View style={[styles.owlContainer, {
-            opacity:   owlOpacity,
-            transform: [{ translateX: owlShake }, { translateY: owlY }],
-          }]}>
-            <Image source={owlIcon} style={styles.owlImage} resizeMode="contain" />
+          <Animated.View
+            style={[
+              styles.owlContainer,
+              {
+                opacity: owlOpacity,
+                transform: [{ translateX: owlShake }, { translateY: owlY }],
+              },
+            ]}
+          >
+            <Image
+              source={owlIcon}
+              style={styles.owlImage}
+              resizeMode="contain"
+            />
           </Animated.View>
 
-          <LinearGradient colors={["#D4C5F2", "#C2B4DE", "#9075C4"]} style={styles.modalGradient}>
+          <LinearGradient
+            colors={["#D4C5F2", "#C2B4DE", "#9075C4"]}
+            style={styles.modalGradient}
+          >
             <View style={styles.container}>
-
               <View style={styles.header}>
                 <TouchableOpacity onPress={handleClose} style={styles.backBtn}>
                   <Ionicons name="arrow-back" size={20} color="#6949a8" />
@@ -203,7 +315,9 @@ export default function ChangePasswordModal({
                   icon="lock"
                   secure
                 />
-                <Text style={styles.inputLabel}>Confirmer le mot de passe :</Text>
+                <Text style={styles.inputLabel}>
+                  Confirmer le mot de passe :
+                </Text>
                 <UsernameInput
                   value={confirmPass}
                   onChange={(v) => handleTyping(setConfirmPass, v)}
@@ -213,21 +327,27 @@ export default function ChangePasswordModal({
                 />
               </View>
 
-              {error   ? <Text style={styles.errorText}>{error}</Text>                      : null}
-              {success ? <Text style={styles.successText}>✅ Mot de passe modifié !</Text> : null}
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+              {success ? (
+                <Text style={styles.successText}>
+                  ✅ Mot de passe modifié !
+                </Text>
+              ) : null}
 
               <TouchableOpacity
                 style={[styles.submitBtn, loading && { opacity: 0.6 }]}
                 onPress={handleSubmit}
                 disabled={loading}
               >
-                <LinearGradient colors={["#6949a8", "#9574e0"]} style={styles.submitGradient}>
+                <LinearGradient
+                  colors={["#6949a8", "#9574e0"]}
+                  style={styles.submitGradient}
+                >
                   <Text style={styles.submitText}>
                     {loading ? "Vérification..." : "Changer le mot de passe"}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
-
             </View>
           </LinearGradient>
         </View>
@@ -237,21 +357,57 @@ export default function ChangePasswordModal({
 }
 
 const styles = StyleSheet.create({
-  overlay:        { flex: 1, justifyContent: "center", alignItems: "center" },
-  modalWrapper:   { width: width * 0.9, position: "relative" },
-  owlContainer:   { position: "absolute", top: -35, left: -8, zIndex: 1 },
-  owlImage:       { width: 75, height: 75 },
-  modalGradient:  { borderRadius: 35, borderWidth: 2, borderColor: "#644979", padding: 2, zIndex: 2, backgroundColor: "#D4C5F2" },
-  container:      { padding: 20, alignItems: "center" },
-  header:         { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: 10 },
-  backBtn:        { backgroundColor: "#fff", padding: 5, borderRadius: 15 },
-  titleRow:       { flexDirection: "row", alignItems: "center", gap: 5 },
-  headerTitle:    { fontSize: 18, fontWeight: "bold", color: "#5A4C91" },
-  inputArea:      { width: "100%", marginTop: 20 },
-  inputLabel:     { fontSize: 13, fontWeight: "bold", color: "#333", marginBottom: 8, marginTop: 10 },
-  errorText:      { color: "#e05c5c", fontWeight: "700", fontSize: 12, textAlign: "center", marginTop: 10, paddingHorizontal: 8 },
-  successText:    { color: "#4caf50", fontWeight: "700", fontSize: 13, textAlign: "center", marginTop: 10 },
-  submitBtn:      { width: "80%", marginTop: 20, marginBottom: 10 },
-  submitGradient: { paddingVertical: 12, borderRadius: 15, alignItems: "center" },
-  submitText:     { color: "white", fontWeight: "bold" },
+  overlay: { flex: 1, justifyContent: "center", alignItems: "center" },
+  modalWrapper: { width: width * 0.9, position: "relative" },
+  owlContainer: { position: "absolute", top: -35, left: -8, zIndex: 1 },
+  owlImage: { width: 75, height: 75 },
+  modalGradient: {
+    borderRadius: 35,
+    borderWidth: 2,
+    borderColor: "#644979",
+    padding: 2,
+    zIndex: 2,
+    backgroundColor: "#D4C5F2",
+  },
+  container: { padding: 20, alignItems: "center" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 10,
+  },
+  backBtn: { backgroundColor: "#fff", padding: 5, borderRadius: 15 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  headerTitle: { fontSize: 18, fontWeight: "bold", color: "#5A4C91" },
+  inputArea: { width: "100%", marginTop: 20 },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 8,
+    marginTop: 10,
+  },
+  errorText: {
+    color: "#e05c5c",
+    fontWeight: "700",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 10,
+    paddingHorizontal: 8,
+  },
+  successText: {
+    color: "#4caf50",
+    fontWeight: "700",
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  submitBtn: { width: "80%", marginTop: 20, marginBottom: 10 },
+  submitGradient: {
+    paddingVertical: 12,
+    borderRadius: 15,
+    alignItems: "center",
+  },
+  submitText: { color: "white", fontWeight: "bold" },
 });

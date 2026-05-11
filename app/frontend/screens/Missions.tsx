@@ -1,10 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ScrollView, StatusBar, StyleSheet, Text,
-  TouchableOpacity, View,
+  TextInput, TouchableOpacity, View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import type { Mission, MissionTimer } from "../../../backend/models/mission.types";
@@ -19,7 +19,6 @@ import {
   planifierRappelsMission,
 } from "../../../backend/models/NotificationService";
 import { useMissions } from "../../../backend/viewmodels/useMissions";
-import AvatarCrd from "../components/AvatarCrd";
 import CreateEventModal from "../components/CreateEventModal";
 import CreateMissionModal from "../components/CreateMissionModal";
 import ExitMissionModal from "../components/ExitMissionModal";
@@ -30,6 +29,8 @@ import { useAvatar } from "../constants/AvatarContext";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
+import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
+
 // ─────────────────────────────────────────────────────────────
 //  Constants
 // ─────────────────────────────────────────────────────────────
@@ -223,12 +224,174 @@ function MissionCard({
 //  MissionsScreen
 // ─────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────
+//  SuggestedMissionBanner — carte de mission suggérée avec chrono
+// ─────────────────────────────────────────────────────────────
+
+type SuggestedTimerState = "running" | "paused" | "done";
+
+function SuggestedMissionBanner({
+  mission,
+  onDismiss,
+  onComplete,
+}: {
+  mission: MissionSuggestion;
+  onDismiss: () => void;
+  onComplete: (xp: number, coins: number, title: string) => void;
+}) {
+  const [elapsed, setElapsed]     = useState(0);
+  const [state, setState]         = useState<SuggestedTimerState>("running");
+  const intervalRef               = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Démarrer le chrono dès le montage
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      setElapsed((e) => e + 1);
+    }, 1000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  const togglePause = () => {
+    if (state === "running") {
+      setState("paused");
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    } else if (state === "paused") {
+      setState("running");
+      intervalRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+    }
+  };
+
+  const finish = () => {
+    setState("done");
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    onComplete(mission.xpReward, mission.coinReward, mission.title);
+  };
+
+  const formatElapsedLocal = (sec: number) => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  const isDone    = state === "done";
+  const isRunning = state === "running";
+
+  return (
+    <View style={sugStyles.wrapper}>
+      {/* Badge suggérée */}
+      <View style={sugStyles.badge}>
+        <Text style={sugStyles.badgeText}>✨ Mission suggérée</Text>
+      </View>
+
+      {/* Dismiss */}
+      <TouchableOpacity style={sugStyles.dismissBtn} onPress={onDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={sugStyles.dismissText}>✕</Text>
+      </TouchableOpacity>
+
+      {/* Header */}
+      <View style={sugStyles.header}>
+        <View style={[sugStyles.iconBox, { backgroundColor: mission.color + "22" }]}>
+          <Text style={sugStyles.icon}>{mission.emoji}</Text>
+        </View>
+        <View style={sugStyles.infoBox}>
+          <Text style={sugStyles.title}>{mission.title}</Text>
+          <Text style={sugStyles.description} numberOfLines={2}>{mission.description}</Text>
+          <Text style={sugStyles.duration}>⏱ Durée estimée : {mission.duration}</Text>
+        </View>
+      </View>
+
+      {/* Chrono */}
+      <View style={[sugStyles.chronoBox, isDone ? sugStyles.chronoDone : isRunning ? sugStyles.chronoRunning : sugStyles.chronoPaused]}>
+        <Text style={[sugStyles.chronoText, { color: isDone ? "#2e7d32" : isRunning ? "#e65100" : "#6b7280" }]}>
+          {isDone ? "✅ Mission terminée !" : `⏱ ${formatElapsedLocal(elapsed)}`}
+        </Text>
+        {!isDone && (
+          <View style={[sugStyles.pulse, { backgroundColor: isRunning ? "#e65100" : "#9ca3af" }]} />
+        )}
+      </View>
+
+      {/* Boutons */}
+      <View style={sugStyles.btnRow}>
+        {!isDone && (
+          <TouchableOpacity style={[sugStyles.finishBtn]} onPress={finish}>
+            <Text style={sugStyles.finishBtnText}>🏁 Terminer</Text>
+          </TouchableOpacity>
+        )}
+        {!isDone && (
+          <TouchableOpacity
+            style={[sugStyles.pauseBtn, { backgroundColor: isRunning ? "#f59e0b" : mission.color }]}
+            onPress={togglePause}
+          >
+            <Text style={sugStyles.pauseBtnText}>{isRunning ? "⏸ Pause" : "▶ Continuer"}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Récompenses */}
+      <View style={sugStyles.rewardsRow}>
+        <Text style={[sugStyles.xpChip, { color: mission.color }]}>+{mission.xpReward} XP</Text>
+        <Text style={sugStyles.coinChip}>🪙 +{mission.coinReward}</Text>
+        <Text style={sugStyles.impactChip}>📈 {mission.impact}</Text>
+      </View>
+    </View>
+  );
+}
+
+const sugStyles = StyleSheet.create({
+  wrapper:       { borderRadius: 20, backgroundColor: "#fff", padding: 16, marginBottom: 20, borderTopWidth: 4, borderTopColor: "#6d28d9", ...SHADOWS.medium, position: "relative" },
+  badge:         { alignSelf: "flex-start", backgroundColor: "#ede9fe", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10 },
+  badgeText:     { color: "#6d28d9", fontWeight: "700", fontSize: 11 },
+  dismissBtn:    { position: "absolute", top: 10, right: 10, width: 24, height: 24, borderRadius: 12, backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center", zIndex: 10 },
+  dismissText:   { fontSize: 11, color: "#6b7280", fontWeight: "700" },
+  header:        { flexDirection: "row", gap: 12, marginBottom: 12 },
+  iconBox:       { width: 54, height: 54, borderRadius: 14, justifyContent: "center", alignItems: "center" },
+  icon:          { fontSize: 26 },
+  infoBox:       { flex: 1 },
+  title:         { fontWeight: "800", fontSize: 16, color: "#1e1b4b", marginBottom: 4 },
+  description:   { fontSize: 12, color: "#6b7280", lineHeight: 17, marginBottom: 4 },
+  duration:      { fontSize: 11, color: "#9ca3af" },
+  chronoBox:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
+  chronoRunning: { backgroundColor: "#fff8e1" },
+  chronoPaused:  { backgroundColor: "#f3f4f6" },
+  chronoDone:    { backgroundColor: "#e8f5e9" },
+  chronoText:    { fontWeight: "700", fontSize: 14 },
+  pulse:         { width: 8, height: 8, borderRadius: 4 },
+  btnRow:        { flexDirection: "row", gap: 10, marginBottom: 10 },
+  finishBtn:     { flex: 1, borderRadius: 14, paddingVertical: 9, backgroundColor: "#e8f5e9", alignItems: "center" },
+  finishBtnText: { color: "#2e7d32", fontWeight: "700", fontSize: 13 },
+  pauseBtn:      { flex: 1, borderRadius: 14, paddingVertical: 9, alignItems: "center" },
+  pauseBtnText:  { color: "#fff", fontWeight: "700", fontSize: 13 },
+  rewardsRow:    { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  xpChip:        { fontSize: 11, fontWeight: "800", backgroundColor: "#f3f4f6", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, overflow: "hidden" },
+  coinChip:      { fontSize: 11, fontWeight: "700", backgroundColor: "#fef3c7", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, overflow: "hidden" },
+  impactChip:    { fontSize: 11, fontWeight: "700", backgroundColor: "#dcfce7", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, overflow: "hidden" },
+});
+
+// ─────────────────────────────────────────────────────────────
+//  MissionsScreen
+// ─────────────────────────────────────────────────────────────
+
 export default function MissionsScreen() {
   const [activeTab, setActiveTab]                       = useState<Tab>("Tout");
   const [isMissionModalVisible, setMissionModalVisible] = useState(false);
   const [isEventModalVisible, setEventModalVisible]     = useState(false);
   const [selectedData, setSelectedData]                 = useState<any>(null);
-  const { openCreate } = useLocalSearchParams();
+  const { openCreate, suggestedMission: suggestedMissionParam } = useLocalSearchParams<{
+    openCreate?: string;
+    suggestedMission?: string;
+  }>();
+
+  // Mission suggérée reçue depuis le Dashboard/Homescreen
+  const [activeSuggestedMission, setActiveSuggestedMission] = useState<MissionSuggestion | null>(null);
+  const [suggestedStatusModal, setSuggestedStatusModal] = useState<{
+    visible: boolean; xp: number; coins: number; title: string;
+  }>({ visible: false, xp: 0, coins: 0, title: "" });
+
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { selectedModel, setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername }   = useUser();
@@ -241,6 +404,18 @@ export default function MissionsScreen() {
       setMissionModalVisible(true);
     }
   }, [openCreate]);
+
+  // Lire et parser la mission suggérée depuis les params de navigation
+  useEffect(() => {
+    if (!suggestedMissionParam) return;
+    try {
+      // expo-router décode déjà les params — JSON.parse directement
+      const parsed = JSON.parse(suggestedMissionParam) as MissionSuggestion;
+      setActiveSuggestedMission(parsed);
+    } catch (e) {
+      console.error("Erreur parsing mission suggérée:", e);
+    }
+  }, [suggestedMissionParam]);
 
   useEffect(() => {
     if (!userId) return;
@@ -322,6 +497,13 @@ export default function MissionsScreen() {
     if (activeTab === "Défis")          return m.idDefi !== null;
     if (activeTab === "Par Événements") return m.event !== null;
     return true;
+  }).filter((m) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      m.title?.toLowerCase().includes(q) ||
+      m.description?.toLowerCase().includes(q)
+    );
   });
 
   const handleEdit = (mission: Mission) => {
@@ -335,27 +517,30 @@ export default function MissionsScreen() {
       <WaveBackground />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <View style={styles.avatarCircle}>
-            {selectedModel ? (
-              <AvatarCrd model={selectedModel} bgColor="#f0ecff" />
-            ) : (
-              <Text style={styles.avatarEmoji}>🧑</Text>
-            )}
-          </View>
-          <View>
-            <Text style={styles.greeting}>
-              Bonjour, <Text style={styles.greetingName}>{displayName}!</Text>
-            </Text>
-            <Text style={styles.subGreeting}>{filteredMissions.length} missions</Text>
-          </View>
-        </View>
 
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Missions</Text>
           <View style={styles.countBadge}>
             <Text style={styles.countText}>{filteredMissions.length}</Text>
           </View>
+        </View>
+
+        {/* ── Barre de recherche ── */}
+        <View style={styles.searchWrapper}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Rechercher une mission..."
+            placeholderTextColor={COLORS.missionDuration}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.searchClear}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContainer}>
@@ -369,6 +554,18 @@ export default function MissionsScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        {/* ── Mission suggérée avec chrono auto-démarré ── */}
+        {activeSuggestedMission && (
+          <SuggestedMissionBanner
+            mission={activeSuggestedMission}
+            onDismiss={() => setActiveSuggestedMission(null)}
+            onComplete={(xp, coins, title) => {
+              setActiveSuggestedMission(null);
+              setSuggestedStatusModal({ visible: true, xp, coins, title });
+            }}
+          />
+        )}
 
         {loading ? (
           <Text style={styles.emptyText}>Chargement...</Text>
@@ -403,6 +600,17 @@ export default function MissionsScreen() {
         xp={statusModal.xp}
         coins={statusModal.coins}
         onClose={closeStatusModal}
+      />
+
+      {/* ── Modal réussite mission suggérée ── */}
+      <MissionStatusModal
+        visible={suggestedStatusModal.visible}
+        type="success"
+        missionTitle={suggestedStatusModal.title}
+        dateLimit={undefined}
+        xp={suggestedStatusModal.xp}
+        coins={suggestedStatusModal.coins}
+        onClose={() => setSuggestedStatusModal({ visible: false, xp: 0, coins: 0, title: "" })}
       />
 
       <CreateMissionModal
@@ -500,4 +708,9 @@ const styles = StyleSheet.create({
   continueBtnText:   { color: COLORS.background, fontWeight: "800", fontSize: 12 },
   createBtn:         { backgroundColor: COLORS.missionCreateBtn, borderRadius: 30, paddingVertical: 15, alignItems: "center", marginTop: 8 },
   createBtnText:     { color: COLORS.background, fontWeight: "800", fontSize: 17 },
+  // ── Barre de recherche ──
+  searchWrapper:     { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.background, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, ...SHADOWS.light },
+  searchIcon:        { fontSize: 16, marginRight: 8 },
+  searchInput:       { flex: 1, fontSize: 14, color: COLORS.missionHeading, padding: 0 },
+  searchClear:       { fontSize: 13, color: COLORS.missionDuration, fontWeight: "700", marginLeft: 8 },
 });

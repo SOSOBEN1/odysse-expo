@@ -604,6 +604,7 @@ export default function CreateDefisScreen() {
     if (error) {
       Alert.alert("Erreur", "Impossible de sauvegarder le défi. Réessaie.");
     } else {
+      
       router.push({
         pathname: "/frontend/screens/DefierAmisScreen",
         params: { defiId: savedDefiId ?? 0, defiNom: titre, defiDesc: description },
@@ -613,6 +614,7 @@ export default function CreateDefisScreen() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
+    
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       <BgDecoration />

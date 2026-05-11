@@ -680,6 +680,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -997,10 +998,9 @@ const StatsCard = () => {
   const loadPotionQty = useCallback(async () => {
     if (!userId) return;
     const { data } = await supabase
-      .from("user_items")
+      .from("user_potions")
       .select("quantite")
       .eq("id_user", userId)
-      .eq("id_item", ENERGY_POTION.itemId)
       .maybeSingle();
     setPotionQty(data?.quantite ?? 0);
   }, [userId]);
@@ -1098,26 +1098,26 @@ const StatsCard = () => {
 
       {/* ── Bandeau état énergie ── */}
       {localStats.energie >= 70 ? (
-        <View style={[statsStyles.energyBanner, { backgroundColor: "#1a3a1a", borderColor: "#4ade80" }]}>
+        <View style={[statsStyles.energyBanner, { backgroundColor: "#f0ecff", borderColor: COLORS.statOrganisation }]}>
           <Text style={statsStyles.energyBannerEmoji}>⚡</Text>
           <View>
-            <Text style={[statsStyles.energyBannerTitle, { color: "#4ade80" }]}>Énergie élevée</Text>
+            <Text style={[statsStyles.energyBannerTitle, { color: "#3d8a3d" }]}>Énergie élevée</Text>
             <Text style={statsStyles.energyBannerSub}>Tu es au top, fonce sur tes missions !</Text>
           </View>
         </View>
       ) : localStats.energie >= 30 ? (
-        <View style={[statsStyles.energyBanner, { backgroundColor: "#2a2510", borderColor: "#facc15" }]}>
+        <View style={[statsStyles.energyBanner, { backgroundColor: "#fff8ec", borderColor: COLORS.statEnergie }]}>
           <Text style={statsStyles.energyBannerEmoji}>🌙</Text>
           <View>
-            <Text style={[statsStyles.energyBannerTitle, { color: "#facc15" }]}>Énergie modérée</Text>
+            <Text style={[statsStyles.energyBannerTitle, { color: "#b07a10" }]}>Énergie modérée</Text>
             <Text style={statsStyles.energyBannerSub}>Pense à te reposer bientôt.</Text>
           </View>
         </View>
       ) : (
-        <View style={[statsStyles.energyBanner, { backgroundColor: "#3a1010", borderColor: "#f87171" }]}>
+        <View style={[statsStyles.energyBanner, { backgroundColor: "#fff0f0", borderColor: COLORS.statStress }]}>
           <Text style={statsStyles.energyBannerEmoji}>😴</Text>
           <View>
-            <Text style={[statsStyles.energyBannerTitle, { color: "#f87171" }]}>Énergie critique</Text>
+            <Text style={[statsStyles.energyBannerTitle, { color: COLORS.statStress }]}>Énergie critique</Text>
             <Text style={statsStyles.energyBannerSub}>Dors ou utilise une potion pour récupérer !</Text>
           </View>
         </View>
@@ -1152,7 +1152,7 @@ const StatsCard = () => {
 
         {/* Bouton Potion */}
         <TouchableOpacity
-          style={[statsStyles.potionBtn, potionQty > 0 && { backgroundColor: "#1e3a1e" }]}
+          style={[statsStyles.potionBtn, potionQty > 0 && { backgroundColor: "#e8f5e9", borderColor: COLORS.statOrganisation }]}
           onPress={() => potionQty > 0 ? handleUsePotion() : setPotionModal(true)}
         >
           <View style={statsStyles.sleepBtnRow}>
@@ -1217,7 +1217,7 @@ const StatsCard = () => {
               </View>
             ) : (
               <TouchableOpacity
-                style={[statsStyles.modalBuyBtn, { backgroundColor: "#1a1a2e", width: "100%" }]}
+                style={[statsStyles.modalBuyBtn, { backgroundColor: COLORS.primary, width: "100%" }]}
                 onPress={handleSleep}
               >
                 <Text style={statsStyles.modalBuyText}>✅ Confirmer le sommeil</Text>
@@ -1251,33 +1251,33 @@ const statsStyles = StyleSheet.create({
   energyBannerEmoji: { fontSize: 22 },
   energyBannerTitle: { fontWeight: "800", fontSize: 13 },
   energyBannerSub:   { color: "#9ca3af", fontSize: 10, marginTop: 1 },
-  sleepBtn:     { flex: 1, backgroundColor: "#1a1a2e", borderRadius: 14, padding: 12, gap: 8 },
+  sleepBtn:     { flex: 1, backgroundColor: "#ede9fb", borderRadius: 14, padding: 12, gap: 8, borderWidth: 1, borderColor: COLORS.tertiary },
   sleepBtnRow:  { flexDirection: "row", alignItems: "center", gap: 8 },
   sleepBtnEmoji:{ fontSize: 22 },
-  sleepBtnText: { color: "#fff", fontWeight: "800", fontSize: 13 },
-  sleepBtnSub:  { color: "#9ca3af", fontSize: 10, marginTop: 1 },
+  sleepBtnText: { color: COLORS.primary, fontWeight: "800", fontSize: 13 },
+  sleepBtnSub:  { color: COLORS.subtitle, fontSize: 10, marginTop: 1 },
   sleepBtnEffects: { flexDirection: "row", gap: 6 },
-  effectChip:   { backgroundColor: "#2d2b5e", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  effectChipText: { color: "#c4b5fd", fontWeight: "700", fontSize: 11 },
-  potionBtn:    { flex: 1, backgroundColor: "#2d1b69", borderRadius: 14, padding: 12, gap: 8 },
-  potionBtnText:{ color: "#fff", fontWeight: "800", fontSize: 12 },
-  potionBtnSub: { color: "#aaa", fontSize: 9, marginTop: 3 },
+  effectChip:   { backgroundColor: COLORS.tertiary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  effectChipText: { color: COLORS.primary, fontWeight: "700", fontSize: 11 },
+  potionBtn:    { flex: 1, backgroundColor: "#f3f0ff", borderRadius: 14, padding: 12, gap: 8, borderWidth: 1, borderColor: COLORS.secondary },
+  potionBtnText:{ color: COLORS.primary, fontWeight: "800", fontSize: 12 },
+  potionBtnSub: { color: COLORS.subtitle, fontSize: 9, marginTop: 3 },
   // Toast
-  toast:        { marginTop: 10, backgroundColor: "#1e293b", borderRadius: 10, padding: 10, alignItems: "center" },
+  toast:        { marginTop: 10, backgroundColor: COLORS.primary, borderRadius: 10, padding: 10, alignItems: "center" },
   toastText:    { color: "#fff", fontWeight: "700", fontSize: 13 },
   // Modal
-  overlay:      { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
+  overlay:      { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
   modalBox:     { backgroundColor: "#fff", borderRadius: 20, padding: 24, width: 280, alignItems: "center" },
-  modalTitle:   { fontSize: 20, fontWeight: "900", color: "#1e1b4b", marginBottom: 8 },
-  modalDesc:    { fontSize: 13, color: "#555", textAlign: "center", marginBottom: 6 },
-  modalPrice:   { fontSize: 15, fontWeight: "800", color: "#6d28d9", marginBottom: 16 },
-  modalBuyBtn:  { backgroundColor: "#6d28d9", borderRadius: 14, paddingVertical: 12, paddingHorizontal: 40, marginBottom: 10 },
+  modalTitle:   { fontSize: 20, fontWeight: "900", color: COLORS.primary, marginBottom: 8 },
+  modalDesc:    { fontSize: 13, color: "#666", textAlign: "center", marginBottom: 6 },
+  modalPrice:   { fontSize: 15, fontWeight: "800", color: COLORS.secondary, marginBottom: 16 },
+  modalBuyBtn:  { backgroundColor: COLORS.primary, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 40, marginBottom: 10 },
   modalBuyText: { color: "#fff", fontWeight: "800", fontSize: 15 },
-  modalCancel:  { color: "#888", fontSize: 13 },
+  modalCancel:  { color: COLORS.subtitle, fontSize: 13 },
   // Sleep countdown
-  sleepCountdownBox:   { width: 90, height: 90, borderRadius: 45, backgroundColor: "#1a1a2e", justifyContent: "center", alignItems: "center", marginBottom: 16 },
-  sleepCountdownNum:   { color: "#c4b5fd", fontSize: 38, fontWeight: "900" },
-  sleepCountdownLabel: { color: "#9ca3af", fontSize: 11, marginTop: 2 },
+  sleepCountdownBox:   { width: 90, height: 90, borderRadius: 45, backgroundColor: "#ede9fb", justifyContent: "center", alignItems: "center", marginBottom: 16 },
+  sleepCountdownNum:   { color: COLORS.primary, fontSize: 38, fontWeight: "900" },
+  sleepCountdownLabel: { color: COLORS.subtitle, fontSize: 11, marginTop: 2 },
 });
 
 // ─── MissionCard ──────────────────────────────────────────────────────────────
@@ -1547,54 +1547,58 @@ const bossStyles = StyleSheet.create({
 
 // ─── GlobalProgressSection ────────────────────────────────────────────────────
 const GlobalProgressSection = () => {
-const { derived } = useDerivedStats();
+  const { derived, loading } = useDerivedStats();
 
+  // Moyenne des 3 stats dérivées → barre globale dynamique
+  const globalPct = Math.round(
+    (derived.concentration + derived.serenite + derived.discipline) / 3
+  );
 
-  const PROGRESS_STATS: ProgressStat[] = [
-    { label: "Concentration", emoji: "🔥", percent: derived.concentration, xpReward: 15, xpBonus: 10 },
-    { label: "Sérénité",      emoji: "🌿", percent: derived.serenite,      xpReward: 15, xpBonus: 10 },
-    { label: "Discipline",    emoji: "💪", percent: derived.discipline,    xpReward: 10, xpBonus: 10 },
+  const PROGRESS_STATS = [
+    { label: "Concentration", emoji: "🔥", percent: derived.concentration },
+    { label: "Sérénité",      emoji: "🌿", percent: derived.serenite      },
+    { label: "Discipline",    emoji: "💪", percent: derived.discipline    },
   ];
 
   return (
     <View style={[gpStyles.card, SHADOWS.light]}>
-      <Text style={gpStyles.title}>Progression globale</Text>
-      <View style={gpStyles.masterTrack}>
-        <View style={gpStyles.masterFill} />
+      <View style={gpStyles.titleRow}>
+        <Text style={gpStyles.title}>Progression globale</Text>
+        <Text style={gpStyles.globalPct}>{globalPct}%</Text>
       </View>
-      {PROGRESS_STATS.map((s) => (
-        <View key={s.label} style={gpStyles.row}>
-          <Text style={gpStyles.rowLabel}>{s.label} {s.emoji}</Text>
-          <View style={gpStyles.rowTrack}>
-            <View style={[gpStyles.rowFill, { width: `${Math.round(s.percent)}%` }]} />
+      {/* Barre maîtresse — dynamique */}
+      <View style={gpStyles.masterTrack}>
+        <View style={[gpStyles.masterFill, { width: `${globalPct}%` }]} />
+      </View>
+      {loading ? (
+        <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 8 }} />
+      ) : (
+        PROGRESS_STATS.map((s) => (
+          <View key={s.label} style={gpStyles.row}>
+            <Text style={gpStyles.rowLabel}>{s.label} {s.emoji}</Text>
+            <View style={gpStyles.rowTrack}>
+              <View style={[gpStyles.rowFill, { width: `${Math.round(s.percent)}%` }]} />
+            </View>
+            <Text style={gpStyles.rowPct}>{Math.round(s.percent)}%</Text>
           </View>
-          <Text style={gpStyles.rowPct}>{Math.round(s.percent)}%</Text>
-          <View style={gpStyles.chip}>
-            <Text style={gpStyles.chipText}>⭐{s.xpReward} XP</Text>
-          </View>
-          <View style={[gpStyles.chip, gpStyles.chipBonus]}>
-            <Text style={gpStyles.chipBonusText}>+{s.xpBonus} XP</Text>
-          </View>
-        </View>
-      ))}
+        ))
+      )}
     </View>
   );
 };
 
 const gpStyles = StyleSheet.create({
-  card:          { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 16 },
-  title:         { fontSize: 17, fontWeight: "800", color: COLORS.text, marginBottom: 12 },
-  masterTrack:   { height: 10, backgroundColor: COLORS.masterTrackBg, borderRadius: 10, overflow: "visible", marginBottom: 16 },
-  masterFill:    { width: "55%", height: "100%", backgroundColor: COLORS.masterFill, borderRadius: 10 },
-  row:           { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 6 },
-  rowLabel:      { fontSize: 12, fontWeight: "600", color: COLORS.text, width: 110 },
-  rowTrack:      { flex: 1, height: 7, backgroundColor: COLORS.progressTrackBg, borderRadius: 10, overflow: "hidden" },
-  rowFill:       { height: "100%", backgroundColor: COLORS.secondary, borderRadius: 10 },
-  rowPct:        { fontSize: 11, fontWeight: "700", color: COLORS.text, width: 32, textAlign: "right" },
-  chip:          { backgroundColor: COLORS.progressTrackBg, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 3 },
-  chipText:      { fontSize: 10, color: COLORS.primary, fontWeight: "700" },
-  chipBonus:     { backgroundColor: COLORS.chipBonusBg },
-  chipBonusText: { fontSize: 10, color: COLORS.chipBonusText, fontWeight: "700" },
+  card:       { backgroundColor: COLORS.card, borderRadius: SIZES.radiusLarge, marginHorizontal: SIZES.padding, padding: SIZES.padding, marginBottom: 16 },
+  titleRow:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  title:      { fontSize: 17, fontWeight: "800", color: COLORS.text },
+  globalPct:  { fontSize: 15, fontWeight: "900", color: COLORS.masterFill },
+  masterTrack:{ height: 10, backgroundColor: COLORS.masterTrackBg, borderRadius: 10, overflow: "hidden", marginBottom: 16 },
+  masterFill: { height: "100%", backgroundColor: COLORS.masterFill, borderRadius: 10 },
+  row:        { flexDirection: "row", alignItems: "center", marginBottom: 10, gap: 6 },
+  rowLabel:   { fontSize: 12, fontWeight: "600", color: COLORS.text, width: 110 },
+  rowTrack:   { flex: 1, height: 7, backgroundColor: COLORS.progressTrackBg, borderRadius: 10, overflow: "hidden" },
+  rowFill:    { height: "100%", backgroundColor: COLORS.secondary, borderRadius: 10 },
+  rowPct:     { fontSize: 11, fontWeight: "700", color: COLORS.text, width: 32, textAlign: "right" },
 });
 
 // ─── SCREEN ───────────────────────────────────────────────────────────────────

@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
 import {
-  ScrollView, StatusBar, StyleSheet, Text,
-  TextInput, TouchableOpacity, View, Alert,
+  Alert, ScrollView, StatusBar, StyleSheet, Text,
+  TextInput, TouchableOpacity, View,
 } from "react-native";
 import { useRouter } from "expo-router";
 import Navbar from "../components/Navbar";
@@ -12,6 +12,7 @@ import CreateEventModal from "../components/CreateEventModal";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import { useAvatar } from "../constants/AvatarContext";
+import { useStats } from "../constants/StatsContext";
 
 type EventType = "projet" | "examen" | "soutenance";
 
@@ -45,6 +46,24 @@ export default function EventsScreen() {
 
   const { userId, username: ctxUsername } = useUser();
   const { selectedModel, setSelectedModel } = useAvatar();
+  const { stats: playerStats } = useStats();
+
+  const ENERGY_THRESHOLD = 16;
+
+  const navigateToEventMissions = (eventId: string, eventTitle: string) => {
+    if (playerStats.energie < ENERGY_THRESHOLD) {
+      Alert.alert(
+        "⚡ Énergie insuffisante",
+        `Tu as seulement ${Math.round(playerStats.energie)}% d'énergie.\n\nIl te faut au minimum ${ENERGY_THRESHOLD}% pour accéder aux missions d'événement.\n\n💡 Va sur le Dashboard pour dormir ou utiliser une potion d'énergie !`,
+        [{ text: "OK", style: "default" }]
+      );
+      return;
+    }
+    router.push({
+      pathname: "/frontend/screens/missionEvent",
+      params: { eventId, eventTitle },
+    });
+  };
 
   // ── Fetch user profile (nom + avatar) ──
   useEffect(() => {
@@ -138,6 +157,17 @@ export default function EventsScreen() {
           </View>
         </View>
 
+        {/* ── Bandeau énergie faible ── */}
+        {playerStats.energie < ENERGY_THRESHOLD && (
+          <View style={styles.lowEnergyBanner}>
+            <Text style={styles.lowEnergyIcon}>⚡</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.lowEnergyTitle}>Énergie insuffisante ({Math.round(playerStats.energie)}%)</Text>
+              <Text style={styles.lowEnergyDesc}>Il te faut min. {ENERGY_THRESHOLD}% pour accéder aux missions. Va dormir ou utilise une potion sur le Dashboard !</Text>
+            </View>
+          </View>
+        )}
+
         {/* ── Barre de recherche ── */}
         <View style={styles.searchWrapper}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -203,10 +233,7 @@ export default function EventsScreen() {
               <TouchableOpacity
                 style={[styles.card, { backgroundColor: cfg.bg }]}
                 activeOpacity={0.88}
-                onPress={() => router.push({
-                  pathname: "/frontend/screens/missionEvent",
-                  params: { eventId: String(ev.id_boss), eventTitle: ev.nom },
-                })}
+                onPress={() => navigateToEventMissions(String(ev.id_boss), ev.nom)}
               >
                 <View style={styles.topRow}>
                   <View style={[styles.iconBox, { backgroundColor: cfg.color }]}>
@@ -224,10 +251,7 @@ export default function EventsScreen() {
                 <View style={styles.cardFooter}>
                   <TouchableOpacity
                     style={[styles.seeMissionsBtn, { backgroundColor: cfg.color }]}
-                    onPress={() => router.push({
-                      pathname: "/frontend/screens/missionEvent",
-                      params: { eventId: String(ev.id_boss), eventTitle: ev.nom },
-                    })}
+                    onPress={() => navigateToEventMissions(String(ev.id_boss), ev.nom)}
                   >
                     <Text style={styles.seeMissionsText}>Voir les missions →</Text>
                   </TouchableOpacity>
@@ -317,4 +341,9 @@ const styles = StyleSheet.create({
   // ── Create button ──
   createBtn:      { backgroundColor: "#4b2fa0", borderRadius: 30, paddingVertical: 15, alignItems: "center", marginTop: 8 },
   createBtnText:  { color: "#fff", fontWeight: "800", fontSize: 17 },
+  // ── Bandeau énergie faible ──
+  lowEnergyBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#fff3cd", borderRadius: 14, padding: 12, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: "#f59e0b" },
+  lowEnergyIcon:   { fontSize: 22 },
+  lowEnergyTitle:  { fontWeight: "800", fontSize: 13, color: "#92400e", marginBottom: 2 },
+  lowEnergyDesc:   { fontSize: 11, color: "#a16207", lineHeight: 16 },
 });

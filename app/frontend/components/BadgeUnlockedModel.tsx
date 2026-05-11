@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { AnimatedBadgeDisplay } from "./Animatedbadgedisplay";
 import { COLORS } from "../styles/theme";
+import { useSounds } from "../hooks/useSounds";
 
 // ── Types ─────────────────────────────────────────────────────
 interface ConfettiPiece {
@@ -142,10 +143,12 @@ export default function BadgeUnlockedModal({
   const coinBounce      = useRef(new Animated.Value(-20)).current;
   const coinOpacity     = useRef(new Animated.Value(0)).current;
   const confettiKey     = useRef(0);
+  const { playSound } = useSounds();
 
   useEffect(() => {
     if (!visible) return;
     confettiKey.current += 1;
+    playSound("missionCreee");
 
     backdropOpacity.setValue(0); cardScale.setValue(0.3);  cardOpacity.setValue(0);
     titleSlide.setValue(-30);    badgeScale.setValue(0);   glowOpacity.setValue(0);

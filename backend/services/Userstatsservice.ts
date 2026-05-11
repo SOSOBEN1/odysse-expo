@@ -467,15 +467,21 @@ export async function failMission(
  */
 export async function sleepRestore(userId: string): Promise<{ success: boolean; message: string }> {
   const userIdInt = parseInt(userId, 10);
-  const storageKey = `last_sleep:${userIdInt}`;
 
-  // Vérifier le last_sleep en local
+  console.log(`\n🛌 [sleepRestore] START — userId: ${userId} (int: ${userIdInt})`);
+
   try {
-    const AsyncStorage = require("@react-native-async-storage/async-storage").default;
+    // Vérifier last_sleep directement dans Supabase (plus de AsyncStorage legacy)
+    const { data: userData, error: userErr } = await supabase
+      .from("users")
+      .select("last_sleep")
+      .eq("id_user", userIdInt)
+      .maybeSingle();
 
-    const lastSleepStr = await AsyncStorage.getItem(storageKey);
-    if (lastSleepStr) {
-      const lastSleep = new Date(lastSleepStr);
+    console.log(`[sleepRestore] users.last_sleep: ${userData?.last_sleep ?? "null"} | error: ${userErr ? JSON.stringify(userErr) : "aucune"}`);
+
+    if (userData?.last_sleep) {
+      const lastSleep = new Date(userData.last_sleep);
       const now       = new Date();
       const sameDay   =
         lastSleep.getDate()     === now.getDate()     &&
@@ -483,53 +489,77 @@ export async function sleepRestore(userId: string): Promise<{ success: boolean; 
         lastSleep.getFullYear() === now.getFullYear();
 
       if (sameDay) {
+        console.log(`[sleepRestore] ❌ Déjà dormi aujourd'hui — bloqué`);
         return { success: false, message: "Tu as déjà dormi aujourd'hui ! Reviens demain. 😴" };
       }
     }
 
-    // Récupérer stats actuelles
+    // Récupérer toutes les stats actuelles pour ne pas perdre connaissance/organisation
     const { data: ps, error } = await supabase
       .from("player_stats")
-      .select("stress")
+      .select("stress, connaissance, organisation")
       .eq("id_user", userIdInt)
       .maybeSingle();
 
+    console.log(`[sleepRestore] player_stats AVANT:`, JSON.stringify(ps) ?? "LIGNE INTROUVABLE");
     if (error) {
-      console.error("[sleepRestore] fetch error:", error.message);
+      console.error("[sleepRestore] ❌ fetch error:", error.message, JSON.stringify(error));
       return { success: false, message: "Erreur lors de la récupération des stats." };
     }
 
     const newStress = clamp((ps?.stress ?? 50) - 20);
+    console.log(`[sleepRestore] stress: ${ps?.stress ?? 50} → ${newStress}`);
 
-    // Mettre à jour player_stats (source principale)
-    const { error: updateErr } = await supabase
+    const upsertPayload = {
+      id_user:      userIdInt,
+      energie:      100,
+      stress:       newStress,
+      connaissance: ps?.connaissance ?? 50,
+      organisation: ps?.organisation ?? 50,
+      date_maj:     new Date().toISOString(),
+    };
+    console.log(`[sleepRestore] payload upsert:`, JSON.stringify(upsertPayload));
+
+    // upsert complet avec TOUTES les colonnes pour ne pas écraser les autres valeurs
+    const { error: upsertErr, data: upsertData } = await supabase
       .from("player_stats")
-      .upsert({
-        id_user:  userIdInt,
-        energie:  100,
-        stress:   newStress,
-        date_maj: new Date().toISOString(),
-      }, { onConflict: "id_user" });
+      .upsert(upsertPayload, { onConflict: "id_user" })
+      .select();
 
-    if (updateErr) {
-      console.error("[sleepRestore] update error:", updateErr.message);
+    console.log(`[sleepRestore] upsert result — data:`, JSON.stringify(upsertData), "| error:", upsertErr ? JSON.stringify(upsertErr) : "aucune");
+
+    if (upsertErr) {
+      console.error("[sleepRestore] ❌ upsert error:", upsertErr.message, JSON.stringify(upsertErr));
       return { success: false, message: "Erreur lors de la sauvegarde." };
     }
 
+    // Vérification post-upsert : relire ce qui est réellement en base
+    const { data: psAfter, error: readErr } = await supabase
+      .from("player_stats")
+      .select("energie, stress, connaissance, organisation")
+      .eq("id_user", userIdInt)
+      .maybeSingle();
+    console.log(`[sleepRestore] player_stats APRÈS:`, JSON.stringify(psAfter) ?? "INTROUVABLE", "| readErr:", readErr ? JSON.stringify(readErr) : "aucune");
+
     // Synchroniser aussi users.energie pour les écrans qui lisent cette colonne
-    await supabase
+    const { error: syncErr } = await supabase
       .from("users")
       .update({ energie: 100 })
       .eq("id_user", userIdInt);
+    console.log(`[sleepRestore] sync users.energie — error:`, syncErr ? JSON.stringify(syncErr) : "aucune");
 
-    // Sauvegarder la date en local
-    await AsyncStorage.setItem(storageKey, new Date().toISOString());
+    // Sauvegarder la date du dernier sleep dans Supabase
+    await supabase
+      .from("users")
+      .update({ last_sleep: new Date().toISOString() })
+      .eq("id_user", userIdInt);
+    console.log(`[sleepRestore] last_sleep sauvegardé`);
 
-    console.log("✅ sleepRestore — énergie → 100, stress -20");
+    console.log("✅ [sleepRestore] DONE — énergie → 100, stress -20\n");
     return { success: true, message: "Bonne nuit ! ⚡ Énergie restaurée à 100%" };
 
   } catch (e) {
-    console.error("[sleepRestore] error:", e);
+    console.error("[sleepRestore] ❌ EXCEPTION:", e);
     return { success: false, message: "Erreur inattendue." };
   }
 }
@@ -553,18 +583,27 @@ export async function buyEnergyPotion(
   userId: number,
   currentGold: number,
 ): Promise<{ success: boolean; message: string; newGold?: number }> {
+  console.log(`\n🧪 [buyEnergyPotion] START — userId: ${userId}, gold actuel: ${currentGold}, prix: ${ENERGY_POTION.price}`);
+
   if (currentGold < ENERGY_POTION.price) {
+    console.log(`[buyEnergyPotion] ❌ Pas assez de gold (${currentGold} < ${ENERGY_POTION.price})`);
     return { success: false, message: `Pas assez de gold ! Il te faut ${ENERGY_POTION.price} 🪙` };
   }
 
   const newGold = currentGold - ENERGY_POTION.price;
+  console.log(`[buyEnergyPotion] gold: ${currentGold} → ${newGold}`);
 
-  const { error: goldErr } = await supabase
+  const { error: goldErr, data: goldData } = await supabase
     .from("users")
     .update({ gold: newGold })
-    .eq("id_user", userId);
+    .eq("id_user", userId)
+    .select("gold");
 
-  if (goldErr) return { success: false, message: "Erreur lors du paiement." };
+  console.log(`[buyEnergyPotion] update users.gold — data:`, JSON.stringify(goldData), "| error:", goldErr ? JSON.stringify(goldErr) : "aucune");
+  if (goldErr) {
+    console.error("[buyEnergyPotion] ❌ goldErr:", goldErr.message, JSON.stringify(goldErr));
+    return { success: false, message: "Erreur lors du paiement." };
+  }
 
   // Ajouter ou incrémenter la potion dans user_items
   const { data: existing } = await supabase
@@ -574,18 +613,35 @@ export async function buyEnergyPotion(
     .eq("id_item", ENERGY_POTION.itemId)
     .maybeSingle();
 
+  console.log(`[buyEnergyPotion] user_items existant:`, JSON.stringify(existing) ?? "aucun");
+
   if (existing) {
-    await supabase
+    const newQty = (existing.quantite ?? 0) + 1;
+    const { error: updateErr } = await supabase
       .from("user_items")
-      .update({ quantite: (existing.quantite ?? 0) + 1 })
+      .update({ quantite: newQty })
       .eq("id_user", userId)
       .eq("id_item", ENERGY_POTION.itemId);
+    console.log(`[buyEnergyPotion] update quantite → ${newQty} | error:`, updateErr ? JSON.stringify(updateErr) : "aucune");
+    if (updateErr) {
+      // Rembourser le gold si l'update échoue
+      await supabase.from("users").update({ gold: currentGold }).eq("id_user", userId);
+      return { success: false, message: "Erreur lors de l'ajout de la potion." };
+    }
   } else {
-    await supabase
+    const { error: insertErr } = await supabase
       .from("user_items")
       .insert({ id_user: userId, id_item: ENERGY_POTION.itemId, quantite: 1 });
+    console.log(`[buyEnergyPotion] insert nouvelle potion | error:`, insertErr ? JSON.stringify(insertErr) : "aucune");
+    if (insertErr) {
+      console.error(`[buyEnergyPotion] ❌ FK error — l'item ${ENERGY_POTION.itemId} n'existe pas dans "boutique". Ajoute-le en base !`);
+      // Rembourser le gold
+      await supabase.from("users").update({ gold: currentGold }).eq("id_user", userId);
+      return { success: false, message: `Erreur : la potion (id=${ENERGY_POTION.itemId}) n'est pas enregistrée en base. Contacte l'admin.` };
+    }
   }
 
+  console.log("✅ [buyEnergyPotion] DONE\n");
   return { success: true, message: "Potion achetée ! 🧪", newGold };
 }
 
@@ -596,6 +652,8 @@ export async function buyEnergyPotion(
 export async function useEnergyPotion(
   userId: number,
 ): Promise<{ success: boolean; message: string; newEnergie?: number }> {
+  console.log(`\n⚡ [useEnergyPotion] START — userId: ${userId}`);
+
   // Vérifier quantité
   const { data: item } = await supabase
     .from("user_items")
@@ -604,45 +662,71 @@ export async function useEnergyPotion(
     .eq("id_item", ENERGY_POTION.itemId)
     .maybeSingle();
 
+  console.log(`[useEnergyPotion] user_items:`, JSON.stringify(item) ?? "aucun");
+
   if (!item || (item.quantite ?? 0) < 1) {
+    console.log(`[useEnergyPotion] ❌ Pas de potion disponible`);
     return { success: false, message: "Tu n'as pas de potion ! Achète-en une à la boutique. 🏪" };
   }
 
-  // Récupérer énergie actuelle
-  const { data: ps } = await supabase
+  // Récupérer toutes les stats actuelles (pour ne pas écraser stress/connaissance/organisation)
+  const { data: ps, error: psErr } = await supabase
     .from("player_stats")
-    .select("energie")
+    .select("energie, stress, connaissance, organisation")
     .eq("id_user", userId)
     .maybeSingle();
 
-  const newEnergie = clamp((ps?.energie ?? 50) + ENERGY_POTION.energyGain);
+  console.log(`[useEnergyPotion] player_stats AVANT:`, JSON.stringify(ps) ?? "INTROUVABLE", "| error:", psErr ? JSON.stringify(psErr) : "aucune");
 
-  // Mettre à jour player_stats (source principale)
-  await supabase
+  const newEnergie = clamp((ps?.energie ?? 50) + ENERGY_POTION.energyGain);
+  console.log(`[useEnergyPotion] energie: ${ps?.energie ?? 50} → ${newEnergie} (+${ENERGY_POTION.energyGain})`);
+
+  const upsertPayload = {
+    id_user:      userId,
+    energie:      newEnergie,
+    stress:       ps?.stress       ?? 50,
+    connaissance: ps?.connaissance ?? 50,
+    organisation: ps?.organisation ?? 50,
+    date_maj:     new Date().toISOString(),
+  };
+  console.log(`[useEnergyPotion] payload upsert:`, JSON.stringify(upsertPayload));
+
+  // upsert complet avec TOUTES les colonnes
+  const { error: upsertErr, data: upsertData } = await supabase
     .from("player_stats")
-    .upsert({
-      id_user:  userId,
-      energie:  newEnergie,
-      date_maj: new Date().toISOString(),
-    }, { onConflict: "id_user" });
+    .upsert(upsertPayload, { onConflict: "id_user" })
+    .select();
+
+  console.log(`[useEnergyPotion] upsert result — data:`, JSON.stringify(upsertData), "| error:", upsertErr ? JSON.stringify(upsertErr) : "aucune");
+
+  // Vérification post-upsert
+  const { data: psAfter } = await supabase
+    .from("player_stats")
+    .select("energie, stress, connaissance, organisation")
+    .eq("id_user", userId)
+    .maybeSingle();
+  console.log(`[useEnergyPotion] player_stats APRÈS:`, JSON.stringify(psAfter) ?? "INTROUVABLE");
 
   // Synchroniser aussi users.energie
-  await supabase
+  const { error: syncErr } = await supabase
     .from("users")
     .update({ energie: newEnergie })
     .eq("id_user", userId);
+  console.log(`[useEnergyPotion] sync users.energie — error:`, syncErr ? JSON.stringify(syncErr) : "aucune");
 
   // Décrémenter quantité
   const newQty = (item.quantite ?? 1) - 1;
   if (newQty <= 0) {
-    await supabase.from("user_items").delete()
+    const { error: delErr } = await supabase.from("user_items").delete()
       .eq("id_user", userId).eq("id_item", ENERGY_POTION.itemId);
+    console.log(`[useEnergyPotion] suppression potion (qty=0) | error:`, delErr ? JSON.stringify(delErr) : "aucune");
   } else {
-    await supabase.from("user_items").update({ quantite: newQty })
+    const { error: decrErr } = await supabase.from("user_items").update({ quantite: newQty })
       .eq("id_user", userId).eq("id_item", ENERGY_POTION.itemId);
+    console.log(`[useEnergyPotion] décrément quantite → ${newQty} | error:`, decrErr ? JSON.stringify(decrErr) : "aucune");
   }
 
-  console.log(`✅ useEnergyPotion — énergie: ${ps?.energie ?? 50} → ${newEnergie}`);
+  console.log(`✅ [useEnergyPotion] DONE — énergie: ${ps?.energie ?? 50} → ${newEnergie}\n`);
   return { success: true, message: `⚡ +${ENERGY_POTION.energyGain} énergie !`, newEnergie };
 }
 

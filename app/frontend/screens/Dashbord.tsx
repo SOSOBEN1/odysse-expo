@@ -840,6 +840,7 @@ function useDashboardUser(): DashboardUser {
 // ─── HEADER ───────────────────────────────────────────────────────────────────
 const DashboardHeader = () => {
  const { selectedModel }                  = useAvatar();
+ const { stats: globalStats }             = useStats();
 
   const { icon: timeIcon, text: timeText } = getTimeGreeting();
   const router                             = useRouter();
@@ -851,7 +852,7 @@ const DashboardHeader = () => {
       <View style={headerStyles.topRow}>
         <View style={headerStyles.coinsBadge}>
           <Text style={headerStyles.coinIcon}>🪙</Text>
-          <Text style={headerStyles.coinsText}>{USER.coins.toLocaleString()}</Text>
+          <Text style={headerStyles.coinsText}>{(globalStats.gold > 0 ? globalStats.gold : USER.coins).toLocaleString()}</Text>
         </View>
         <View style={headerStyles.headerIcons}>
           <PuzzleIcone onPress={() => router.push("/frontend/screens/WorldsScreen")} />
@@ -867,9 +868,15 @@ const DashboardHeader = () => {
           {selectedModel ? (
             <AvatarCrd model={selectedModel} />
           ) : (
-            <View style={headerStyles.avatarPlaceholder}>
+            <TouchableOpacity
+              style={headerStyles.avatarPlaceholder}
+              onPress={() => router.push("/frontend/screens/BoutiqueScreen")}
+            >
               <Text style={headerStyles.avatarEmoji}>🧑</Text>
-            </View>
+              <Text style={{ fontSize: 7, color: "#6d28d9", fontWeight: "800", textAlign: "center", paddingHorizontal: 4 }}>
+                Choisir avatar →
+              </Text>
+            </TouchableOpacity>
           )}
           <View style={headerStyles.levelBadge}>
             <Text style={headerStyles.levelText}>Niv. {USER.level}</Text>
@@ -949,8 +956,34 @@ const CircularProgress = ({ percent, color, size = 70, strokeWidth = 7 }: { perc
 // ─── StatsCard ────────────────────────────────────────────────────────────────
 const StatsCard = () => {
   const { userId } = useUser();
-  // ✅ On utilise le contexte global — mis à jour partout dans l'app
-  const { stats, refreshStats } = useStats();
+  // Stats locales — source directe Supabase, indépendante du contexte
+  const [localStats, setLocalStats] = useState({ energie: 50, stress: 50, connaissance: 50, organisation: 50 });
+  const { refreshStats } = useStats(); // on rafraîchit quand même le contexte global pour le gold/header
+
+  // Lecture directe Supabase — source de vérité pour l'affichage des stats
+  const loadLocalStats = useCallback(async () => {
+    if (!userId) return;
+    console.log(`\n📊 [loadLocalStats] lecture player_stats pour userId: ${userId}`);
+    const { data, error } = await supabase
+      .from("player_stats")
+      .select("energie, stress, connaissance, organisation")
+      .eq("id_user", userId)
+      .maybeSingle();
+    console.log(`[loadLocalStats] data:`, JSON.stringify(data), "| error:", error ? JSON.stringify(error) : "aucune");
+    if (data) {
+      setLocalStats({
+        energie:      data.energie      ?? 50,
+        stress:       data.stress       ?? 50,
+        connaissance: data.connaissance ?? 50,
+        organisation: data.organisation ?? 50,
+      });
+      console.log(`[loadLocalStats] ✅ localStats mis à jour — energie: ${data.energie}\n`);
+    } else {
+      console.log(`[loadLocalStats] ⚠️ Aucune donnée — localStats inchangé\n`);
+    }
+  }, [userId]);
+
+  useFocusEffect(useCallback(() => { loadLocalStats(); }, [loadLocalStats]));
   const [potionQty, setPotionQty]         = useState(0);
   const [potionModal, setPotionModal]     = useState(false);
   const [sleepModal, setSleepModal]       = useState(false);
@@ -1000,20 +1033,33 @@ const StatsCard = () => {
     if (!userId || sleeping) return;
     setSleepModal(false);
     setSleeping(true);
+    console.log(`[handleSleep] appel sleepRestore pour userId: ${userId}`);
     const result = await sleepRestore(String(userId));
+    console.log(`[handleSleep] sleepRestore result:`, JSON.stringify(result));
     setSleeping(false);
     showToast(result.message);
-    if (result.success) refreshStats();
+    if (result.success) {
+      console.log(`[handleSleep] ✅ succès — rechargement stats...`);
+      await loadLocalStats();
+      refreshStats();
+    }
   };
 
   // Utiliser potion
   const handleUsePotion = async () => {
     if (!userId || usingPotion) return;
     setUsingPotion(true);
+    console.log(`[handleUsePotion] appel useEnergyPotion pour userId: ${userId}`);
     const result = await useEnergyPotion(userId);
+    console.log(`[handleUsePotion] useEnergyPotion result:`, JSON.stringify(result));
     setUsingPotion(false);
     showToast(result.message);
-    if (result.success) { refreshStats(); loadPotionQty(); }
+    if (result.success) {
+      console.log(`[handleUsePotion] ✅ succès — rechargement stats...`);
+      await loadLocalStats();
+      refreshStats();
+      loadPotionQty();
+    }
   };
 
   // Acheter potion
@@ -1021,17 +1067,19 @@ const StatsCard = () => {
     if (!userId) return;
     const { data: user } = await supabase.from("users").select("gold").eq("id_user", userId).single();
     const currentGold = user?.gold ?? 0;
+    console.log(`[handleBuyPotion] gold lu depuis users: ${currentGold} pour userId: ${userId}`);
     const result = await buyEnergyPotion(userId, currentGold);
+    console.log(`[handleBuyPotion] buyEnergyPotion result:`, JSON.stringify(result));
     showToast(result.message);
-    if (result.success) loadPotionQty();
+    if (result.success) { loadPotionQty(); refreshStats(); }
     setPotionModal(false);
   };
 
   const STATS: Stat[] = [
-    { label: "Énergie",      percent: stats.energie      ?? 0, color: COLORS.statEnergie,      emoji: "⚡" },
-    { label: "Stress",       percent: stats.stress       ?? 0, color: COLORS.statStress,       emoji: "😰" },
-    { label: "Connaissance", percent: stats.connaissance ?? 0, color: COLORS.statConnaissance, emoji: "📚" },
-    { label: "Organisation", percent: stats.organisation ?? 0, color: COLORS.statOrganisation, emoji: "🗂️" },
+    { label: "Énergie",      percent: localStats.energie      ?? 0, color: COLORS.statEnergie,      emoji: "⚡" },
+    { label: "Stress",       percent: localStats.stress       ?? 0, color: COLORS.statStress,       emoji: "😰" },
+    { label: "Connaissance", percent: localStats.connaissance ?? 0, color: COLORS.statConnaissance, emoji: "📚" },
+    { label: "Organisation", percent: localStats.organisation ?? 0, color: COLORS.statOrganisation, emoji: "🗂️" },
   ];
 
   return (
@@ -1044,10 +1092,36 @@ const StatsCard = () => {
               <Text style={{ fontSize: 11 }}>{s.emoji}</Text>
               <Text style={statsStyles.label}>{s.label}</Text>
             </View>
-            <Text style={statsStyles.sub}>Niveau actuel</Text>
           </View>
         ))}
       </View>
+
+      {/* ── Bandeau état énergie ── */}
+      {localStats.energie >= 70 ? (
+        <View style={[statsStyles.energyBanner, { backgroundColor: "#1a3a1a", borderColor: "#4ade80" }]}>
+          <Text style={statsStyles.energyBannerEmoji}>⚡</Text>
+          <View>
+            <Text style={[statsStyles.energyBannerTitle, { color: "#4ade80" }]}>Énergie élevée</Text>
+            <Text style={statsStyles.energyBannerSub}>Tu es au top, fonce sur tes missions !</Text>
+          </View>
+        </View>
+      ) : localStats.energie >= 30 ? (
+        <View style={[statsStyles.energyBanner, { backgroundColor: "#2a2510", borderColor: "#facc15" }]}>
+          <Text style={statsStyles.energyBannerEmoji}>🌙</Text>
+          <View>
+            <Text style={[statsStyles.energyBannerTitle, { color: "#facc15" }]}>Énergie modérée</Text>
+            <Text style={statsStyles.energyBannerSub}>Pense à te reposer bientôt.</Text>
+          </View>
+        </View>
+      ) : (
+        <View style={[statsStyles.energyBanner, { backgroundColor: "#3a1010", borderColor: "#f87171" }]}>
+          <Text style={statsStyles.energyBannerEmoji}>😴</Text>
+          <View>
+            <Text style={[statsStyles.energyBannerTitle, { color: "#f87171" }]}>Énergie critique</Text>
+            <Text style={statsStyles.energyBannerSub}>Dors ou utilise une potion pour récupérer !</Text>
+          </View>
+        </View>
+      )}
 
       {/* ── Boutons énergie ── */}
       <View style={statsStyles.energyBtns}>
@@ -1172,6 +1246,11 @@ const statsStyles = StyleSheet.create({
   sub:          { fontSize: 9, color: COLORS.statSubColor },
   // Boutons énergie
   energyBtns:   { flexDirection: "row", gap: 8, marginTop: 14 },
+  // Bandeau état énergie
+  energyBanner:      { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12, marginBottom: 2, borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  energyBannerEmoji: { fontSize: 22 },
+  energyBannerTitle: { fontWeight: "800", fontSize: 13 },
+  energyBannerSub:   { color: "#9ca3af", fontSize: 10, marginTop: 1 },
   sleepBtn:     { flex: 1, backgroundColor: "#1a1a2e", borderRadius: 14, padding: 12, gap: 8 },
   sleepBtnRow:  { flexDirection: "row", alignItems: "center", gap: 8 },
   sleepBtnEmoji:{ fontSize: 22 },

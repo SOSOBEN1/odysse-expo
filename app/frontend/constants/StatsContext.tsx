@@ -9,6 +9,7 @@ export interface PlayerStats {
   stress: number;
   connaissance: number;
   organisation: number;
+  gold: number;
 }
 
 interface StatsContextValue {
@@ -20,7 +21,7 @@ interface StatsContextValue {
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 const StatsContext = createContext<StatsContextValue>({
-  stats:        { energie: 50, stress: 50, connaissance: 50, organisation: 50 },
+  stats:        { energie: 50, stress: 50, connaissance: 50, organisation: 50, gold: 0 },
   refreshStats: async () => {},
   loading:      true,
 });
@@ -30,7 +31,7 @@ const StatsContext = createContext<StatsContextValue>({
 export function StatsProvider({ children }: { children: React.ReactNode }) {
   const { userId } = useUser();
   const [stats, setStats] = useState<PlayerStats>({
-    energie: 50, stress: 50, connaissance: 50, organisation: 50,
+    energie: 50, stress: 50, connaissance: 50, organisation: 50, gold: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -50,7 +51,7 @@ export function StatsProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle(),
       supabase
         .from("users")
-        .select("energie")
+        .select("energie, gold")
         .eq("id_user", userId)
         .maybeSingle(),
     ]);
@@ -70,6 +71,7 @@ export function StatsProvider({ children }: { children: React.ReactNode }) {
       stress:       ps?.stress       ?? 50,
       connaissance: ps?.connaissance ?? 50,
       organisation: ps?.organisation ?? 50,
+      gold:         user?.gold       ?? 0,
     });
 
     setLoading(false);

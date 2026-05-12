@@ -3,10 +3,10 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pencil, LogOut } from "lucide-react-native";
+import { Pencil, LogOut, ShoppingBag } from "lucide-react-native";
 import {
   ActivityIndicator, Alert, Animated, Easing, ScrollView, StyleSheet,
-  Text, TouchableOpacity, View, ViewStyle
+  Text, TouchableOpacity, View, ViewStyle,
 } from "react-native";
 
 import AvatarCrd from "../components/AvatarCrd";
@@ -27,10 +27,6 @@ interface StatCardProps {
   label: string;
 }
 interface BadgeItemProps { emoji: string; label: string; color: string; }
-interface StarItem {
-  top?: number; bottom?: number; left?: number; right?: number;
-  size: number; opacity: number;
-}
 type AnimatedStarProps = { style: ViewStyle; size: number; delay?: number };
 
 interface UserBadge {
@@ -42,32 +38,15 @@ interface UserBadge {
 
 // ─── Mapping emoji/couleur par id_badge ───────────────────────────────────────
 const BADGE_EMOJI: Record<number, string> = {
-  1:  "👣",
-  2:  "🔥",
-  3:  "👁️",
-  4:  "📋",
-  5:  "🗂️",
-  6:  "🎯",
-  7:  "💪",
-  8:  "😌",
-  9:  "🧠",
-  10: "🏃",
+  1: "👣", 2: "🔥", 3: "👁️", 4: "📋", 5: "🗂️",
+  6: "🎯", 7: "💪", 8: "😌", 9: "🧠", 10: "🏃",
 };
-
 const BADGE_COLOR: Record<number, string> = {
-  1:  "#f9c74f",
-  2:  "#f8961e",
-  3:  "#4cc9f0",
-  4:  "#90be6d",
-  5:  "#43aa8b",
-  6:  "#7f5af0",
-  7:  "#e63946",
-  8:  "#06d6a0",
-  9:  "#118ab2",
-  10: "#ffd166",
+  1: "#f9c74f", 2: "#f8961e", 3: "#4cc9f0", 4: "#90be6d", 5: "#43aa8b",
+  6: "#7f5af0", 7: "#e63946", 8: "#06d6a0", 9: "#118ab2", 10: "#ffd166",
 };
 
-// ─── Données statiques ────────────────────────────────────────────────────────
+// ─── Étoiles animées ──────────────────────────────────────────────────────────
 const STAR_POSITIONS = [
   { top: 20,  left: 20,  size: 18, delay: 0   },
   { top: 15,  right: 30, size: 12, delay: 200 },
@@ -76,7 +55,6 @@ const STAR_POSITIONS = [
   { top: 38,  left: 180, size: 14, delay: 300 },
 ];
 
-// ─── AnimatedStar ─────────────────────────────────────────────────────────────
 function AnimatedStar({ style, size, delay = 0 }: AnimatedStarProps) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -102,18 +80,13 @@ function StatCard({ emoji, coin, value, label }: StatCardProps) {
   return (
     <View style={statStyles.card}>
       <View style={statStyles.row}>
-        {coin ? (
-          <GoldCoin size={24} />
-        ) : (
-          <Text style={statStyles.emoji}>{emoji}</Text>
-        )}
+        {coin ? <GoldCoin size={24} /> : <Text style={statStyles.emoji}>{emoji}</Text>}
         <Text style={statStyles.value}>{value}</Text>
       </View>
       <Text style={statStyles.label}>{label}</Text>
     </View>
   );
 }
-
 const statStyles = StyleSheet.create({
   card:  { width: "48%", backgroundColor: "#f0edff", borderRadius: 18, padding: 14, marginBottom: 10, minHeight: 78, justifyContent: "space-between" },
   row:   { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -133,7 +106,6 @@ function BadgeItem({ emoji, label, color }: BadgeItemProps) {
     </View>
   );
 }
-
 const badgeStyles = StyleSheet.create({
   container: { alignItems: "center", width: 70 },
   iconBox:   { width: 60, height: 60, borderRadius: 14, justifyContent: "center", alignItems: "center", marginBottom: 5, borderWidth: 1.5 },
@@ -141,7 +113,7 @@ const badgeStyles = StyleSheet.create({
   label:     { fontSize: 9.5, color: "#5c3ca8", textAlign: "center", fontWeight: "600", lineHeight: 13 },
 });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers niveau ───────────────────────────────────────────────────────────
 function getLevelTitle(niveau: number): string {
   if (niveau === 1)  return "Débutant curieux 🌱";
   if (niveau === 2)  return "Apprenti motivé 🔥";
@@ -154,7 +126,6 @@ function getLevelTitle(niveau: number): string {
   if (niveau <= 39)  return "Élite suprême 🦁";
   return "Légende vivante ✨";
 }
-
 function getLevelDescription(niveau: number): string {
   if (niveau === 1)  return "Tu commences ton odyssée. Chaque mission te rapproche de la maîtrise.";
   if (niveau === 2)  return "La flamme est allumée. Continue, tu es sur la bonne voie !";
@@ -174,7 +145,8 @@ export default function ProfileScreen() {
   const { setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername, isLoading: ctxLoading } = useUser();
 
-  const [avatarKey, setAvatarKey] = useState("avatar_1");
+  // ✅ null = pas d'avatar choisi (≠ "avatar_1" par défaut)
+  const [avatarKey, setAvatarKey] = useState<string | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [badges,    setBadges]    = useState<UserBadge[]>([]);
   const [userData,  setUserData]  = useState({
@@ -218,12 +190,16 @@ export default function ProfileScreen() {
           return;
         }
 
-        const key = user.avatar_url && AVATAR_MAP[user.avatar_url]
-          ? user.avatar_url
-          : "avatar_1";
-
-        setAvatarKey(key);
-        setSelectedModel(resolveAvatarModel(key));
+        // ✅ FIX : on ne force plus "avatar_1" si avatar_url est null/absent
+        const hasAvatar = user.avatar_url && AVATAR_MAP[user.avatar_url];
+        if (hasAvatar) {
+          setAvatarKey(user.avatar_url);
+          setSelectedModel(resolveAvatarModel(user.avatar_url));
+        } else {
+          // Aucun avatar choisi → on remet à null dans le contexte aussi
+          setAvatarKey(null);
+          setSelectedModel(null);
+        }
 
         // ── Fetch counts ──────────────────────────────────────────────────────
         const [
@@ -236,20 +212,13 @@ export default function ProfileScreen() {
           supabase.from("user_badges").select("id_badge",             { count: "exact", head: true }).eq("id_user", userId),
         ]);
 
-        // ── Fetch badges réels avec jointure ──────────────────────────────────
-        const { data: userBadgesData, error: badgeError } = await supabase
+        // ── Fetch badges ───────────────────────────────────────────────────────
+        const { data: userBadgesData } = await supabase
           .from("user_badges")
-          .select(`
-            id_badge,
-            badges ( nom )
-          `)
+          .select("id_badge, badges ( nom )")
           .eq("id_user", userId)
           .order("date_obtention", { ascending: false })
           .limit(4);
-
-        if (badgeError) {
-          console.warn("Erreur fetch badges:", badgeError.message);
-        }
 
         const mappedBadges: UserBadge[] = (userBadgesData ?? []).map((row: any) => ({
           id_badge: row.id_badge,
@@ -257,14 +226,12 @@ export default function ProfileScreen() {
           emoji:    BADGE_EMOJI[row.id_badge]  ?? "🏅",
           color:    BADGE_COLOR[row.id_badge]  ?? "#9b87c9",
         }));
-
         setBadges(mappedBadges);
 
         // ── XP / niveau ───────────────────────────────────────────────────────
         const xpTotal      = user.xp ?? 0;
         const niveau       = Math.floor(xpTotal / 500) + 1;
         const xpDansNiveau = xpTotal % 500;
-        const maxXp        = 500;
 
         setUserData({
           username:   user.username ?? "",
@@ -273,7 +240,7 @@ export default function ProfileScreen() {
           level:      niveau,
           levelTitle: getLevelTitle(niveau),
           xp:         xpDansNiveau,
-          xpMax:      maxXp,
+          xpMax:      500,
           coins:      user.gold     ?? 0,
           badgeCount: badgesCount   ?? 0,
           missions:   missionsCount ?? 0,
@@ -299,9 +266,15 @@ export default function ProfileScreen() {
           .select("avatar_url")
           .eq("id_user", userId)
           .single();
-        if (user?.avatar_url && AVATAR_MAP[user.avatar_url]) {
+
+        // ✅ FIX : même logique — null si pas d'avatar
+        const hasAvatar = user?.avatar_url && AVATAR_MAP[user.avatar_url];
+        if (hasAvatar) {
           setAvatarKey(user.avatar_url);
           setSelectedModel(resolveAvatarModel(user.avatar_url));
+        } else {
+          setAvatarKey(null);
+          setSelectedModel(null);
         }
       };
       refresh();
@@ -332,9 +305,7 @@ export default function ProfileScreen() {
       {/* Étoiles animées */}
       {STAR_POSITIONS.map((s, i) => (
         <AnimatedStar
-          key={i}
-          size={s.size}
-          delay={s.delay}
+          key={i} size={s.size} delay={s.delay}
           style={{
             position: "absolute", zIndex: 5,
             ...(s.top   !== undefined ? { top: s.top }     : {}),
@@ -350,15 +321,33 @@ export default function ProfileScreen() {
         <View style={{ width: 42 }} />
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-      >
-        {/* Avatar */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+
+        {/* ── Avatar : affiche le vrai avatar OU un placeholder cliquable → Boutique ── */}
         <View style={styles.mainAvatarWrapper}>
-          <View style={styles.mainAvatarCircle}>
-            <AvatarCrd model={resolveAvatarModel(avatarKey)} bgColor="#f0edff" />
-          </View>
+          {avatarKey ? (
+            // Avatar choisi → on l'affiche normalement
+            <TouchableOpacity
+              style={styles.mainAvatarCircle}
+              onPress={() => router.push("/frontend/screens/BoutiqueScreen")}
+              activeOpacity={0.85}
+            >
+              <AvatarCrd model={resolveAvatarModel(avatarKey)} bgColor="#f0edff" />
+            </TouchableOpacity>
+          ) : (
+            // Aucun avatar → placeholder Instagram-style + redirect boutique
+            <TouchableOpacity
+              style={[styles.mainAvatarCircle, styles.avatarPlaceholder]}
+              onPress={() => router.push("/frontend/screens/BoutiqueScreen")}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.avatarPlaceholderEmoji}>🧑</Text>
+              <View style={styles.avatarEditBadge}>
+                <ShoppingBag size={12} color="#fff" />
+              </View>
+              <Text style={styles.avatarPlaceholderHint}>Choisir un avatar</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Nom + niveau */}
@@ -384,7 +373,7 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Stats — pièces d'or avec GoldCoin, reste en emoji */}
+          {/* Stats */}
           <View style={styles.statsGrid}>
             <StatCard coin  value={userData.coins}      label="Pièces d'or" />
             <StatCard emoji="🏆" value={userData.badgeCount} label="Badges"      />
@@ -396,7 +385,6 @@ export default function ProfileScreen() {
           <Text style={styles.badgesTitle}>
             Badges gagnés {userData.badgeCount > 0 ? `(${userData.badgeCount})` : ""}
           </Text>
-
           {badges.length === 0 ? (
             <Text style={styles.badgesEmpty}>
               Aucun badge encore 🎯 Complète des missions pour en gagner !
@@ -404,12 +392,7 @@ export default function ProfileScreen() {
           ) : (
             <View style={styles.badgesRow}>
               {badges.map((b) => (
-                <BadgeItem
-                  key={b.id_badge}
-                  emoji={b.emoji}
-                  label={b.nom}
-                  color={b.color}
-                />
+                <BadgeItem key={b.id_badge} emoji={b.emoji} label={b.nom} color={b.color} />
               ))}
             </View>
           )}
@@ -431,11 +414,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           {/* Bouton déconnexion */}
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}
-            activeOpacity={0.85}
-          >
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.85}>
             <LogOut size={18} color="#fff" style={{ marginRight: 8 }} />
             <Text style={styles.logoutText}>Se déconnecter</Text>
           </TouchableOpacity>
@@ -464,28 +443,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 
-  logoutButton: {
-    width: "100%",
-    borderRadius: 15,
-    paddingVertical: 15,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#c0392b",
-    marginTop: 10,
-    elevation: 3,
-    shadowColor: "#7b241c",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-  },
-  logoutText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-    letterSpacing: 0.4,
-  },
-
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 10,
@@ -493,7 +450,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  // ── Avatar ──────────────────────────────────────────────────────────────────
   mainAvatarWrapper: { alignItems: "center", marginBottom: 8 },
+
   mainAvatarCircle: {
     width: 120,
     height: 120,
@@ -509,10 +468,45 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
 
+  // Placeholder quand aucun avatar n'est choisi
+  avatarPlaceholder: {
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0edff",
+    borderStyle: "dashed",
+    borderColor: "#b8a9f0",
+    position: "relative",
+  },
+  avatarPlaceholderEmoji: { fontSize: 42 },
+  avatarPlaceholderHint: {
+    fontSize: 8,
+    color: "#7f5af0",
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 2,
+    paddingHorizontal: 6,
+  },
+  // Badge "+" en bas à droite du placeholder
+  avatarEditBadge: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#7f5af0",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+
+  // ── Textes profil ────────────────────────────────────────────────────────────
   userName:  { fontSize: 22, fontWeight: "900", color: "#2d1a6e", letterSpacing: 1.5, marginBottom: 4, textAlign: "center" },
   userLevel: { fontSize: 13, color: "#9b87c9", fontWeight: "600", marginBottom: 6, textAlign: "center" },
   levelDesc: { fontSize: 11, color: "#a78bca", fontStyle: "italic", textAlign: "center", marginBottom: 16, paddingHorizontal: 24, lineHeight: 16 },
 
+  // ── Card ─────────────────────────────────────────────────────────────────────
   card: {
     width: "100%",
     backgroundColor: "#fff",
@@ -525,18 +519,38 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
 
+  // ── XP ───────────────────────────────────────────────────────────────────────
   xpBox:    { backgroundColor: "#f0edff", borderRadius: 18, padding: 14, marginBottom: 16 },
   xpHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   xpLabel:  { fontSize: 14, fontWeight: "800", color: "#2d1a6e" },
   xpTrack:  { height: 10, backgroundColor: "#d1c4e9", borderRadius: 10, overflow: "hidden" },
   xpFill:   { height: "100%", borderRadius: 10 },
 
+  // ── Stats & Badges ───────────────────────────────────────────────────────────
   statsGrid:   { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 8 },
   badgesTitle: { fontSize: 16, fontWeight: "800", color: "#2d1a6e", textAlign: "center", marginBottom: 14, marginTop: 6 },
   badgesEmpty: { fontSize: 12, color: "#9b87c9", textAlign: "center", marginBottom: 20, fontStyle: "italic" },
   badgesRow:   { flexDirection: "row", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 8 },
 
+  // ── Boutons ─────────────────────────────────────────────────────────────────
   editButton:   { width: "100%", borderRadius: 15, overflow: "hidden", elevation: 7, shadowColor: "#6949a8", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
   editGradient: { flexDirection: "row", paddingVertical: 15, alignItems: "center", justifyContent: "center" },
   editText:     { color: "#fff", fontWeight: "bold", fontSize: 16, letterSpacing: 0.4 },
+
+  logoutButton: {
+    width: "100%",
+    borderRadius: 15,
+    paddingVertical: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#c0392b",
+    marginTop: 10,
+    elevation: 3,
+    shadowColor: "#7b241c",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+  },
+  logoutText: { color: "#fff", fontWeight: "bold", fontSize: 16, letterSpacing: 0.4 },
 });

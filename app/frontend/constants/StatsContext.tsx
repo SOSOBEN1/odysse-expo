@@ -9,6 +9,7 @@ export interface PlayerStats {
   stress: number;
   connaissance: number;
   organisation: number;
+  gold: number;
 }
 
 interface StatsContextValue {
@@ -20,7 +21,7 @@ interface StatsContextValue {
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 const StatsContext = createContext<StatsContextValue>({
-  stats:        { energie: 50, stress: 50, connaissance: 50, organisation: 50 },
+  stats:        { energie: 50, stress: 50, connaissance: 50, organisation: 50, gold: 0 },
   refreshStats: async () => {},
   loading:      true,
 });
@@ -30,27 +31,49 @@ const StatsContext = createContext<StatsContextValue>({
 export function StatsProvider({ children }: { children: React.ReactNode }) {
   const { userId } = useUser();
   const [stats, setStats] = useState<PlayerStats>({
-    energie: 50, stress: 50, connaissance: 50, organisation: 50,
+    energie: 50, stress: 50, connaissance: 50, organisation: 50, gold: 0,
   });
   const [loading, setLoading] = useState(true);
 
   const refreshStats = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from("player_stats")
-      .select("energie, stress, connaissance, organisation")
-      .eq("id_user", userId)
-      .maybeSingle();
 
-    if (!error && data) {
-      setStats({
-        energie:      data.energie      ?? 50,
-        stress:       data.stress       ?? 50,
-        connaissance: data.connaissance ?? 50,
-        organisation: data.organisation ?? 50,
-      });
-    }
+    // Lire les deux tables en parallèle:
+    // - player_stats : source principale pour toutes les stats
+    // - users.energie : fallback car certaines fonctions (sleepRestore, useEnergyPotion)
+    //   ne mettent à jour que player_stats, mais on garde la compatibilité
+    const [psResult, userResult] = await Promise.all([
+      supabase
+        .from("player_stats")
+        .select("energie, stress, connaissance, organisation")
+        .eq("id_user", userId)
+        .maybeSingle(),
+      supabase
+        .from("users")
+        .select("energie, gold")
+        .eq("id_user", userId)
+        .maybeSingle(),
+    ]);
+
+    const ps   = psResult.data;
+    const user = userResult.data;
+
+    // player_stats.energie est prioritaire (source des fonctions sleep/potion)
+    // users.energie sert de fallback si player_stats n'existe pas encore
+    const energieVal =
+      ps?.energie   != null ? ps.energie :
+      user?.energie != null ? user.energie :
+      50;
+
+    setStats({
+      energie:      energieVal,
+      stress:       ps?.stress       ?? 50,
+      connaissance: ps?.connaissance ?? 50,
+      organisation: ps?.organisation ?? 50,
+      gold:         user?.gold       ?? 0,
+    });
+
     setLoading(false);
   }, [userId]);
 

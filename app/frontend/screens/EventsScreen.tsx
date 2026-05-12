@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
-  ScrollView, StatusBar, StyleSheet, Text,
-  TouchableOpacity, View, Alert,
+  Alert, ScrollView, StatusBar, StyleSheet, Text,
+  TextInput, TouchableOpacity, View,
 } from "react-native";
 import { useRouter } from "expo-router";
 import Navbar from "../components/Navbar";
@@ -11,14 +11,18 @@ import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 import CreateEventModal from "../components/CreateEventModal";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
+import { useAvatar } from "../constants/AvatarContext";
+import { useStats } from "../constants/StatsContext";
 
 type EventType = "projet" | "examen" | "soutenance";
 
-// ✅ FIX — id_boss au lieu de id (correspond au vrai champ PRIMARY KEY de boss_events)
 interface BossEvent {
-  id_boss: number;
-  nom: string;
-  type_boss: EventType;
+  id_boss:      number;
+  nom:          string;
+  type_boss:    EventType;
+  date_limite:  string | null;
+  completed_at: string | null;
+  failed_at:    string | null;
 }
 
 const TABS = ["Tout", "Projet", "Examen", "Soutenance"] as const;
@@ -35,14 +39,55 @@ const getConfig = (type: string) =>
 
 export default function EventsScreen() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>("Tout");
+  const [activeTab, setActiveTab]       = useState<Tab>("Tout");
   const [isModalVisible, setModalVisible] = useState(false);
   const [selectedData, setSelectedData] = useState<any>(null);
-  const [events, setEvents] = useState<BossEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { userId } = useUser();
+  const [events, setEvents]             = useState<BossEvent[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [searchQuery, setSearchQuery]   = useState("");
+  const [displayName, setDisplayName]   = useState<string>("...");
 
-  // ✅ FIX — useEffect simple, se déclenche dès que userId est disponible
+  const { userId, username: ctxUsername } = useUser();
+  const { selectedModel, setSelectedModel } = useAvatar();
+  const { stats: playerStats } = useStats();
+
+  const ENERGY_THRESHOLD = 16;
+
+  const navigateToEventMissions = (eventId: string, eventTitle: string) => {
+    if (playerStats.energie < ENERGY_THRESHOLD) {
+      Alert.alert(
+        "⚡ Énergie insuffisante",
+        `Tu as seulement ${Math.round(playerStats.energie)}% d'énergie.\n\nIl te faut au minimum ${ENERGY_THRESHOLD}% pour accéder aux missions d'événement.\n\n💡 Va sur le Dashboard pour dormir ou utiliser une potion d'énergie !`,
+        [{ text: "OK", style: "default" }]
+      );
+      return;
+    }
+    router.push({
+      pathname: "/frontend/screens/missionEvent",
+      params: { eventId, eventTitle },
+    });
+  };
+
+  // ── Fetch user profile (nom + avatar) ──
+  useEffect(() => {
+    if (!userId) return;
+    const fetchUserProfile = async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("username, prenom, nom, avatar_url")
+        .eq("id_user", userId)
+        .single();
+
+      if (error || !data) return;
+
+      const name = data.username ?? data.prenom ?? data.nom ?? ctxUsername ?? "Joueur";
+      setDisplayName(name);
+      if (data.avatar_url) setSelectedModel(data.avatar_url);
+    };
+    fetchUserProfile();
+  }, [userId, ctxUsername]);
+
+  // ── Fetch events ──
   useEffect(() => {
     if (userId) fetchEvents();
   }, [userId]);
@@ -54,9 +99,21 @@ export default function EventsScreen() {
 
       const { data, error } = await supabase
         .from("boss_events")
-        .select("id_boss, nom, type_boss") // ✅ sélection explicite des bons champs
+        .select("id_boss, nom, type_boss, date_limite, completed_at, failed_at")
         .eq("id_creator", userId)
         .order("id_boss", { ascending: false });
+
+      // Auto-fail events whose deadline has passed and aren't done/failed yet
+      const now = new Date();
+      for (const ev of (data ?? [])) {
+        if (ev.date_limite && !ev.completed_at && !ev.failed_at) {
+          if (new Date(ev.date_limite) < now) {
+            const { failEvent } = await import("../../../backend/services/Userstatsservice");
+            await failEvent(Number(userId), ev.id_boss);
+            ev.failed_at = new Date().toISOString(); // update local copy
+          }
+        }
+      }
 
       if (error) throw error;
       setEvents(data ?? []);
@@ -67,10 +124,16 @@ export default function EventsScreen() {
     }
   };
 
-  const filtered = events.filter(e => {
-    if (activeTab === "Tout") return true;
-    return e.type_boss?.toLowerCase() === activeTab.toLowerCase();
-  });
+  // ── Filtrage tab + recherche ──
+  const filtered = events
+    .filter(e => {
+      if (activeTab === "Tout") return true;
+      return e.type_boss?.toLowerCase() === activeTab.toLowerCase();
+    })
+    .filter(e => {
+      if (!searchQuery.trim()) return true;
+      return e.nom?.toLowerCase().includes(searchQuery.toLowerCase());
+    });
 
   const handleDelete = (id_boss: number) => {
     Alert.alert("Supprimer", "Supprimer cet événement ?", [
@@ -81,20 +144,16 @@ export default function EventsScreen() {
           const { error } = await supabase
             .from("boss_events")
             .delete()
-            .eq("id_boss", id_boss); // ✅ FIX — id_boss
+            .eq("id_boss", id_boss);
           if (error) Alert.alert("Erreur", error.message);
-          else setEvents(prev => prev.filter(e => e.id_boss !== id_boss)); // ✅ FIX
+          else setEvents(prev => prev.filter(e => e.id_boss !== id_boss));
         },
       },
     ]);
   };
 
   const handleEdit = (ev: BossEvent) => {
-    setSelectedData({
-      id_boss:   ev.id_boss, // ✅ FIX
-      nom:       ev.nom,
-      type_boss: ev.type_boss,
-    });
+    setSelectedData({ id_boss: ev.id_boss, nom: ev.nom, type_boss: ev.type_boss, date_limite: ev.date_limite });
     setModalVisible(true);
   };
 
@@ -105,23 +164,53 @@ export default function EventsScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarEmoji}>👩</Text>
-          </View>
-          <View>
-            <Text style={styles.greeting}>Bonjour, <Text style={styles.greetingName}>Sonia!</Text></Text>
-            <Text style={styles.subGreeting}>{filtered.length} événement{filtered.length !== 1 ? "s" : ""}</Text>
+        {/* ── Section title (même style que MissionsScreen) ── */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Événements</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>{filtered.length}</Text>
           </View>
         </View>
 
-        {/* Stats */}
+        {/* ── Bandeau énergie faible ── */}
+        {playerStats.energie < ENERGY_THRESHOLD && (
+          <View style={styles.lowEnergyBanner}>
+            <Text style={styles.lowEnergyIcon}>⚡</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.lowEnergyTitle}>Énergie insuffisante ({Math.round(playerStats.energie)}%)</Text>
+              <Text style={styles.lowEnergyDesc}>Il te faut min. {ENERGY_THRESHOLD}% pour accéder aux missions. Va dormir ou utilise une potion sur le Dashboard !</Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Barre de recherche ── */}
+        <View style={styles.searchWrapper}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Rechercher un événement..."
+            placeholderTextColor="#9b8bbf"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery("")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.searchClear}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* ── Stats ── */}
         <View style={styles.statRow}>
           {[
             { val: events.length, label: "Total", color: COLORS.primary },
-            { val: events.filter(e => e.type_boss?.toLowerCase() === "examen").length, label: "Examens", color: "#e84393" },
-            { val: events.filter(e => e.type_boss?.toLowerCase() === "projet").length, label: "Projets", color: "#6c3fcb" },
+            { val: events.filter(e => e.type_boss?.toLowerCase() === "examen").length,    label: "Examens", color: "#e84393" },
+            { val: events.filter(e => e.type_boss?.toLowerCase() === "projet").length,    label: "Projets",  color: "#6c3fcb" },
+            { val: events.filter(e => e.type_boss?.toLowerCase() === "soutenance").length, label: "Souten.", color: "#5ab4e5" },
           ].map(s => (
             <View key={s.label} style={styles.statCard}>
               <Text style={[styles.statVal, { color: s.color }]}>{s.val}</Text>
@@ -130,15 +219,7 @@ export default function EventsScreen() {
           ))}
         </View>
 
-        {/* Section title */}
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Événements</Text>
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{filtered.length}</Text>
-          </View>
-        </View>
-
-        {/* Tabs */}
+        {/* ── Tabs ── */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContainer}>
           {TABS.map(tab => (
             <TouchableOpacity
@@ -151,55 +232,98 @@ export default function EventsScreen() {
           ))}
         </ScrollView>
 
-        {/* Cards */}
+        {/* ── Cards ── */}
         {loading ? (
           <Text style={styles.empty}>Chargement...</Text>
         ) : filtered.length === 0 ? (
           <Text style={styles.empty}>Aucun événement trouvé</Text>
         ) : filtered.map(ev => {
-          const cfg = getConfig(ev.type_boss);
+          const cfg           = getConfig(ev.type_boss);
+          const isFailed      = !!ev.failed_at;
+          const isCompleted   = !!ev.completed_at;
+          const now           = new Date();
+          const deadlineDate  = ev.date_limite ? new Date(ev.date_limite) : null;
+          const isExpiring    = deadlineDate && !isFailed && !isCompleted && deadlineDate > now
+                                  && (deadlineDate.getTime() - now.getTime()) < 3 * 24 * 60 * 60 * 1000; // <3 jours
+          const deadlineStr   = deadlineDate
+            ? deadlineDate.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })
+            : null;
+
+          const cardBg = isFailed ? "#fff1f2" : isCompleted ? "#f0fdf4" : cfg.bg;
+
           return (
-            // ✅ FIX — key et toutes les refs utilisent ev.id_boss
             <View key={ev.id_boss} style={styles.cardWrapper}>
-              <View style={[styles.eventBadge, { backgroundColor: cfg.color }]}>
-                <Text style={styles.eventBadgeText}>{ev.type_boss}</Text>
+              {/* Type badge */}
+              <View style={[styles.eventBadge, { backgroundColor: isFailed ? "#ef4444" : isCompleted ? "#10b981" : cfg.color }]}>
+                <Text style={styles.eventBadgeText}>
+                  {isFailed ? "❌ Échoué" : isCompleted ? "✅ Terminé" : ev.type_boss}
+                </Text>
               </View>
 
               <TouchableOpacity
-                style={[styles.card, { backgroundColor: cfg.bg }]}
+                style={[styles.card, { backgroundColor: cardBg, opacity: isFailed ? 0.75 : 1 }]}
                 activeOpacity={0.88}
-                onPress={() => router.push({
-                  pathname: "/frontend/screens/missionEvent",
-                  params: { eventId: String(ev.id_boss), eventTitle: ev.nom }, // ✅ FIX
-                })}
+                onPress={() => !isFailed && navigateToEventMissions(String(ev.id_boss), ev.nom)}
               >
                 <View style={styles.topRow}>
-                  <View style={[styles.iconBox, { backgroundColor: cfg.color }]}>
-                    <Text style={styles.iconText}>{cfg.icon}</Text>
+                  <View style={[styles.iconBox, { backgroundColor: isFailed ? "#ef4444" : isCompleted ? "#10b981" : cfg.color }]}>
+                    <Text style={styles.iconText}>{isFailed ? "💀" : isCompleted ? "🏆" : cfg.icon}</Text>
                   </View>
                   <View style={styles.infoBox}>
                     <Text style={styles.eventTitle} numberOfLines={2}>{ev.nom}</Text>
-                    <Text style={[styles.typePill, { color: cfg.color }]}>
-                      {ev.type_boss?.charAt(0).toUpperCase() + ev.type_boss?.slice(1)}
-                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <Text style={[styles.typePill, { color: isFailed ? "#ef4444" : isCompleted ? "#10b981" : cfg.color }]}>
+                        {ev.type_boss?.charAt(0).toUpperCase() + ev.type_boss?.slice(1)}
+                      </Text>
+                      {/* Deadline chip */}
+                      {deadlineStr && !isCompleted && (
+                        <View style={[
+                          styles.deadlineChip,
+                          isFailed    && styles.deadlineChipFailed,
+                          isExpiring  && styles.deadlineChipExpiring,
+                        ]}>
+                          <Text style={[
+                            styles.deadlineChipText,
+                            isFailed   && { color: "#ef4444" },
+                            isExpiring && { color: "#f59e0b" },
+                          ]}>
+                            {isFailed ? "⛔ Expiré" : isExpiring ? "⚠️ " + deadlineStr : "📅 " + deadlineStr}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                 </View>
 
+                {/* Pénalité si échoué */}
+                {isFailed && (
+                  <View style={styles.failPenaltyRow}>
+                    <Text style={styles.failPenaltyText}>💔 -20 énergie  😰 +25 stress</Text>
+                  </View>
+                )}
+
                 {/* Footer */}
                 <View style={styles.cardFooter}>
-                  <TouchableOpacity
-                    style={[styles.seeMissionsBtn, { backgroundColor: cfg.color }]}
-                    onPress={() => router.push({
-                      pathname: "/frontend/screens/missionEvent",
-                      params: { eventId: String(ev.id_boss), eventTitle: ev.nom }, // ✅ FIX
-                    })}
-                  >
-                    <Text style={styles.seeMissionsText}>Voir les missions →</Text>
-                  </TouchableOpacity>
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => handleEdit(ev)}>
-                      <Ionicons name="pencil-outline" size={16} color="#6c3fcb" />
+                  {!isFailed ? (
+                    <TouchableOpacity
+                      style={[styles.seeMissionsBtn, { backgroundColor: isCompleted ? "#10b981" : cfg.color }]}
+                      onPress={() => navigateToEventMissions(String(ev.id_boss), ev.nom)}
+                    >
+                      <Text style={styles.seeMissionsText}>
+                        {isCompleted ? "Voir le résumé →" : "Voir les missions →"}
+                      </Text>
                     </TouchableOpacity>
+                  ) : (
+                    <View style={[styles.seeMissionsBtn, { backgroundColor: "#9ca3af" }]}>
+                      <Text style={styles.seeMissionsText}>Événement échoué</Text>
+                    </View>
+                  )}
+                  <View style={styles.cardActions}>
+                    {!isFailed && !isCompleted && (
+                      <TouchableOpacity style={styles.iconBtn} onPress={() => handleEdit(ev)}>
+                        <Ionicons name="pencil-outline" size={16} color="#6c3fcb" />
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity style={styles.iconBtn} onPress={() => handleDelete(ev.id_boss)}>
                       <Ionicons name="trash-outline" size={16} color="#e84393" />
                     </TouchableOpacity>
@@ -231,43 +355,66 @@ export default function EventsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:        { flex: 1, backgroundColor: "#f5f3ff" },
-  scrollContent:    { paddingTop: 60, paddingHorizontal: SIZES.padding, paddingBottom: 120 },
-  header:           { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 20 },
-  avatarCircle:     { width: 70, height: 70, borderRadius: 35, backgroundColor: "#fff", justifyContent: "center", alignItems: "center", ...SHADOWS.medium },
-  avatarEmoji:      { fontSize: 36 },
-  greeting:         { fontSize: 22, color: "#2d1a5e" },
-  greetingName:     { fontWeight: "800" },
-  subGreeting:      { color: "#7a5bbf", fontWeight: "600", fontSize: 14, marginTop: 2 },
-  statRow:          { flexDirection: "row", gap: 10, marginBottom: 20 },
-  statCard:         { flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 10, alignItems: "center", ...SHADOWS.light },
-  statVal:          { fontSize: 20, fontWeight: "800" },
-  statLabel:        { fontSize: 11, color: "#9b8bbf", fontWeight: "600", marginTop: 2 },
-  sectionRow:       { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
-  sectionTitle:     { fontWeight: "800", fontSize: 20, color: "#2d1a5e" },
-  countBadge:       { backgroundColor: "#6c3fcb", borderRadius: 12, paddingHorizontal: 9, paddingVertical: 2 },
-  countText:        { color: "#fff", fontWeight: "800", fontSize: 13 },
-  tabsContainer:    { gap: 8, marginBottom: 24 },
-  tab:              { borderRadius: 20, borderWidth: 2, borderColor: "#c0a8f0", paddingVertical: 7, paddingHorizontal: 14 },
-  tabActive:        { backgroundColor: "#6c3fcb", borderWidth: 0 },
-  tabText:          { color: "#6c3fcb", fontWeight: "700", fontSize: 13 },
-  tabTextActive:    { color: "#fff" },
-  empty:            { textAlign: "center", color: "#9b8bbf", marginTop: 40, fontSize: 15 },
-  cardWrapper:      { marginBottom: 24 },
-  eventBadge:       { alignSelf: "flex-start", borderRadius: 20, paddingVertical: 6, paddingHorizontal: 22, marginLeft: 14, marginBottom: -14, zIndex: 2, ...SHADOWS.light },
-  eventBadgeText:   { color: "#fff", fontWeight: "700", fontSize: 12, textTransform: "capitalize" },
-  card:             { borderRadius: 20, paddingTop: 24, paddingBottom: 14, paddingHorizontal: 16, ...SHADOWS.medium },
-  topRow:           { flexDirection: "row", gap: 12, alignItems: "center" },
-  iconBox:          { width: 58, height: 58, borderRadius: 16, justifyContent: "center", alignItems: "center" },
-  iconText:         { fontSize: 26 },
-  infoBox:          { flex: 1 },
-  eventTitle:       { fontWeight: "800", fontSize: 17, color: "#2d1a5e" },
-  typePill:         { fontSize: 13, fontWeight: "600", marginTop: 4, textTransform: "capitalize" },
-  cardFooter:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.06)" },
-  seeMissionsBtn:   { borderRadius: 20, paddingVertical: 7, paddingHorizontal: 14 },
-  seeMissionsText:  { color: "#fff", fontWeight: "700", fontSize: 13 },
-  cardActions:      { flexDirection: "row", gap: 10 },
-  iconBtn:          { width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(120,90,180,0.08)", alignItems: "center", justifyContent: "center" },
-  createBtn:        { backgroundColor: "#4b2fa0", borderRadius: 30, paddingVertical: 15, alignItems: "center", marginTop: 8 },
-  createBtnText:    { color: "#fff", fontWeight: "800", fontSize: 17 },
+  container:      { flex: 1, backgroundColor: "#f5f3ff" },
+  scrollContent:  { paddingTop: 60, paddingHorizontal: SIZES.padding, paddingBottom: 160 },
+
+  // ── Section title ──
+  sectionRow:     { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  sectionTitle:   { fontWeight: "800", fontSize: 20, color: "#2d1a5e" },
+  countBadge:     { backgroundColor: "#6c3fcb", borderRadius: 12, paddingHorizontal: 9, paddingVertical: 2 },
+  countText:      { color: "#fff", fontWeight: "800", fontSize: 13 },
+
+  // ── Search bar ──
+  searchWrapper:  { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, ...SHADOWS.light },
+  searchIcon:     { fontSize: 16, marginRight: 8 },
+  searchInput:    { flex: 1, fontSize: 14, color: "#2d1a5e", padding: 0 },
+  searchClear:    { fontSize: 13, color: "#9b8bbf", fontWeight: "700", marginLeft: 8 },
+
+  // ── Stats ──
+  statRow:        { flexDirection: "row", gap: 8, marginBottom: 20 },
+  statCard:       { flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 10, alignItems: "center", ...SHADOWS.light },
+  statVal:        { fontSize: 18, fontWeight: "800" },
+  statLabel:      { fontSize: 10, color: "#9b8bbf", fontWeight: "600", marginTop: 2 },
+
+  // ── Tabs ──
+  tabsContainer:  { gap: 8, marginBottom: 24 },
+  tab:            { borderRadius: 20, borderWidth: 2, borderColor: "#c0a8f0", paddingVertical: 7, paddingHorizontal: 14 },
+  tabActive:      { backgroundColor: "#6c3fcb", borderWidth: 0 },
+  tabText:        { color: "#6c3fcb", fontWeight: "700", fontSize: 13 },
+  tabTextActive:  { color: "#fff" },
+
+  // ── Empty ──
+  empty:          { textAlign: "center", color: "#9b8bbf", marginTop: 40, fontSize: 15 },
+
+  // ── Cards ──
+  cardWrapper:    { marginBottom: 24 },
+  eventBadge:     { alignSelf: "flex-start", borderRadius: 20, paddingVertical: 6, paddingHorizontal: 22, marginLeft: 14, marginBottom: -14, zIndex: 2, ...SHADOWS.light },
+  eventBadgeText: { color: "#fff", fontWeight: "700", fontSize: 12, textTransform: "capitalize" },
+  card:           { borderRadius: 20, paddingTop: 24, paddingBottom: 14, paddingHorizontal: 16, ...SHADOWS.medium },
+  topRow:         { flexDirection: "row", gap: 12, alignItems: "center" },
+  iconBox:        { width: 58, height: 58, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+  iconText:       { fontSize: 26 },
+  infoBox:        { flex: 1 },
+  eventTitle:     { fontWeight: "800", fontSize: 17, color: "#2d1a5e" },
+  typePill:       { fontSize: 13, fontWeight: "600", marginTop: 4, textTransform: "capitalize" },
+  cardFooter:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.06)" },
+  seeMissionsBtn:       { borderRadius: 20, paddingVertical: 7, paddingHorizontal: 14 },
+  deadlineChip:         { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: "#ede9fe" },
+  deadlineChipFailed:   { backgroundColor: "#fee2e2" },
+  deadlineChipExpiring: { backgroundColor: "#fef3c7" },
+  deadlineChipText:     { fontSize: 10, fontWeight: "700", color: "#7c3aed" },
+  failPenaltyRow:       { backgroundColor: "#fee2e2", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8 },
+  failPenaltyText:      { fontSize: 11, fontWeight: "700", color: "#ef4444", textAlign: "center" },
+  seeMissionsText:{ color: "#fff", fontWeight: "700", fontSize: 13 },
+  cardActions:    { flexDirection: "row", gap: 10 },
+  iconBtn:        { width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(120,90,180,0.08)", alignItems: "center", justifyContent: "center" },
+
+  // ── Create button ──
+  createBtn:      { backgroundColor: "#4b2fa0", borderRadius: 30, paddingVertical: 15, alignItems: "center", marginTop: 8 },
+  createBtnText:  { color: "#fff", fontWeight: "800", fontSize: 17 },
+  // ── Bandeau énergie faible ──
+  lowEnergyBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#fff3cd", borderRadius: 14, padding: 12, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: "#f59e0b" },
+  lowEnergyIcon:   { fontSize: 22 },
+  lowEnergyTitle:  { fontWeight: "800", fontSize: 13, color: "#92400e", marginBottom: 2 },
+  lowEnergyDesc:   { fontSize: 11, color: "#a16207", lineHeight: 16 },
 });

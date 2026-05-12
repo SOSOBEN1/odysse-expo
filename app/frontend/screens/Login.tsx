@@ -300,10 +300,9 @@ export default function LoginScreen() {
       <View style={styles.card}>
         <Text style={styles.label}>Email</Text>
         <UsernameInput
-          value={email}
-          onChange={setEmail}
-          placeholder="Enter Email Address"
-          icon="mail"
+          value={email} onChange={setEmail}
+          placeholder="Enter Email Address" icon="mail"
+          validate={(v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)}
         />
 
         <Text style={[styles.label, { marginTop: 15 }]}>Password</Text>

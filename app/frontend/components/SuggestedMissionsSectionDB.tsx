@@ -1,13 +1,15 @@
 // components/SuggestedMissionsSectionDB.tsx
-import React from "react";
+import React, { useState } from "react";
 import {
-  ActivityIndicator, ScrollView, StyleSheet,
+  ActivityIndicator, Alert, ScrollView, StyleSheet,
   Text, TouchableOpacity, View,
 } from "react-native";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
 import { useMissionSuggestions } from "../hooks/Usemissionsuggestions";
 import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
 import { useRouter } from "expo-router";
+import { useUser } from "../constants/UserContext";
+import { createMission } from "../../../backend/models/mission.service";
 
 // ─── Config difficulté ────────────────────────────────────────
 const difficultyConfig = {
@@ -128,15 +130,45 @@ export default function SuggestedMissionsSectionDB({
   maxSuggestions = 5,
 }: Props) {
   const router = useRouter();
+  const { userId } = useUser();
+  const [startingId, setStartingId] = useState<string | null>(null);
   const { suggestions, isLoading, error, refresh, completeMission } =
     useMissionSuggestions(maxSuggestions);
 
-  const handleStart = (mission: MissionSuggestion) => {
-    completeMission(mission.id);
-    onMissionStart?.(mission);
-    // Naviguer vers Missions avec la mission encodée → chrono démarre auto
-    const missionJson = JSON.stringify(mission);
-    router.push(`/frontend/screens/Missions?suggestedMission=${missionJson}` as any);
+  const handleStart = async (mission: MissionSuggestion) => {
+    if (!userId || startingId) return;
+    setStartingId(mission.id);
+    try {
+      completeMission(mission.id);
+      onMissionStart?.(mission);
+
+      const dureeMatch = mission.duration.match(/(\d+)/);
+      const duree_min  = dureeMatch ? parseInt(dureeMatch[1], 10) : 30;
+
+      const difficulte = mission.priority === "critical" ? 3
+                       : mission.priority === "high"     ? 2 : 1;
+      const priorite   = mission.priority === "critical" ? 5
+                       : mission.priority === "high"     ? 4
+                       : mission.priority === "medium"   ? 3 : 2;
+
+      const created = await createMission({
+        id_user:     typeof userId === "number" ? userId : parseInt(userId as any, 10),
+        titre:       mission.title,
+        description: mission.description,
+        duree_min,
+        difficulte,
+        priorite,
+        date_limite: null,
+        id_boss:     null,
+      });
+
+      router.push(`/frontend/screens/Missions?autoStartId=${created.id_mission}` as any);
+    } catch (err: any) {
+      console.error("[SuggestedMissionsSectionDB] createMission error:", err.message);
+      Alert.alert("Erreur", "Impossible de créer la mission. Réessaie.");
+    } finally {
+      setStartingId(null);
+    }
   };
 
   return (

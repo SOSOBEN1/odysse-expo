@@ -268,26 +268,27 @@ export async function completeMission(
   userId: string,
   mission: MissionData
 ): Promise<MissionCompletionResult | null> {
-  // 1. Fetch current stats (inclut maintenant les 3 nouvelles colonnes)
+  // 1. Fetch current stats — uniquement les colonnes qui existent dans player_stats
   const { data: statsData, error: statsError } = await supabase
     .from("player_stats")
-    .select("energie, stress, connaissance, organisation, serenite, concentration, discipline")
-    .eq("id_user", userId)
+    .select("energie, stress, connaissance, organisation")
+    .eq("id_user", parseInt(userId, 10))
     .maybeSingle();
 
-  if (statsError || !statsData) {
-    console.error("[missionStatsService] Failed to fetch player_stats:", statsError?.message);
+  if (statsError) {
+    console.error("[missionStatsService] Failed to fetch player_stats:", statsError.message);
     return null;
   }
 
+  // Si aucune ligne, on démarre depuis des valeurs par défaut (première mission)
   const current: PlayerStats = {
-    energie:       statsData.energie       ?? 50,
-    stress:        statsData.stress        ?? 50,
-    connaissance:  statsData.connaissance  ?? 50,
-    organisation:  statsData.organisation  ?? 50,
-    serenite:      statsData.serenite      ?? 50,
-    concentration: statsData.concentration ?? 70,
-    discipline:    statsData.discipline    ?? 50,
+    energie:       statsData?.energie       ?? 50,
+    stress:        statsData?.stress        ?? 50,
+    connaissance:  statsData?.connaissance  ?? 50,
+    organisation:  statsData?.organisation  ?? 50,
+    serenite:      50,
+    concentration: 70,
+    discipline:    50,
   };
 
   // 2. Calculer les stats de base
@@ -313,113 +314,47 @@ export async function completeMission(
     discipline:    newDiscipline,
   };
 
-  // 4. Sauvegarder toutes les stats en BDD (upsert = crée la ligne si elle n'existe pas)
+  // 4. Sauvegarder les stats en BDD — uniquement les colonnes qui existent dans player_stats
+  //    (energie, stress, connaissance, organisation, date_maj)
+  const upsertPayload: Record<string, any> = {
+    id_user:      parseInt(userId, 10),   // int4 en base — on force le type
+    energie:      newStats.energie,
+    stress:       newStats.stress,
+    connaissance: newStats.connaissance,
+    organisation: newStats.organisation,
+    date_maj:     new Date().toISOString(),
+  };
+
   const { error: updateStatsError } = await supabase
     .from("player_stats")
-    .upsert({
-      id_user:       userId,
-      energie:       newStats.energie,
-      stress:        newStats.stress,
-      connaissance:  newStats.connaissance,
-      organisation:  newStats.organisation,
-      serenite:      newStats.serenite,
-      concentration: newStats.concentration,
-      discipline:    newStats.discipline,
-      date_maj:      new Date().toISOString(),
-    }, { onConflict: "id_user" });
+    .upsert(upsertPayload, { onConflict: "id_user" });
 
   if (updateStatsError) {
     console.error("[missionStatsService] Failed to upsert player_stats:", updateStatsError.message);
-    return null;
+    // Fallback : tentative update simple si upsert échoue
+    const { error: updateErr } = await supabase
+      .from("player_stats")
+      .update({
+        energie:      newStats.energie,
+        stress:       newStats.stress,
+        connaissance: newStats.connaissance,
+        organisation: newStats.organisation,
+        date_maj:     new Date().toISOString(),
+      })
+      .eq("id_user", parseInt(userId, 10));
+    if (updateErr) {
+      console.error("[missionStatsService] Fallback update also failed:", updateErr.message);
+      return null;
+    }
   }
+
+  console.log(`✅ completeMission — stats sauvegardées: énergie=${newStats.energie}, stress=${newStats.stress}, connaissance=${newStats.connaissance}, organisation=${newStats.organisation}`);
 
   return {
     newStats,
     xpEarned:   0, // XP géré par missionRewardService.ts
     goldEarned: 0,
   };
-}
-
-// ─── Fail Mission ─────────────────────────────────────────────────────────────
-
-/**
- * Call this when a user FAILS a mission (deadline passed or manual abandon).
- *
- * Malus appliqués :
- *   - Énergie  : -energie_cout  (la mission a quand même coûté de l'énergie)
- *   - Stress   : +difficulte * 5  (l'échec génère du stress)
- *   - Connaissance : -5  (on n'a pas appris, léger recul)
- *   - Organisation : -difficulte * 3  (objectif manqué)
- *   - Sérenité : calculée depuis le nouveau stress
- *   - Concentration : recalculée depuis la nouvelle énergie
- *   - Discipline : pénalité pour mission ratée (0 réalisée / 1 totale / 1 oubliée)
- */
-export async function failMission(
-  userId: string,
-  mission: MissionData
-): Promise<void> {
-  // 1. Fetch current stats
-  const { data: statsData, error: statsError } = await supabase
-    .from("player_stats")
-    .select("energie, stress, connaissance, organisation, serenite, concentration, discipline")
-    .eq("id_user", userId)
-    .maybeSingle();
-
-  if (statsError || !statsData) {
-    console.error("[failMission] Failed to fetch player_stats:", statsError?.message);
-    return;
-  }
-
-  const current: PlayerStats = {
-    energie:       statsData.energie       ?? 50,
-    stress:        statsData.stress        ?? 50,
-    connaissance:  statsData.connaissance  ?? 50,
-    organisation:  statsData.organisation  ?? 50,
-    serenite:      statsData.serenite      ?? 50,
-    concentration: statsData.concentration ?? 70,
-    discipline:    statsData.discipline    ?? 50,
-  };
-
-  // 2. Calculer les malus
-  // Énergie : coût dépensé quand même
-  const newEnergie = clamp(current.energie - mission.energie_cout);
-
-  // Stress : augmente en fonction de la difficulté
-  const stressPenalty = mission.difficulte * 5;
-  const newStress = clamp(current.stress + stressPenalty);
-
-  // Connaissance : légère perte
-  const newConnaissance = clamp(current.connaissance - 5);
-
-  // Organisation : pénalité selon difficulté (objectif manqué)
-  const orgaPenalty = mission.difficulte * 3;
-  const newOrganisation = clamp(current.organisation - orgaPenalty);
-
-  // Stats dérivées recalculées après malus
-  const newSerenite      = clamp(100 - newStress);
-  const newConcentration = clamp(current.concentration + 0 - (100 - newEnergie) * 0.1);
-  const newDiscipline    = computeDisciplineFromRatio(current.discipline, 0, 1, 1);
-
-  // 3. Sauvegarder en BDD
-  const { error: updateError } = await supabase
-    .from("player_stats")
-    .upsert({
-      id_user:       userId,
-      energie:       newEnergie,
-      stress:        newStress,
-      connaissance:  newConnaissance,
-      organisation:  newOrganisation,
-      serenite:      newSerenite,
-      concentration: newConcentration,
-      discipline:    newDiscipline,
-      date_maj:      new Date().toISOString(),
-    }, { onConflict: "id_user" });
-
-  if (updateError) {
-    console.error("[failMission] Failed to upsert player_stats:", updateError.message);
-  } else {
-    console.log("[failMission] ✅ Malus appliqués pour la mission", mission.id_mission);
-  }
 }
 
 // ─── Fetch mission from DB ────────────────────────────────────────────────────
@@ -442,6 +377,351 @@ export async function fetchMission(missionId: number): Promise<MissionData | nul
   }
 
   return data as MissionData;
+}
+
+// ─── Fail Mission Stats ───────────────────────────────────────────────────────
+
+/**
+ * Call this when a user FAILS a mission (timer expired, deadline passed, or manual fail).
+ *
+ * Penalties applied:
+ *   - Stress    += difficulte * 5   (échec = stress supplémentaire)
+ *   - Energie   -= energie_cout / 2 (effort partiel gaspillé)
+ *   - Organisation -= 5            (mission non accomplie = désorganisation)
+ *   - Connaissance inchangée       (pas d'apprentissage complet)
+ *
+ * All values are clamped to [0, 100].
+ */
+export async function failMission(
+  userId: string,
+  mission: MissionData
+): Promise<void> {
+  const { data: statsData, error: statsError } = await supabase
+    .from("player_stats")
+    .select("energie, stress, connaissance, organisation")
+    .eq("id_user", parseInt(userId, 10))
+    .maybeSingle();
+
+  if (statsError) {
+    console.error("[failMission] Failed to fetch player_stats:", statsError.message);
+    return;
+  }
+
+  const current: PlayerStats = {
+    energie:       statsData?.energie       ?? 50,
+    stress:        statsData?.stress        ?? 50,
+    connaissance:  statsData?.connaissance  ?? 50,
+    organisation:  statsData?.organisation  ?? 50,
+    serenite:      50,
+    concentration: 70,
+    discipline:    50,
+  };
+
+  // Pénalités pour échec
+  const stressPenalty      = mission.difficulte * 5;
+  const energiePenalty     = Math.round(mission.energie_cout / 2);
+  const organisationPenalty = 5;
+
+  const newStress       = clamp(current.stress       + stressPenalty);
+  const newEnergie      = clamp(current.energie      - energiePenalty);
+  const newOrganisation = clamp(current.organisation - organisationPenalty);
+  // Discipline pénalisée : 0 mission réalisée sur 1 totale
+  const newDiscipline   = computeDisciplineFromRatio(current.discipline, 0, 1, 1);
+  // Stats dérivées recalculées
+  const newSerenite      = clamp(current.serenite + (100 - newStress) * 0.05 - 3);
+  const newConcentration = clamp(current.concentration - (100 - newEnergie) * 0.05);
+
+  const { error: updateError } = await supabase
+    .from("player_stats")
+    .upsert({
+      id_user:      parseInt(userId, 10),
+      energie:      newEnergie,
+      stress:       newStress,
+      connaissance: current.connaissance, // inchangée
+      organisation: newOrganisation,
+      date_maj:     new Date().toISOString(),
+    }, { onConflict: "id_user" });
+
+  if (updateError) {
+    console.error("[failMission] Failed to upsert player_stats:", updateError.message);
+    // Fallback update
+    await supabase
+      .from("player_stats")
+      .update({
+        energie:      newEnergie,
+        stress:       newStress,
+        organisation: newOrganisation,
+        date_maj:     new Date().toISOString(),
+      })
+      .eq("id_user", parseInt(userId, 10));
+  } else {
+    console.log(`✅ failMission — stress: +${stressPenalty}, énergie: -${energiePenalty}, organisation: -${organisationPenalty}`);
+  }
+}
+
+// ─── Récupération d'énergie : Dormir (1x/jour) ───────────────────────────────
+
+/**
+ * Bouton "Dormir" — remet l'énergie à 100, réduit le stress de 20.
+ * Utilisable 1 seule fois par jour (vérifié via AsyncStorage).
+ */
+export async function sleepRestore(userId: string): Promise<{ success: boolean; message: string }> {
+  const userIdInt = parseInt(userId, 10);
+
+  console.log(`\n🛌 [sleepRestore] START — userId: ${userId} (int: ${userIdInt})`);
+
+  try {
+    // Vérifier last_sleep directement dans Supabase (plus de AsyncStorage legacy)
+    const { data: userData, error: userErr } = await supabase
+      .from("users")
+      .select("last_sleep")
+      .eq("id_user", userIdInt)
+      .maybeSingle();
+
+    console.log(`[sleepRestore] users.last_sleep: ${userData?.last_sleep ?? "null"} | error: ${userErr ? JSON.stringify(userErr) : "aucune"}`);
+
+    if (userData?.last_sleep) {
+      const lastSleep = new Date(userData.last_sleep);
+      const now       = new Date();
+      const sameDay   =
+        lastSleep.getDate()     === now.getDate()     &&
+        lastSleep.getMonth()    === now.getMonth()    &&
+        lastSleep.getFullYear() === now.getFullYear();
+
+      if (sameDay) {
+        console.log(`[sleepRestore] ❌ Déjà dormi aujourd'hui — bloqué`);
+        return { success: false, message: "Tu as déjà dormi aujourd'hui ! Reviens demain. 😴" };
+      }
+    }
+
+    // Récupérer toutes les stats actuelles pour ne pas perdre connaissance/organisation
+    const { data: ps, error } = await supabase
+      .from("player_stats")
+      .select("stress, connaissance, organisation")
+      .eq("id_user", userIdInt)
+      .maybeSingle();
+
+    console.log(`[sleepRestore] player_stats AVANT:`, JSON.stringify(ps) ?? "LIGNE INTROUVABLE");
+    if (error) {
+      console.error("[sleepRestore] ❌ fetch error:", error.message, JSON.stringify(error));
+      return { success: false, message: "Erreur lors de la récupération des stats." };
+    }
+
+    const newStress = clamp((ps?.stress ?? 50) - 20);
+    console.log(`[sleepRestore] stress: ${ps?.stress ?? 50} → ${newStress}`);
+
+    const upsertPayload = {
+      id_user:      userIdInt,
+      energie:      100,
+      stress:       newStress,
+      connaissance: ps?.connaissance ?? 50,
+      organisation: ps?.organisation ?? 50,
+      date_maj:     new Date().toISOString(),
+    };
+    console.log(`[sleepRestore] payload upsert:`, JSON.stringify(upsertPayload));
+
+    // upsert complet avec TOUTES les colonnes pour ne pas écraser les autres valeurs
+    const { error: upsertErr, data: upsertData } = await supabase
+      .from("player_stats")
+      .upsert(upsertPayload, { onConflict: "id_user" })
+      .select();
+
+    console.log(`[sleepRestore] upsert result — data:`, JSON.stringify(upsertData), "| error:", upsertErr ? JSON.stringify(upsertErr) : "aucune");
+
+    if (upsertErr) {
+      console.error("[sleepRestore] ❌ upsert error:", upsertErr.message, JSON.stringify(upsertErr));
+      return { success: false, message: "Erreur lors de la sauvegarde." };
+    }
+
+    // Vérification post-upsert : relire ce qui est réellement en base
+    const { data: psAfter, error: readErr } = await supabase
+      .from("player_stats")
+      .select("energie, stress, connaissance, organisation")
+      .eq("id_user", userIdInt)
+      .maybeSingle();
+    console.log(`[sleepRestore] player_stats APRÈS:`, JSON.stringify(psAfter) ?? "INTROUVABLE", "| readErr:", readErr ? JSON.stringify(readErr) : "aucune");
+
+    // Synchroniser aussi users.energie pour les écrans qui lisent cette colonne
+    const { error: syncErr } = await supabase
+      .from("users")
+      .update({ energie: 100 })
+      .eq("id_user", userIdInt);
+    console.log(`[sleepRestore] sync users.energie — error:`, syncErr ? JSON.stringify(syncErr) : "aucune");
+
+    // Sauvegarder la date du dernier sleep dans Supabase
+    await supabase
+      .from("users")
+      .update({ last_sleep: new Date().toISOString() })
+      .eq("id_user", userIdInt);
+    console.log(`[sleepRestore] last_sleep sauvegardé`);
+
+    console.log("✅ [sleepRestore] DONE — énergie → 100, stress -20\n");
+    return { success: true, message: "Bonne nuit ! ⚡ Énergie restaurée à 100%" };
+
+  } catch (e) {
+    console.error("[sleepRestore] ❌ EXCEPTION:", e);
+    return { success: false, message: "Erreur inattendue." };
+  }
+}
+
+// ─── Récupération d'énergie : Potion ──────────────────────────────────────────
+// Stockée dans "user_potions" (table simple, sans FK vers boutique)
+
+export const ENERGY_POTION = {
+  name:        "Potion d'énergie",
+  emoji:       "⚡",
+  description: "Restaure +40 d'énergie instantanément",
+  price:       50,          // gold
+  energyGain:  40,
+};
+
+/**
+ * Acheter une potion — déduit le gold, incrémente user_potions.
+ * user_potions : { id_user int4, quantite int4 }  — sans FK boutique
+ */
+export async function buyEnergyPotion(
+  userId: number,
+  currentGold: number,
+): Promise<{ success: boolean; message: string; newGold?: number }> {
+  console.log(`\n🧪 [buyEnergyPotion] START — userId: ${userId}, gold: ${currentGold}, prix: ${ENERGY_POTION.price}`);
+
+  if (currentGold < ENERGY_POTION.price) {
+    return { success: false, message: `Pas assez de gold ! Il te faut ${ENERGY_POTION.price} 🪙` };
+  }
+
+  const newGold = currentGold - ENERGY_POTION.price;
+
+  // Déduire le gold
+  const { error: goldErr } = await supabase
+    .from("users")
+    .update({ gold: newGold })
+    .eq("id_user", userId);
+
+  if (goldErr) {
+    console.error("[buyEnergyPotion] ❌ goldErr:", goldErr.message);
+    return { success: false, message: "Erreur lors du paiement." };
+  }
+
+  // Upsert dans user_potions (incrémente ou crée)
+  const { data: existing } = await supabase
+    .from("user_potions")
+    .select("quantite")
+    .eq("id_user", userId)
+    .maybeSingle();
+
+  if (existing) {
+    const { error: updateErr } = await supabase
+      .from("user_potions")
+      .update({ quantite: (existing.quantite ?? 0) + 1 })
+      .eq("id_user", userId);
+    if (updateErr) {
+      await supabase.from("users").update({ gold: currentGold }).eq("id_user", userId);
+      return { success: false, message: "Erreur lors de l'ajout de la potion." };
+    }
+  } else {
+    const { error: insertErr } = await supabase
+      .from("user_potions")
+      .insert({ id_user: userId, quantite: 1 });
+    if (insertErr) {
+      console.error("[buyEnergyPotion] ❌ insertErr:", insertErr.message);
+      await supabase.from("users").update({ gold: currentGold }).eq("id_user", userId);
+      return { success: false, message: "Erreur lors de la création de la potion." };
+    }
+  }
+
+  console.log("✅ [buyEnergyPotion] DONE\n");
+  return { success: true, message: "Potion achetée ! 🧪", newGold };
+}
+
+/**
+ * Utiliser une potion — consomme 1 quantité, ajoute +40 énergie.
+ */
+export async function useEnergyPotion(
+  userId: number,
+): Promise<{ success: boolean; message: string; newEnergie?: number }> {
+  console.log(`\n⚡ [useEnergyPotion] START — userId: ${userId}`);
+
+  // Vérifier quantité dans user_potions
+  const { data: item } = await supabase
+    .from("user_potions")
+    .select("quantite")
+    .eq("id_user", userId)
+    .maybeSingle();
+
+  console.log(`[useEnergyPotion] user_potions:`, JSON.stringify(item) ?? "aucun");
+
+  if (!item || (item.quantite ?? 0) < 1) {
+    return { success: false, message: "Tu n'as pas de potion ! Achète-en une à la boutique. 🏪" };
+  }
+
+  // Stats actuelles
+  const { data: ps } = await supabase
+    .from("player_stats")
+    .select("energie, stress, connaissance, organisation")
+    .eq("id_user", userId)
+    .maybeSingle();
+
+  const newEnergie = clamp((ps?.energie ?? 50) + ENERGY_POTION.energyGain);
+  console.log(`[useEnergyPotion] energie: ${ps?.energie ?? 50} → ${newEnergie}`);
+
+  // Mettre à jour player_stats
+  await supabase.from("player_stats").upsert({
+    id_user:      userId,
+    energie:      newEnergie,
+    stress:       ps?.stress       ?? 50,
+    connaissance: ps?.connaissance ?? 50,
+    organisation: ps?.organisation ?? 50,
+    date_maj:     new Date().toISOString(),
+  }, { onConflict: "id_user" });
+
+  // Sync users.energie
+  await supabase.from("users").update({ energie: newEnergie }).eq("id_user", userId);
+
+  // Décrémenter quantité dans user_potions
+  const newQty = (item.quantite ?? 1) - 1;
+  if (newQty <= 0) {
+    await supabase.from("user_potions").delete().eq("id_user", userId);
+  } else {
+    await supabase.from("user_potions").update({ quantite: newQty }).eq("id_user", userId);
+  }
+
+  console.log(`✅ [useEnergyPotion] DONE — énergie → ${newEnergie}\n`);
+  return { success: true, message: `⚡ +${ENERGY_POTION.energyGain} énergie !`, newEnergie };
+}
+
+// ─── Récupération passive (appelée au chargement du dashboard) ────────────────
+
+// ─── Récupération passive (appelée au chargement du dashboard) ────────────────
+
+/**
+ * Récupération passive : +2 énergie par heure d'inactivité (max +20 à la fois).
+ * À appeler à chaque ouverture du dashboard.
+ */
+export async function applyPassiveEnergyRecovery(userId: number): Promise<number> {
+  const { data: ps } = await supabase
+    .from("player_stats")
+    .select("energie, date_maj")
+    .eq("id_user", userId)
+    .maybeSingle();
+
+  if (!ps?.date_maj) return ps?.energie ?? 50;
+
+  const lastUpdate  = new Date(ps.date_maj);
+  const now         = new Date();
+  const heuresEcoulees = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60));
+
+  if (heuresEcoulees < 1) return ps.energie ?? 50; // Pas encore 1h
+
+  const gainEnergie = Math.min(heuresEcoulees * 2, 20); // +2/h, max +20
+  const newEnergie  = clamp((ps.energie ?? 50) + gainEnergie);
+
+  await supabase
+    .from("player_stats")
+    .update({ energie: newEnergie, date_maj: now.toISOString() })
+    .eq("id_user", userId);
+
+  console.log(`✅ Récupération passive — +${gainEnergie} énergie (${heuresEcoulees}h), total: ${newEnergie}`);
+  return newEnergie;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -480,4 +760,66 @@ export function useMissionCompletion(): UseMissionCompletion {
   };
 
   return { completing, result, complete };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  failEvent — Marque un boss_event comme échoué et applique des pénalités
+// ─────────────────────────────────────────────────────────────────────────────
+export async function failEvent(
+  userId: number,
+  bossId: number,
+): Promise<{ success: boolean; message: string; penalty: { energie: number; stress: number } }> {
+  console.log(`\n💀 [failEvent] START — userId: ${userId}, bossId: ${bossId}`);
+
+  const penalty = { energie: -20, stress: +25 };
+
+  try {
+    // 1. Marquer l'event comme échoué
+    const { error: failErr } = await supabase
+      .from("boss_events")
+      .update({ failed_at: new Date().toISOString() })
+      .eq("id_boss", bossId)
+      .eq("id_creator", userId);
+
+    if (failErr) {
+      console.error("[failEvent] ❌ update boss_events error:", failErr.message);
+      return { success: false, message: "Erreur lors du marquage d'échec.", penalty };
+    }
+
+    // 2. Récupérer les stats actuelles
+    const { data: ps } = await supabase
+      .from("player_stats")
+      .select("energie, stress, connaissance, organisation")
+      .eq("id_user", userId)
+      .maybeSingle();
+
+    const newEnergie      = clamp((ps?.energie      ?? 50) + penalty.energie);
+    const newStress       = clamp((ps?.stress       ?? 50) + penalty.stress);
+    const newConnaissance = ps?.connaissance ?? 50;
+    const newOrganisation = ps?.organisation ?? 50;
+
+    console.log(`[failEvent] pénalités: énergie ${ps?.energie ?? 50} → ${newEnergie}, stress ${ps?.stress ?? 50} → ${newStress}`);
+
+    // 3. Appliquer les pénalités sur player_stats
+    await supabase
+      .from("player_stats")
+      .upsert({
+        id_user:      userId,
+        energie:      newEnergie,
+        stress:       newStress,
+        connaissance: newConnaissance,
+        organisation: newOrganisation,
+        date_maj:     new Date().toISOString(),
+      }, { onConflict: "id_user" });
+
+    // 4. Sync users.energie
+    await supabase.from("users").update({ energie: newEnergie }).eq("id_user", userId);
+
+    console.log("✅ [failEvent] DONE\n");
+    return { success: true, message: "Événement échoué.", penalty };
+
+  } catch (e: any) {
+    console.error("[failEvent] ❌ EXCEPTION:", e);
+    return { success: false, message: "Erreur inattendue.", penalty };
+  }
 }

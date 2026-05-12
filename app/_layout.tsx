@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { checkAndUnlockBadges } from "../backend/services/badgeEngine";
 import BadgeUnlockedModal from "./frontend/components/BadgeUnlockedModel";
 import LevelUpModal from "./frontend/components/LevelUpModal";
+import MissionStatusModal from "./frontend/components/MissionStatusModals";
 import { AvatarProvider } from "./frontend/constants/AvatarContext";
+import { MissionStatusProvider, useMissionStatus } from "./frontend/constants/MissionStatusContext";
 import { StatsProvider } from "./frontend/constants/StatsContext";
 import { supabase } from "./frontend/constants/supabase";
 import { useNotifications } from './frontend/constants/UseNotifications';
@@ -21,15 +23,42 @@ const BADGE_EMOJI: Record<number, string> = {
   30:"🌟", 31:"💪", 32:"🛡️", 33:"👑", 34:"🦁", 35:"🔍", 36:"⚔️", 37:"💎",
 };
 
+// ── Gold par badge ─────────────────────────────────────────────
+const BADGE_GOLD: Record<number, number> = {
+  1:25, 2:50,  3:25,  4:50,  5:25,  6:25,  7:50,  8:25,
+  9:100, 10:100, 11:200, 12:50, 13:50, 14:50, 15:100,
+  16:100, 17:50, 18:25, 19:150, 20:25, 21:50, 22:100,
+  23:100, 24:150, 25:25, 26:50, 27:100, 28:100, 29:150,
+  30:200, 31:25, 32:25, 33:200, 34:200, 35:25, 36:25, 37:200,
+};
+
 const XP_PAR_NIVEAU = 500;
 function calcNiveauFromXP(xp: number): number {
   return Math.floor(xp / XP_PAR_NIVEAU) + 1;
 }
 
+// ── Watcher global modal mission ──────────────────────────────
+function MissionStatusWatcher() {
+  const { statusModal, closeStatusModal } = useMissionStatus();
+  return (
+    <MissionStatusModal
+      visible={statusModal.visible}
+      type={statusModal.type}
+      missionTitle={statusModal.missionTitle}
+      dateLimit={statusModal.dateLimit}
+      xp={statusModal.xp}
+      coins={statusModal.coins}
+      onClose={closeStatusModal}
+    />
+  );
+}
+
 // ── Détecteur global de montée de niveau ─────────────────────
 function LevelUpWatcher() {
   const { userId } = useUser();
-  const [levelUpModal, setLevelUpModal] = useState({ visible: false, newLevel: 1 });
+  const [levelUpModal, setLevelUpModal] = useState<{
+    visible: boolean; newLevel: number; goldBonus: number; getsPotion: boolean;
+  }>({ visible: false, newLevel: 1, goldBonus: 0, getsPotion: false });
   const lastNiveauRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -55,7 +84,34 @@ function LevelUpWatcher() {
 
         if (niveauActuel > lastNiveauRef.current) {
           lastNiveauRef.current = niveauActuel;
-          setLevelUpModal({ visible: true, newLevel: niveauActuel });
+
+          try {
+            const goldBonus = niveauActuel <= 3  ? 50
+                            : niveauActuel <= 6  ? 100
+                            : niveauActuel <= 9  ? 175
+                            : 250;
+
+            const { data: uData } = await supabase
+              .from("users").select("gold").eq("id_user", userId).maybeSingle();
+            await supabase.from("users")
+              .update({ gold: (uData?.gold ?? 0) + goldBonus })
+              .eq("id_user", userId);
+
+            const getsPotion = [3, 5, 7, 10].includes(niveauActuel) || niveauActuel > 10;
+            if (getsPotion) {
+              const { data: pData } = await supabase
+                .from("user_potions").select("quantite")
+                .eq("id_user", userId).eq("potion_type", "energie").maybeSingle();
+              await supabase.from("user_potions").upsert(
+                { id_user: userId, potion_type: "energie", quantite: (pData?.quantite ?? 0) + 1, updated_at: new Date().toISOString() },
+                { onConflict: "id_user,potion_type" }
+              );
+            }
+
+            setLevelUpModal({ visible: true, newLevel: niveauActuel, goldBonus, getsPotion: !!getsPotion });
+          } catch {
+            setLevelUpModal({ visible: true, newLevel: niveauActuel, goldBonus: 0, getsPotion: false });
+          }
         }
       } catch (e) {
         console.error("[LevelUpWatcher]", e);
@@ -71,6 +127,8 @@ function LevelUpWatcher() {
     <LevelUpModal
       visible={levelUpModal.visible}
       newLevel={levelUpModal.newLevel}
+      goldBonus={levelUpModal.goldBonus}
+      getsPotion={levelUpModal.getsPotion}
       onClose={() => setLevelUpModal(prev => ({ ...prev, visible: false }))}
     />
   );
@@ -79,9 +137,9 @@ function LevelUpWatcher() {
 // ── Détecteur global de badges ────────────────────────────────
 function BadgeWatcher() {
   const { userId } = useUser();
-  const [queue,        setQueue]        = useState<{ id: number; name: string }[]>([]);
+  const [queue, setQueue]               = useState<{ id: number; name: string }[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
-  const [current,      setCurrent]      = useState<{ id: number; name: string } | null>(null);
+  const [current, setCurrent]           = useState<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -126,6 +184,7 @@ function BadgeWatcher() {
       badgeId={current.id}
       badgeName={current.name}
       badgeEmoji={BADGE_EMOJI[current.id] ?? "🏅"}
+      goldReward={BADGE_GOLD[current.id] ?? 30}
       onClose={() => setModalVisible(false)}
     />
   );
@@ -181,12 +240,14 @@ export default function RootLayout() {
     <UserProvider>
       <AvatarProvider>
         <StatsProvider>
-          {/* <OAuthHandler /> */}
-          <Stack screenOptions={{ headerShown: false }} />
-          <LevelUpWatcher />
-          <BadgeWatcher />
+          <MissionStatusProvider>
+            <Stack screenOptions={{ headerShown: false }} />
+            <LevelUpWatcher />
+            <BadgeWatcher />
+            <MissionStatusWatcher />
+          </MissionStatusProvider>
         </StatsProvider>
       </AvatarProvider>
     </UserProvider>
-  )
+  );
 }

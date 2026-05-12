@@ -8,6 +8,7 @@ const SOUNDS = {
   missionCreee:   require("../assets/sounds/mission-cree.mp3"),
   changerMDP:     require("../assets/sounds/changer-MDP-sauvegarderProfil.mp3"),
   acceuil:        require("../assets/sounds/acceuil.wav"),
+      unlocked:       require("../assets/sounds/unlocked.mp3"), 
 };
 
 export type SoundKey = keyof typeof SOUNDS;

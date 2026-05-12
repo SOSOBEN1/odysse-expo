@@ -18,7 +18,6 @@ import {
 } from "react-native";
 import { useZoneMissions, ZoneMission, ZoneTimer } from "../../../backend/viewmodels/UseZoneMission";
 import CreateMissionModal from "../components/CreateMissionModal";
-import MissionStatusModal from "../components/MissionStatusModals";
 import ZoneUnlockedModal from "../components/ZoneUnlockedModal";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
@@ -196,7 +195,7 @@ function MissionCard({
   const isRunning = timer.state === "running";
   const isPaused  = timer.state === "paused";
   const isActive  = isRunning || isPaused;
-  const totalSecs = mission.duree_min * 60;
+  const totalSecs = (mission.duree_min ?? 30) * 60;
   const pct       = Math.min(100, totalSecs > 0 ? Math.round((timer.elapsed / totalSecs) * 100) : 0);
 
   const fmt = (s: number) => {
@@ -269,7 +268,7 @@ function MissionCard({
           ]}>
             {isDone ? "✅ Mission terminée !" :
              isFail ? "❌ Temps écoulé — mission échouée" :
-             `⏱ ${fmt(timer.elapsed)} / ${String(mission.duree_min).padStart(2, "0")}:00`}
+             `⏱ ${fmt(timer.elapsed)} / ${String(mission.duree_min ?? 30).padStart(2, "0")}:00`}
           </Text>
           {isActive && (
             <View style={[styles.chronoPulse, { backgroundColor: isRunning ? "#ea580c" : "#9ca3af" }]} />
@@ -408,11 +407,11 @@ export default function ZoneScreen() {
   if (!rawUserId) return null;
   const userId = String(rawUserId);
 
-  const [zoneInfo,       setZoneInfo]       = useState<ZoneInfo | null>(null);
-  const [showExitModal,  setShowExitModal]  = useState(false);
-  const [editingMission, setEditingMission] = useState<ZoneMission | null>(null);
+  const [zoneInfo,        setZoneInfo]        = useState<ZoneInfo | null>(null);
+  const [showExitModal,   setShowExitModal]   = useState(false);
+  const [editingMission,  setEditingMission]  = useState<ZoneMission | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [nextZoneName,   setNextZoneName]   = useState("");
+  const [nextZoneName,    setNextZoneName]    = useState("");
 
   const bgFade    = useRef(new Animated.Value(0)).current;
   const cardSlide = useRef(new Animated.Value(50)).current;
@@ -423,16 +422,17 @@ export default function ZoneScreen() {
   // ── Hook principal ─────────────────────────────────────────────────────────
 
   const {
-    missions, slots, suggestions, timers, puzzle, loading,
-    statusModal, zoneUnlocked,
+    slots, suggestions, puzzle, loading,
+    puzzleModal, zoneUnlocked,
     doneMissions, getTimer,
     startTimer, pauseTimer, finishTimer, retryTimer,
     hasRunningTimer, pauseAllRunning, saveAllRunningForBackground,
-    acceptSuggestion, addMission,
-    closeStatusModal, closeZoneUnlocked,
-  } = useZoneMissions(userId, Number(zoneId), 3);
+    acceptSuggestion,
+    closePuzzleModal, closeZoneUnlocked,
+    reload,
+  } = useZoneMissions(userId, Number(zoneId));
 
-  const totalPieces  = puzzle?.total_pieces  ?? 3;
+  const totalPieces  = puzzle?.total_pieces  ?? 0;
   const piecesEarned = puzzle?.pieces_earned ?? 0;
   const isComplete   = puzzle?.is_complete   ?? false;
   const imageUri     = zoneInfo?.image_url   ?? "";
@@ -527,18 +527,9 @@ export default function ZoneScreen() {
   // ── Mission créée depuis modal ─────────────────────────────────────────────
 
   const handleMissionCreated = useCallback(async () => {
-    // Recharger la dernière mission créée pour cette zone
-    const { data } = await supabase
-      .from("mission")
-      .select("*")
-      .eq("id_user", userId)
-      .eq("id_zone", Number(zoneId))
-      .order("id_mission", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (data) addMission(data);
     setShowCreateModal(false);
-  }, [userId, zoneId, addMission]);
+    await reload();
+  }, [reload]);
 
   // ── Rendu loading ──────────────────────────────────────────────────────────
 
@@ -660,7 +651,7 @@ export default function ZoneScreen() {
         onCancel={() => setEditingMission(null)}
       />
 
-      {/* Modal création mission — pré-remplit id_zone */}
+      {/* Modal création mission */}
       <CreateMissionModal
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
@@ -668,16 +659,27 @@ export default function ZoneScreen() {
         initialData={{ id_zone: Number(zoneId) }}
       />
 
-      {/* Modal succès / échec */}
-      <MissionStatusModal
-        visible={statusModal.visible}
-        type={statusModal.type}
-        missionTitle={statusModal.missionTitle}
-        dateLimit={undefined}
-        xp={statusModal.xp}
-        coins={statusModal.coins}
-        onClose={closeStatusModal}
-      />
+      {/* Modal pièce puzzle débloquée */}
+      <Modal visible={puzzleModal.visible} transparent animationType="fade">
+        <View style={modalStyles.overlay}>
+          <View style={modalStyles.box}>
+            <Text style={{ fontSize: 52, marginBottom: 8 }}>🧩</Text>
+            <Text style={modalStyles.title}>Pièce débloquée !</Text>
+            <Text style={modalStyles.subtitle}>
+              {puzzleModal.piecesEarned}/{puzzleModal.totalPieces} pièces obtenues
+            </Text>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: "#f59e0b", marginBottom: 20 }}>
+              +{puzzleModal.xp} XP
+            </Text>
+            <TouchableOpacity
+              style={[modalStyles.btn, { backgroundColor: accent }]}
+              onPress={closePuzzleModal}
+            >
+              <Text style={modalStyles.btnText}>Super ! 🎉</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Zone débloquée */}
       <ZoneUnlockedModal

@@ -3,7 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ScrollView, StatusBar, StyleSheet, Text,
+  Alert, ScrollView, StatusBar, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -22,14 +22,13 @@ import { useMissions } from "../../../backend/viewmodels/useMissions";
 import CreateEventModal from "../components/CreateEventModal";
 import CreateMissionModal from "../components/CreateMissionModal";
 import ExitMissionModal from "../components/ExitMissionModal";
-import MissionStatusModal from "../components/MissionStatusModals";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
+import { useStats } from "../constants/StatsContext";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
-import type { MissionSuggestion } from "../utils/MissionSuggestionEngine";
 
 // ─────────────────────────────────────────────────────────────
 //  Constants
@@ -224,177 +223,38 @@ function MissionCard({
 //  MissionsScreen
 // ─────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────
-//  SuggestedMissionBanner — carte de mission suggérée avec chrono
-// ─────────────────────────────────────────────────────────────
-
-type SuggestedTimerState = "running" | "paused" | "done";
-
-function SuggestedMissionBanner({
-  mission,
-  onDismiss,
-  onComplete,
-}: {
-  mission: MissionSuggestion;
-  onDismiss: () => void;
-  onComplete: (xp: number, coins: number, title: string) => void;
-}) {
-  const [elapsed, setElapsed]     = useState(0);
-  const [state, setState]         = useState<SuggestedTimerState>("running");
-  const intervalRef               = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Démarrer le chrono dès le montage
-  useEffect(() => {
-    intervalRef.current = setInterval(() => {
-      setElapsed((e) => e + 1);
-    }, 1000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, []);
-
-  const togglePause = () => {
-    if (state === "running") {
-      setState("paused");
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    } else if (state === "paused") {
-      setState("running");
-      intervalRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
-    }
-  };
-
-  const finish = () => {
-    setState("done");
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    onComplete(mission.xpReward, mission.coinReward, mission.title);
-  };
-
-  const formatElapsedLocal = (sec: number) => {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  };
-
-  const isDone    = state === "done";
-  const isRunning = state === "running";
-
-  return (
-    <View style={sugStyles.wrapper}>
-      {/* Badge suggérée */}
-      <View style={sugStyles.badge}>
-        <Text style={sugStyles.badgeText}>✨ Mission suggérée</Text>
-      </View>
-
-      {/* Dismiss */}
-      <TouchableOpacity style={sugStyles.dismissBtn} onPress={onDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <Text style={sugStyles.dismissText}>✕</Text>
-      </TouchableOpacity>
-
-      {/* Header */}
-      <View style={sugStyles.header}>
-        <View style={[sugStyles.iconBox, { backgroundColor: mission.color + "22" }]}>
-          <Text style={sugStyles.icon}>{mission.emoji}</Text>
-        </View>
-        <View style={sugStyles.infoBox}>
-          <Text style={sugStyles.title}>{mission.title}</Text>
-          <Text style={sugStyles.description} numberOfLines={2}>{mission.description}</Text>
-          <Text style={sugStyles.duration}>⏱ Durée estimée : {mission.duration}</Text>
-        </View>
-      </View>
-
-      {/* Chrono */}
-      <View style={[sugStyles.chronoBox, isDone ? sugStyles.chronoDone : isRunning ? sugStyles.chronoRunning : sugStyles.chronoPaused]}>
-        <Text style={[sugStyles.chronoText, { color: isDone ? "#2e7d32" : isRunning ? "#e65100" : "#6b7280" }]}>
-          {isDone ? "✅ Mission terminée !" : `⏱ ${formatElapsedLocal(elapsed)}`}
-        </Text>
-        {!isDone && (
-          <View style={[sugStyles.pulse, { backgroundColor: isRunning ? "#e65100" : "#9ca3af" }]} />
-        )}
-      </View>
-
-      {/* Boutons */}
-      <View style={sugStyles.btnRow}>
-        {!isDone && (
-          <TouchableOpacity style={[sugStyles.finishBtn]} onPress={finish}>
-            <Text style={sugStyles.finishBtnText}>🏁 Terminer</Text>
-          </TouchableOpacity>
-        )}
-        {!isDone && (
-          <TouchableOpacity
-            style={[sugStyles.pauseBtn, { backgroundColor: isRunning ? "#f59e0b" : mission.color }]}
-            onPress={togglePause}
-          >
-            <Text style={sugStyles.pauseBtnText}>{isRunning ? "⏸ Pause" : "▶ Continuer"}</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Récompenses */}
-      <View style={sugStyles.rewardsRow}>
-        <Text style={[sugStyles.xpChip, { color: mission.color }]}>+{mission.xpReward} XP</Text>
-        <Text style={sugStyles.coinChip}>🪙 +{mission.coinReward}</Text>
-        <Text style={sugStyles.impactChip}>📈 {mission.impact}</Text>
-      </View>
-    </View>
-  );
-}
-
-const sugStyles = StyleSheet.create({
-  wrapper:       { borderRadius: 20, backgroundColor: "#fff", padding: 16, marginBottom: 20, borderTopWidth: 4, borderTopColor: "#6d28d9", ...SHADOWS.medium, position: "relative" },
-  badge:         { alignSelf: "flex-start", backgroundColor: "#ede9fe", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10 },
-  badgeText:     { color: "#6d28d9", fontWeight: "700", fontSize: 11 },
-  dismissBtn:    { position: "absolute", top: 10, right: 10, width: 24, height: 24, borderRadius: 12, backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center", zIndex: 10 },
-  dismissText:   { fontSize: 11, color: "#6b7280", fontWeight: "700" },
-  header:        { flexDirection: "row", gap: 12, marginBottom: 12 },
-  iconBox:       { width: 54, height: 54, borderRadius: 14, justifyContent: "center", alignItems: "center" },
-  icon:          { fontSize: 26 },
-  infoBox:       { flex: 1 },
-  title:         { fontWeight: "800", fontSize: 16, color: "#1e1b4b", marginBottom: 4 },
-  description:   { fontSize: 12, color: "#6b7280", lineHeight: 17, marginBottom: 4 },
-  duration:      { fontSize: 11, color: "#9ca3af" },
-  chronoBox:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
-  chronoRunning: { backgroundColor: "#fff8e1" },
-  chronoPaused:  { backgroundColor: "#f3f4f6" },
-  chronoDone:    { backgroundColor: "#e8f5e9" },
-  chronoText:    { fontWeight: "700", fontSize: 14 },
-  pulse:         { width: 8, height: 8, borderRadius: 4 },
-  btnRow:        { flexDirection: "row", gap: 10, marginBottom: 10 },
-  finishBtn:     { flex: 1, borderRadius: 14, paddingVertical: 9, backgroundColor: "#e8f5e9", alignItems: "center" },
-  finishBtnText: { color: "#2e7d32", fontWeight: "700", fontSize: 13 },
-  pauseBtn:      { flex: 1, borderRadius: 14, paddingVertical: 9, alignItems: "center" },
-  pauseBtnText:  { color: "#fff", fontWeight: "700", fontSize: 13 },
-  rewardsRow:    { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  xpChip:        { fontSize: 11, fontWeight: "800", backgroundColor: "#f3f4f6", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, overflow: "hidden" },
-  coinChip:      { fontSize: 11, fontWeight: "700", backgroundColor: "#fef3c7", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, overflow: "hidden" },
-  impactChip:    { fontSize: 11, fontWeight: "700", backgroundColor: "#dcfce7", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, overflow: "hidden" },
-});
-
-// ─────────────────────────────────────────────────────────────
-//  MissionsScreen
-// ─────────────────────────────────────────────────────────────
-
 export default function MissionsScreen() {
   const [activeTab, setActiveTab]                       = useState<Tab>("Tout");
   const [isMissionModalVisible, setMissionModalVisible] = useState(false);
   const [isEventModalVisible, setEventModalVisible]     = useState(false);
   const [selectedData, setSelectedData]                 = useState<any>(null);
-  const { openCreate, suggestedMission: suggestedMissionParam } = useLocalSearchParams<{
+
+  const { openCreate, autoStartId } = useLocalSearchParams<{
     openCreate?: string;
-    suggestedMission?: string;
+    autoStartId?: string;
   }>();
 
-  // Mission suggérée reçue depuis le Dashboard/Homescreen
-  const [activeSuggestedMission, setActiveSuggestedMission] = useState<MissionSuggestion | null>(null);
-  const [suggestedStatusModal, setSuggestedStatusModal] = useState<{
-    visible: boolean; xp: number; coins: number; title: string;
-  }>({ visible: false, xp: 0, coins: 0, title: "" });
-
+  const autoStartHandled = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const { selectedModel, setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername }   = useUser();
+  const { stats: playerStats }              = useStats();
+
+  const ENERGY_THRESHOLD = 16;
+  const scrollRef = useRef<any>(null);
+
+  const checkEnergyAndStart = (id: number) => {
+    if (playerStats.energie < ENERGY_THRESHOLD) {
+      Alert.alert(
+        "⚡ Énergie insuffisante",
+        `Tu as seulement ${Math.round(playerStats.energie)}% d'énergie.\n\nIl te faut au minimum ${ENERGY_THRESHOLD}% pour démarrer une mission.\n\n💡 Va sur le Dashboard pour dormir ou utiliser une potion d'énergie !`,
+        [{ text: "OK", style: "default" }]
+      );
+      return;
+    }
+    handleStart(id);
+  };
 
   const [displayName, setDisplayName] = useState<string>(ctxUsername || "...");
 
@@ -405,18 +265,6 @@ export default function MissionsScreen() {
     }
   }, [openCreate]);
 
-  // Lire et parser la mission suggérée depuis les params de navigation
-  useEffect(() => {
-    if (!suggestedMissionParam) return;
-    try {
-      // expo-router décode déjà les params — JSON.parse directement
-      const parsed = JSON.parse(suggestedMissionParam) as MissionSuggestion;
-      setActiveSuggestedMission(parsed);
-    } catch (e) {
-      console.error("Erreur parsing mission suggérée:", e);
-    }
-  }, [suggestedMissionParam]);
-
   useEffect(() => {
     if (!userId) return;
     const fetchUserProfile = async () => {
@@ -425,9 +273,7 @@ export default function MissionsScreen() {
         .select("username, prenom, nom, avatar_url")
         .eq("id_user", userId)
         .single();
-
       if (error || !data) return;
-
       const name = data.username ?? data.prenom ?? data.nom ?? ctxUsername ?? "Joueur";
       setDisplayName(name);
       if (data.avatar_url) setSelectedModel(data.avatar_url);
@@ -435,10 +281,10 @@ export default function MissionsScreen() {
     fetchUserProfile();
   }, [userId, ctxUsername]);
 
+  // ── useMissions — statusModal et closeStatusModal retirés ──
   const {
     missions,
     loading,
-    statusModal,
     exitModal,
     getTimer,
     handleStart,
@@ -448,7 +294,6 @@ export default function MissionsScreen() {
     buildEditPayload,
     loadMissions,
     reloadMissionsOnly,
-    closeStatusModal,
     requestExit,
     handlePauseAndLeave,
     handleLeaveRunning,
@@ -516,14 +361,32 @@ export default function MissionsScreen() {
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <WaveBackground />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Missions</Text>
           <View style={styles.countBadge}>
             <Text style={styles.countText}>{filteredMissions.length}</Text>
           </View>
         </View>
+
+        {/* ── Bandeau énergie faible ── */}
+        {playerStats.energie < ENERGY_THRESHOLD && (
+          <View style={styles.lowEnergyBanner}>
+            <Text style={styles.lowEnergyIcon}>⚡</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.lowEnergyTitle}>
+                Énergie insuffisante ({Math.round(playerStats.energie)}%)
+              </Text>
+              <Text style={styles.lowEnergyDesc}>
+                Il te faut min. {ENERGY_THRESHOLD}% pour démarrer. Va dormir ou utilise une potion sur le Dashboard !
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* ── Barre de recherche ── */}
         <View style={styles.searchWrapper}>
@@ -537,36 +400,35 @@ export default function MissionsScreen() {
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity
+              onPress={() => setSearchQuery("")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Text style={styles.searchClear}>✕</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContainer}>
+        {/* ── Tabs ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabsContainer}
+        >
           {TABS.map((tab) => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
               style={[styles.tab, activeTab === tab && styles.tabActive]}
             >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab}
+              </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* ── Mission suggérée avec chrono auto-démarré ── */}
-        {activeSuggestedMission && (
-          <SuggestedMissionBanner
-            mission={activeSuggestedMission}
-            onDismiss={() => setActiveSuggestedMission(null)}
-            onComplete={(xp, coins, title) => {
-              setActiveSuggestedMission(null);
-              setSuggestedStatusModal({ visible: true, xp, coins, title });
-            }}
-          />
-        )}
-
+        {/* ── Liste missions ── */}
         {loading ? (
           <Text style={styles.emptyText}>Chargement...</Text>
         ) : filteredMissions.length === 0 ? (
@@ -578,7 +440,7 @@ export default function MissionsScreen() {
             timer={getTimer(m.id)}
             onDelete={handleDelete}
             onEdit={handleEdit}
-            onStart={handleStart}
+            onStart={checkEnergyAndStart}
             onPause={handlePause}
             onFinish={handleFinishWithNotif}
           />
@@ -592,26 +454,7 @@ export default function MissionsScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      <MissionStatusModal
-        visible={statusModal.visible}
-        type={statusModal.type}
-        missionTitle={statusModal.missionTitle}
-        dateLimit={statusModal.dateLimit}
-        xp={statusModal.xp}
-        coins={statusModal.coins}
-        onClose={closeStatusModal}
-      />
-
-      {/* ── Modal réussite mission suggérée ── */}
-      <MissionStatusModal
-        visible={suggestedStatusModal.visible}
-        type="success"
-        missionTitle={suggestedStatusModal.title}
-        dateLimit={undefined}
-        xp={suggestedStatusModal.xp}
-        coins={suggestedStatusModal.coins}
-        onClose={() => setSuggestedStatusModal({ visible: false, xp: 0, coins: 0, title: "" })}
-      />
+      {/* ── MissionStatusModal SUPPRIMÉE ici — rendue globalement dans _layout.tsx ── */}
 
       <CreateMissionModal
         visible={isMissionModalVisible}
@@ -708,9 +551,12 @@ const styles = StyleSheet.create({
   continueBtnText:   { color: COLORS.background, fontWeight: "800", fontSize: 12 },
   createBtn:         { backgroundColor: COLORS.missionCreateBtn, borderRadius: 30, paddingVertical: 15, alignItems: "center", marginTop: 8 },
   createBtnText:     { color: COLORS.background, fontWeight: "800", fontSize: 17 },
-  // ── Barre de recherche ──
   searchWrapper:     { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.background, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, ...SHADOWS.light },
   searchIcon:        { fontSize: 16, marginRight: 8 },
   searchInput:       { flex: 1, fontSize: 14, color: COLORS.missionHeading, padding: 0 },
   searchClear:       { fontSize: 13, color: COLORS.missionDuration, fontWeight: "700", marginLeft: 8 },
+  lowEnergyBanner:   { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#fff3cd", borderRadius: 14, padding: 12, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: "#f59e0b" },
+  lowEnergyIcon:     { fontSize: 22 },
+  lowEnergyTitle:    { fontWeight: "800", fontSize: 13, color: "#92400e", marginBottom: 2 },
+  lowEnergyDesc:     { fontSize: 11, color: "#a16207", lineHeight: 16 },
 });

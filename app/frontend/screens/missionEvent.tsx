@@ -4,6 +4,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { COLORS, SHADOWS } from "../styles/theme";
 
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   Alert,
   Animated,
@@ -18,15 +20,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { BlurView } from "expo-blur";
-import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Circle, Ellipse, Path } from "react-native-svg";
+import { completeMission } from "../../../backend/services/Userstatsservice";
 import CreateMissionModal from "../components/CreateMissionModal";
 import HibouGuide from "../components/ui/Hibou";
+import { useStats } from "../constants/StatsContext";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
-import { useStats } from "../constants/StatsContext";
-import { completeMission } from "../../../backend/services/Userstatsservice";
 
 const owlSuccess = require("../assets/Hibou/success.png");
 const { width } = Dimensions.get("window");
@@ -464,6 +464,7 @@ export default function MissionMapScreen() {
   const [editData,              setEditData]              = useState<any>(null);
   const [continueModalVisible,  setContinueModalVisible]  = useState(false);
   const [rewardModal,           setRewardModal]           = useState({ visible: false, totalXP: 0, totalGold: 0 });
+  const [isEventClosed,         setIsEventClosed]         = useState(false);
 
   const hibouMsg = missions.length === 0
     ? "Crée ta\npremière\nmission !"
@@ -531,6 +532,15 @@ export default function MissionMapScreen() {
       });
 
       setMissions(withStatus);
+
+      // Vérifier si l'événement est déjà clôturé
+      const { data: bossData } = await supabase
+        .from("boss_events")
+        .select("completed_at")
+        .eq("id_boss", Number(eventId))
+        .maybeSingle();
+      setIsEventClosed(!!bossData?.completed_at);
+
     } catch (err: any) {
       Alert.alert("Erreur", err.message);
     } finally {
@@ -592,6 +602,7 @@ export default function MissionMapScreen() {
       }
 
       setRewardModal({ visible: true, totalXP, totalGold });
+      setIsEventClosed(true);
 
     } catch (err: any) {
       console.error("❌ finishEvent:", err.message);
@@ -618,6 +629,25 @@ export default function MissionMapScreen() {
   // ─── Actions ─────────────────────────────────────────────────────────────
   const handleStart = async () => {
     if (!selectedMission || !userId) return;
+
+    // ── Vérifier l'énergie avant de démarrer ──
+    try {
+      const { data: ps } = await supabase
+        .from("player_stats")
+        .select("energie")
+        .eq("id_user", userId)
+        .maybeSingle();
+
+      if ((ps?.energie ?? 100) <= 0) {
+        Alert.alert(
+          "⚡ Énergie épuisée !",
+          "Tu n'as plus d'énergie pour démarrer une mission.\n\nDors (1x/jour) ou utilise une potion ⚡ depuis le Dashboard.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+    } catch {}
+
     try {
       const newValidationId = await upsertValidation(selectedMission.id_mission, selectedMission.validationId, "running");
       const updated: Mission = { ...selectedMission, localStatus: "in_progress", validationId: newValidationId, validationStatut: "running" };
@@ -648,13 +678,13 @@ export default function MissionMapScreen() {
           .eq("id_validation", selectedMission.validationId);
       }
 
-      // ✅ Appliquer les gains de stats sur player_stats
+      // ── Mise à jour des stats player_stats directement depuis la mission ──
       try {
         await completeMission(String(userId), {
           id_mission:        selectedMission.id_mission,
           titre:             selectedMission.titre,
           description:       selectedMission.description ?? "",
-          duree_min:         selectedMission.duree_min ?? 0,
+          duree_min:         selectedMission.duree_min ?? 30,
           difficulte:        selectedMission.difficulte,
           priorite:          selectedMission.priorite,
           energie_cout:      selectedMission.energie_cout,
@@ -663,10 +693,9 @@ export default function MissionMapScreen() {
           organisation_gain: selectedMission.organisation_gain,
           xp_gain:           selectedMission.xp_gain,
         });
-        // ✅ Rafraîchir les stats dans le contexte global
-        refreshStats();
-      } catch (statsErr) {
-        console.warn("⚠️ Stats update failed (non-bloquant):", statsErr);
+        console.log(`✅ handleComplete (event) — stats mises à jour pour mission ${id}`);
+      } catch (e) {
+        console.warn("⚠️ Stats update failed (non-bloquant):", e);
       }
 
       const updatedMissions = missions.map((m, i) => {
@@ -815,10 +844,17 @@ export default function MissionMapScreen() {
 
       {/* ── CTA ── */}
       <View style={styles.ctaBar}>
-        <TouchableOpacity style={styles.ctaBtn} onPress={() => { setEditData({ id_boss: Number(eventId) }); setCreateModalVisible(true); }}>
-          <Ionicons name="add" size={22} color="#fff" />
-          <Text style={styles.ctaBtnText}>Créer une mission</Text>
-        </TouchableOpacity>
+        {isEventClosed ? (
+          <View style={[styles.ctaBtn, { backgroundColor: "#9ca3af", opacity: 0.7 }]}>
+            <Ionicons name="lock-closed" size={18} color="#fff" />
+            <Text style={styles.ctaBtnText}>Événement clôturé</Text>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.ctaBtn} onPress={() => { setEditData({ id_boss: Number(eventId) }); setCreateModalVisible(true); }}>
+            <Ionicons name="add" size={22} color="#fff" />
+            <Text style={styles.ctaBtnText}>Créer une mission</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* ── Modals ── */}

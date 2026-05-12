@@ -1,3 +1,5 @@
+// app/frontend/app/missions.tsx
+
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,18 +17,15 @@ import {
   getDeadlineColor,
 } from "../../../backend/models/mission.utils";
 import { useMissions } from "../../../backend/viewmodels/useMissions";
-import AvatarCrd from "../components/AvatarCrd";
 import CreateEventModal from "../components/CreateEventModal";
 import CreateMissionModal from "../components/CreateMissionModal";
 import ExitMissionModal from "../components/ExitMissionModal";
-import MissionStatusModal from "../components/MissionStatusModals";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
-import { useSounds } from "../hooks/useSounds";
 
 // ─────────────────────────────────────────────────────────────
 //  Constants
@@ -221,30 +220,24 @@ function MissionCard({
 //  MissionsScreen
 // ─────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────
-//  MissionsScreen
-// ─────────────────────────────────────────────────────────────
-
 export default function MissionsScreen() {
   const [activeTab, setActiveTab]                       = useState<Tab>("Tout");
   const [isMissionModalVisible, setMissionModalVisible] = useState(false);
   const [isEventModalVisible, setEventModalVisible]     = useState(false);
   const [selectedData, setSelectedData]                 = useState<any>(null);
+
   const { openCreate, autoStartId } = useLocalSearchParams<{
     openCreate?: string;
     autoStartId?: string;
   }>();
 
-  // Mission suggérée — plus besoin de state séparé, on utilise le flux normal
   const autoStartHandled = useRef(false);
-
   const [searchQuery, setSearchQuery] = useState("");
 
   const { selectedModel, setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername }   = useUser();
-  const { stats: playerStats, refreshStats } = useStats();
+  const { stats: playerStats }              = useStats();
 
-  // ── Vérification énergie avant démarrer une mission ──────────
   const ENERGY_THRESHOLD = 16;
   const scrollRef = useRef<any>(null);
 
@@ -277,9 +270,7 @@ export default function MissionsScreen() {
         .select("username, prenom, nom, avatar_url")
         .eq("id_user", userId)
         .single();
-
       if (error || !data) return;
-
       const name = data.username ?? data.prenom ?? data.nom ?? ctxUsername ?? "Joueur";
       setDisplayName(name);
       if (data.avatar_url) setSelectedModel(data.avatar_url);
@@ -287,10 +278,10 @@ export default function MissionsScreen() {
     fetchUserProfile();
   }, [userId, ctxUsername]);
 
+  // ── useMissions — statusModal et closeStatusModal retirés ──
   const {
     missions,
     loading,
-    statusModal,
     exitModal,
     getTimer,
     handleStart,
@@ -300,14 +291,12 @@ export default function MissionsScreen() {
     buildEditPayload,
     loadMissions,
     reloadMissionsOnly,
-    closeStatusModal,
     requestExit,
     handlePauseAndLeave,
     handleLeaveRunning,
     handleCancelExit,
   } = useMissions(userId !== null ? String(userId) : null);
 
-  // Auto-démarrer la mission suggérée — placé APRÈS la déclaration de missions
   useEffect(() => {
     if (!autoStartId || !missions.length || autoStartHandled.current) return;
     const id = parseInt(autoStartId, 10);
@@ -350,8 +339,11 @@ export default function MissionsScreen() {
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <WaveBackground />
 
-      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Missions</Text>
           <View style={styles.countBadge}>
@@ -364,8 +356,12 @@ export default function MissionsScreen() {
           <View style={styles.lowEnergyBanner}>
             <Text style={styles.lowEnergyIcon}>⚡</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.lowEnergyTitle}>Énergie insuffisante ({Math.round(playerStats.energie)}%)</Text>
-              <Text style={styles.lowEnergyDesc}>Il te faut min. {ENERGY_THRESHOLD}% pour démarrer. Va dormir ou utilise une potion sur le Dashboard !</Text>
+              <Text style={styles.lowEnergyTitle}>
+                Énergie insuffisante ({Math.round(playerStats.energie)}%)
+              </Text>
+              <Text style={styles.lowEnergyDesc}>
+                Il te faut min. {ENERGY_THRESHOLD}% pour démarrer. Va dormir ou utilise une potion sur le Dashboard !
+              </Text>
             </View>
           </View>
         )}
@@ -382,24 +378,35 @@ export default function MissionsScreen() {
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity
+              onPress={() => setSearchQuery("")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Text style={styles.searchClear}>✕</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContainer}>
+        {/* ── Tabs ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabsContainer}
+        >
           {TABS.map((tab) => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
               style={[styles.tab, activeTab === tab && styles.tabActive]}
             >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab}
+              </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
+        {/* ── Liste missions ── */}
         {loading ? (
           <Text style={styles.emptyText}>Chargement...</Text>
         ) : filteredMissions.length === 0 ? (
@@ -425,15 +432,7 @@ export default function MissionsScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      <MissionStatusModal
-        visible={statusModal.visible}
-        type={statusModal.type}
-        missionTitle={statusModal.missionTitle}
-        dateLimit={statusModal.dateLimit}
-        xp={statusModal.xp}
-        coins={statusModal.coins}
-        onClose={closeStatusModal}
-      />
+      {/* ── MissionStatusModal SUPPRIMÉE ici — rendue globalement dans _layout.tsx ── */}
 
       <CreateMissionModal
         visible={isMissionModalVisible}
@@ -495,13 +494,11 @@ const styles = StyleSheet.create({
   card:              { borderRadius: 20, paddingTop: 24, paddingBottom: 12, paddingHorizontal: 16, ...SHADOWS.medium },
   cardActionsBottom: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 15, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.cardDivider },
   actionIconBtn:     { width: 32, height: 32, borderRadius: 8, backgroundColor: COLORS.cardActionBg, alignItems: "center", justifyContent: "center" },
-  // ── Banners ──
   bannersRow:        { flexDirection: "row", gap: 8, marginBottom: 10 },
   urgentBanner:      { backgroundColor: COLORS.missionUrgentBg, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, alignSelf: "flex-start" },
   urgentText:        { color: COLORS.missionUrgentText, fontWeight: "700", fontSize: 12 },
   defiBanner:        { backgroundColor: "#ede9fe", borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, alignSelf: "flex-start" },
   defiText:          { color: "#6d28d9", fontWeight: "700", fontSize: 12 },
-  // ── Card content ──
   topRow:            { flexDirection: "row", gap: 12 },
   iconBox:           { width: 58, height: 58, borderRadius: 16, justifyContent: "center", alignItems: "center" },
   iconText:          { fontSize: 26 },
@@ -532,12 +529,10 @@ const styles = StyleSheet.create({
   continueBtnText:   { color: COLORS.background, fontWeight: "800", fontSize: 12 },
   createBtn:         { backgroundColor: COLORS.missionCreateBtn, borderRadius: 30, paddingVertical: 15, alignItems: "center", marginTop: 8 },
   createBtnText:     { color: COLORS.background, fontWeight: "800", fontSize: 17 },
-  // ── Barre de recherche ──
   searchWrapper:     { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.background, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16, ...SHADOWS.light },
   searchIcon:        { fontSize: 16, marginRight: 8 },
   searchInput:       { flex: 1, fontSize: 14, color: COLORS.missionHeading, padding: 0 },
   searchClear:       { fontSize: 13, color: COLORS.missionDuration, fontWeight: "700", marginLeft: 8 },
-  // ── Bandeau énergie faible ──
   lowEnergyBanner:   { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#fff3cd", borderRadius: 14, padding: 12, marginBottom: 14, borderLeftWidth: 4, borderLeftColor: "#f59e0b" },
   lowEnergyIcon:     { fontSize: 22 },
   lowEnergyTitle:    { fontWeight: "800", fontSize: 13, color: "#92400e", marginBottom: 2 },

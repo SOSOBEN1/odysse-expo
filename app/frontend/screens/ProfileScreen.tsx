@@ -3,15 +3,15 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pencil, LogOut, ShoppingBag } from "lucide-react-native";
+import { Pencil, LogOut } from "lucide-react-native";
 import {
-  ActivityIndicator,Alert, Animated, Easing, ScrollView, StyleSheet,
+  ActivityIndicator, Alert, Animated, Easing, ScrollView, StyleSheet,
   Text, TouchableOpacity, View, ViewStyle
 } from "react-native";
 
-
 import AvatarCrd from "../components/AvatarCrd";
 import BackButton from "../components/BackButton";
+import { GoldCoin } from "../components/GoldCoin";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/waveBackground";
 import { useAvatar } from "../constants/AvatarContext";
@@ -20,7 +20,12 @@ import { AVATAR_MAP, resolveAvatarModel } from "../constants/avatarMap";
 import { supabase } from "../constants/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface StatCardProps  { emoji: string; value: number; label: string; }
+interface StatCardProps {
+  emoji?: string;
+  coin?: boolean;
+  value: number;
+  label: string;
+}
 interface BadgeItemProps { emoji: string; label: string; color: string; }
 interface StarItem {
   top?: number; bottom?: number; left?: number; right?: number;
@@ -92,13 +97,16 @@ function AnimatedStar({ style, size, delay = 0 }: AnimatedStarProps) {
   );
 }
 
-
 // ─── StatCard ─────────────────────────────────────────────────────────────────
-function StatCard({ emoji, value, label }: StatCardProps) {
+function StatCard({ emoji, coin, value, label }: StatCardProps) {
   return (
     <View style={statStyles.card}>
       <View style={statStyles.row}>
-        <Text style={statStyles.emoji}>{emoji}</Text>
+        {coin ? (
+          <GoldCoin size={24} />
+        ) : (
+          <Text style={statStyles.emoji}>{emoji}</Text>
+        )}
         <Text style={statStyles.value}>{value}</Text>
       </View>
       <Text style={statStyles.label}>{label}</Text>
@@ -162,23 +170,6 @@ function getLevelDescription(niveau: number): string {
 
 // ─── SCREEN ───────────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
-  const handleLogout = () => {
-  Alert.alert(
-    "Déconnexion",
-    "Tu veux vraiment te déconnecter ?",
-    [
-      { text: "Annuler", style: "cancel" },
-      {
-        text: "Déconnexion",
-        style: "destructive",
-        onPress: async () => {
-          await supabase.auth.signOut();
-          router.replace("/");
-        },
-      },
-    ]
-  );
-};
   const router = useRouter();
   const { setSelectedModel } = useAvatar();
   const { userId, username: ctxUsername, isLoading: ctxLoading } = useUser();
@@ -192,6 +183,24 @@ export default function ProfileScreen() {
     xp: 0, xpMax: 500, coins: 0,
     badgeCount: 0, missions: 0, defis: 0,
   });
+
+  const handleLogout = () => {
+    Alert.alert(
+      "Déconnexion",
+      "Tu veux vraiment te déconnecter ?",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Déconnexion",
+          style: "destructive",
+          onPress: async () => {
+            await supabase.auth.signOut();
+            router.replace("/");
+          },
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -375,9 +384,9 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Stats */}
+          {/* Stats — pièces d'or avec GoldCoin, reste en emoji */}
           <View style={styles.statsGrid}>
-            <StatCard emoji="🪙" value={userData.coins}      label="Pièces d'or" />
+            <StatCard coin  value={userData.coins}      label="Pièces d'or" />
             <StatCard emoji="🏆" value={userData.badgeCount} label="Badges"      />
             <StatCard emoji="📋" value={userData.missions}   label="Missions"    />
             <StatCard emoji="🎯" value={userData.defis}      label="Défis"       />
@@ -405,31 +414,31 @@ export default function ProfileScreen() {
             </View>
           )}
 
-{/* Bouton modifier profil */}
-<TouchableOpacity
-  style={styles.editButton}
-  onPress={() => router.push("/frontend/screens/EditProfileScreen")}
-  activeOpacity={0.85}
->
-  <LinearGradient
-    colors={["#7f5af0", "#9b87c9"]}
-    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-    style={styles.editGradient}
-  >
-    <Pencil size={18} color="#fff" style={{ marginRight: 8 }} />
-    <Text style={styles.editText}>Modifier le profil</Text>
-  </LinearGradient>
-</TouchableOpacity>
+          {/* Bouton modifier profil */}
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => router.push("/frontend/screens/EditProfileScreen")}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={["#7f5af0", "#9b87c9"]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.editGradient}
+            >
+              <Pencil size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.editText}>Modifier le profil</Text>
+            </LinearGradient>
+          </TouchableOpacity>
 
-{/* Bouton déconnexion */}
-<TouchableOpacity
-  style={styles.logoutButton}
-  onPress={handleLogout}
-  activeOpacity={0.85}
->
-  <LogOut size={18} color="#fff" style={{ marginRight: 8 }} />
-  <Text style={styles.logoutText}>Se déconnecter</Text>
-</TouchableOpacity>
+          {/* Bouton déconnexion */}
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+            activeOpacity={0.85}
+          >
+            <LogOut size={18} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.logoutText}>Se déconnecter</Text>
+          </TouchableOpacity>
 
         </View>
 
@@ -454,28 +463,28 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     zIndex: 10,
   },
- logoutButton: {
-  width: "100%",
-  borderRadius: 15,
-  paddingVertical: 15,
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  backgroundColor: "#c0392b",  // rouge sombre, pas flashy
-  marginTop: 10,
-  elevation: 3,
-  shadowColor: "#7b241c",
-  shadowOffset: { width: 0, height: 3 },
-  shadowOpacity: 0.2,
-  shadowRadius: 6,
-},
-logoutText: {
-  color: "#fff",
-  fontWeight: "bold",
-  fontSize: 16,
-  letterSpacing: 0.4,
-},
 
+  logoutButton: {
+    width: "100%",
+    borderRadius: 15,
+    paddingVertical: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#c0392b",
+    marginTop: 10,
+    elevation: 3,
+    shadowColor: "#7b241c",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+  },
+  logoutText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+    letterSpacing: 0.4,
+  },
 
   scroll: {
     paddingHorizontal: 20,
@@ -500,9 +509,9 @@ logoutText: {
     elevation: 6,
   },
 
-  userName:    { fontSize: 22, fontWeight: "900", color: "#2d1a6e", letterSpacing: 1.5, marginBottom: 4, textAlign: "center" },
-  userLevel:   { fontSize: 13, color: "#9b87c9", fontWeight: "600", marginBottom: 6, textAlign: "center" },
-  levelDesc:   { fontSize: 11, color: "#a78bca", fontStyle: "italic", textAlign: "center", marginBottom: 16, paddingHorizontal: 24, lineHeight: 16 },
+  userName:  { fontSize: 22, fontWeight: "900", color: "#2d1a6e", letterSpacing: 1.5, marginBottom: 4, textAlign: "center" },
+  userLevel: { fontSize: 13, color: "#9b87c9", fontWeight: "600", marginBottom: 6, textAlign: "center" },
+  levelDesc: { fontSize: 11, color: "#a78bca", fontStyle: "italic", textAlign: "center", marginBottom: 16, paddingHorizontal: 24, lineHeight: 16 },
 
   card: {
     width: "100%",

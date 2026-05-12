@@ -1,8 +1,12 @@
+// app/_layout.tsx
+
 import { Stack } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import BadgeUnlockedModal from "./frontend/components/BadgeUnlockedModel";
 import LevelUpModal from "./frontend/components/LevelUpModal";
+import MissionStatusModal from "./frontend/components/MissionStatusModals";
 import { AvatarProvider } from "./frontend/constants/AvatarContext";
+import { MissionStatusProvider, useMissionStatus } from "./frontend/constants/MissionStatusContext";
 import { supabase } from "./frontend/constants/supabase";
 import { UserProvider, useUser } from "./frontend/constants/UserContext";
 import { StatsProvider } from "./frontend/constants/StatsContext";
@@ -17,7 +21,7 @@ const BADGE_EMOJI: Record<number, string> = {
   30:"🌟", 31:"💪", 32:"🛡️", 33:"👑", 34:"🦁", 35:"🔍", 36:"⚔️", 37:"💎",
 };
 
-// ── Gold par badge (miroir de badgeEngine.ts) ─────────────────
+// ── Gold par badge ─────────────────────────────────────────────
 const BADGE_GOLD: Record<number, number> = {
   1:25, 2:50,  3:25,  4:50,  5:25,  6:25,  7:50,  8:25,
   9:100, 10:100, 11:200, 12:50, 13:50, 14:50, 15:100,
@@ -26,10 +30,25 @@ const BADGE_GOLD: Record<number, number> = {
   30:200, 31:25, 32:25, 33:200, 34:200, 35:25, 36:25, 37:200,
 };
 
-// ── Même formule que levelService.ts : 500 XP = 1 niveau ─────
 const XP_PAR_NIVEAU = 500;
 function calcNiveauFromXP(xp: number): number {
   return Math.floor(xp / XP_PAR_NIVEAU) + 1;
+}
+
+// ── Watcher global modal mission ──────────────────────────────
+function MissionStatusWatcher() {
+  const { statusModal, closeStatusModal } = useMissionStatus();
+  return (
+    <MissionStatusModal
+      visible={statusModal.visible}
+      type={statusModal.type}
+      missionTitle={statusModal.missionTitle}
+      dateLimit={statusModal.dateLimit}
+      xp={statusModal.xp}
+      coins={statusModal.coins}
+      onClose={closeStatusModal}
+    />
+  );
 }
 
 // ── Détecteur global de montée de niveau ─────────────────────
@@ -41,9 +60,7 @@ function LevelUpWatcher() {
   const lastNiveauRef = useRef<number | null>(null);
 
   useEffect(() => {
-    console.log("[LevelUpWatcher] userId =", userId);
     if (!userId) return;
-
     let isMounted = true;
 
     const checkLevel = async () => {
@@ -54,11 +71,9 @@ function LevelUpWatcher() {
           .eq("id_user", userId)
           .single();
 
-        console.log("[LevelUpWatcher] data =", data, "error =", error);
         if (!isMounted || !data) return;
 
         const niveauActuel = calcNiveauFromXP(data.xp ?? 0);
-        console.log("[LevelUpWatcher] xp =", data.xp, "→ niveau =", niveauActuel, "| last =", lastNiveauRef.current);
 
         if (lastNiveauRef.current === null) {
           lastNiveauRef.current = niveauActuel;
@@ -67,14 +82,12 @@ function LevelUpWatcher() {
 
         if (niveauActuel > lastNiveauRef.current) {
           lastNiveauRef.current = niveauActuel;
-          console.log("[LevelUpWatcher] 🎉 LEVEL UP → niveau", niveauActuel);
 
-          // ── Récompense montée de niveau ──────────────────────────────
           try {
             const goldBonus = niveauActuel <= 3  ? 50
                             : niveauActuel <= 6  ? 100
                             : niveauActuel <= 9  ? 175
-                            : 250; // niveau 10+
+                            : 250;
 
             const { data: uData } = await supabase
               .from("users").select("gold").eq("id_user", userId).maybeSingle();
@@ -82,7 +95,6 @@ function LevelUpWatcher() {
               .update({ gold: (uData?.gold ?? 0) + goldBonus })
               .eq("id_user", userId);
 
-            // 1 potion offerte à chaque palier (niveau 3, 5, 7, 10+)
             const getsPotion = [3, 5, 7, 10].includes(niveauActuel) || niveauActuel > 10;
             if (getsPotion) {
               const { data: pData } = await supabase
@@ -123,13 +135,10 @@ function LevelUpWatcher() {
 // ── Détecteur global de badges ────────────────────────────────
 function BadgeWatcher() {
   const { userId } = useUser();
-
-  // File d'attente des badges à afficher un par un
-  const [queue,        setQueue]        = useState<{ id: number; name: string }[]>([]);
+  const [queue, setQueue]               = useState<{ id: number; name: string }[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
-  const [current,      setCurrent]      = useState<{ id: number; name: string } | null>(null);
+  const [current, setCurrent]           = useState<{ id: number; name: string } | null>(null);
 
-  // Vérifie les badges toutes les 10 secondes
   useEffect(() => {
     if (!userId) return;
     let isMounted = true;
@@ -139,7 +148,6 @@ function BadgeWatcher() {
         const unlocked = await checkAndUnlockBadges(userId);
         if (!isMounted || unlocked.length === 0) return;
 
-        // On a besoin des IDs pour les emojis — on refetch les badges nouvellement obtenus
         const { data } = await supabase
           .from("badges")
           .select("id_badge, nom")
@@ -149,9 +157,7 @@ function BadgeWatcher() {
 
         const newBadges = data.map((b: any) => ({ id: b.id_badge, name: b.nom }));
         setQueue(prev => [...prev, ...newBadges]);
-      } catch (e) {
-        // Silencieux
-      }
+      } catch {}
     };
 
     check();
@@ -159,7 +165,6 @@ function BadgeWatcher() {
     return () => { isMounted = false; clearInterval(interval); };
   }, [userId]);
 
-  // Dépile la file : affiche un badge à la fois
   useEffect(() => {
     if (!modalVisible && queue.length > 0) {
       const [next, ...rest] = queue;
@@ -189,9 +194,12 @@ export default function RootLayout() {
     <UserProvider>
       <AvatarProvider>
         <StatsProvider>
-          <Stack screenOptions={{ headerShown: false }} />
-          <LevelUpWatcher />
-          <BadgeWatcher />
+          <MissionStatusProvider>
+            <Stack screenOptions={{ headerShown: false }} />
+            <LevelUpWatcher />
+            <BadgeWatcher />
+            <MissionStatusWatcher />
+          </MissionStatusProvider>
         </StatsProvider>
       </AvatarProvider>
     </UserProvider>

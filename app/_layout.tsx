@@ -1,18 +1,23 @@
 // app/_layout.tsx
 
 import { Stack } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect, useRef, useState } from "react";
+import { checkAndUnlockBadges } from "../backend/services/badgeEngine";
 import BadgeUnlockedModal from "./frontend/components/BadgeUnlockedModel";
 import LevelUpModal from "./frontend/components/LevelUpModal";
 import MissionStatusModal from "./frontend/components/MissionStatusModals";
 import { AvatarProvider } from "./frontend/constants/AvatarContext";
 import { MissionStatusProvider, useMissionStatus } from "./frontend/constants/MissionStatusContext";
-import { supabase } from "./frontend/constants/supabase";
-import { UserProvider, useUser } from "./frontend/constants/UserContext";
 import { StatsProvider } from "./frontend/constants/StatsContext";
-import { checkAndUnlockBadges } from "../backend/services/badgeEngine";
+import { supabase } from "./frontend/constants/supabase";
+import { useNotifications } from "./frontend/constants/UseNotifications";
+import { UserProvider, useUser } from "./frontend/constants/UserContext";
+import { useBackgroundMusic } from "./frontend/hooks/useBackgroundMusic";
 
-// ── Badge meta (emoji) ────────────────────────────────────────
+WebBrowser.maybeCompleteAuthSession();
+
+// ── Badge meta ────────────────────────────────────────────────
 const BADGE_EMOJI: Record<number, string> = {
   1:"👣", 2:"🔥", 3:"👁️", 4:"🎯", 5:"📅", 6:"⚡", 7:"⭐", 8:"❤️",
   9:"🎓", 10:"🏃", 11:"🏆", 12:"🌸", 13:"🌬️", 14:"🧘", 15:"💚",
@@ -23,7 +28,7 @@ const BADGE_EMOJI: Record<number, string> = {
 
 // ── Gold par badge ─────────────────────────────────────────────
 const BADGE_GOLD: Record<number, number> = {
-  1:25, 2:50,  3:25,  4:50,  5:25,  6:25,  7:50,  8:25,
+  1:25,  2:50,  3:25,  4:50,  5:25,  6:25,  7:50,  8:25,
   9:100, 10:100, 11:200, 12:50, 13:50, 14:50, 15:100,
   16:100, 17:50, 18:25, 19:150, 20:25, 21:50, 22:100,
   23:100, 24:150, 25:25, 26:50, 27:100, 28:100, 29:150,
@@ -33,6 +38,18 @@ const BADGE_GOLD: Record<number, number> = {
 const XP_PAR_NIVEAU = 500;
 function calcNiveauFromXP(xp: number): number {
   return Math.floor(xp / XP_PAR_NIVEAU) + 1;
+}
+
+// ── Background music (doit être INSIDE les providers) ─────────
+function BackgroundMusicManager() {
+  useBackgroundMusic();
+  return null;
+}
+
+// ── Notifications (doit être INSIDE les providers) ────────────
+function NotificationsManager() {
+  useNotifications();
+  return null;
 }
 
 // ── Watcher global modal mission ──────────────────────────────
@@ -65,7 +82,7 @@ function LevelUpWatcher() {
 
     const checkLevel = async () => {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("users")
           .select("xp")
           .eq("id_user", userId)
@@ -195,6 +212,10 @@ export default function RootLayout() {
       <AvatarProvider>
         <StatsProvider>
           <MissionStatusProvider>
+            {/* ✅ Ces managers sont INSIDE les providers → hooks fonctionnent correctement */}
+            <BackgroundMusicManager />
+            <NotificationsManager />
+
             <Stack screenOptions={{ headerShown: false }} />
             <LevelUpWatcher />
             <BadgeWatcher />

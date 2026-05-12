@@ -356,7 +356,7 @@ export default function EventsScreen() {
 
 const styles = StyleSheet.create({
   container:      { flex: 1, backgroundColor: "#f5f3ff" },
-  scrollContent:  { paddingTop: 60, paddingHorizontal: SIZES.padding, paddingBottom: 120 },
+  scrollContent:  { paddingTop: 60, paddingHorizontal: SIZES.padding, paddingBottom: 160 },
 
   // ── Section title ──
   sectionRow:     { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },

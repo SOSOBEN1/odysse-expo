@@ -90,7 +90,7 @@ export default function MissionStatusModal({
                       {/* ✅ XP réel */}
                       <RewardItem icon="flash" val={`+${xp ?? 0}`} label="XP" color="#4A90E2" />
 
-                      <RewardItem icon="trophy" val="+1" label="Badge" color="#9B51E0" />
+                     
                     </View>
                   </View>
                 ) : (

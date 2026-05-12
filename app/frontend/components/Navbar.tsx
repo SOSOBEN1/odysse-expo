@@ -3,6 +3,7 @@ import { usePathname, useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { COLORS, SHADOWS, SIZES } from "../styles/theme";
+import EventsScreen from "../screens/EventsScreen";
 
 type Props = {
   active?: string; // optionnel maintenant
@@ -12,7 +13,7 @@ type Props = {
 
 const items = [
   { key: "home",     label: "Accueil",  icon: "home-outline",   route: "/frontend/screens//Dashbord",       aliases: ["dashbord"] },
-  { key: "missions", label: "Missions", icon: "flag-outline",    route: "/frontend/screens//Homescreen",     aliases: ["homescreen", "missions", "missionevent", "createeventmodal"] },
+  { key: "missions", label: "Missions", icon: "flag-outline",    route: "/frontend/screens//Homescreen",     aliases: ["homescreen", "missions", "missionevent", "createeventmodal","EventsScreen"] },
   { key: "shop",     label: "Boutique", icon: "cart-outline",    route: "/frontend/screens//BoutiqueScreen", aliases: ["boutiquescreen"] },
   { key: "badges",   label: "Badges",   icon: "ribbon-outline",  route: "/frontend/screens//BadgeScreen",    aliases: ["badgescreen"] },
   { key: "defis",    label: "Defis",    icon: "trophy-outline",  route: "/frontend/screens//Defis",          aliases: ["defis"] },

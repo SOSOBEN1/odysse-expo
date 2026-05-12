@@ -28,6 +28,7 @@ interface BadgeUnlockedModalProps {
   badgeId?: number;
   badgeName?: string;
   badgeEmoji?: string;
+  goldReward: number;
   onClose: () => void;
 }
 
@@ -262,11 +263,7 @@ const SPARKS = [
 
 // ── Modal ─────────────────────────────────────────────────────
 export default function BadgeUnlockedModal({
-  visible,
-  badgeId = 0,
-  badgeName = "Badge",
-  badgeEmoji = "🏅",
-  onClose,
+  visible, badgeId = 0, badgeName = "Badge", badgeEmoji = "🏅", goldReward, onClose,
 }: BadgeUnlockedModalProps) {
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const cardScale = useRef(new Animated.Value(0.3)).current;
@@ -448,7 +445,7 @@ export default function BadgeUnlockedModal({
                 },
               ]}
             >
-              <Text style={styles.coinText}>🪙 +10</Text>
+              <Text style={styles.coinText}>🪙 +{goldReward}</Text>
             </Animated.View>
           </View>
 

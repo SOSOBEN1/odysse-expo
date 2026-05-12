@@ -16,6 +16,8 @@ import { COLORS } from "../styles/theme";
 interface LevelUpModalProps {
   visible: boolean;
   newLevel: number;
+  goldBonus: number;
+  getsPotion: boolean;
   onClose: () => void;
 }
 
@@ -268,11 +270,7 @@ function getLevelTitle(level: number): string {
 }
 
 // ── Modal ─────────────────────────────────────────────────────
-export default function LevelUpModal({
-  visible,
-  newLevel,
-  onClose,
-}: LevelUpModalProps) {
+export default function LevelUpModal({ visible, newLevel, goldBonus, getsPotion, onClose }: LevelUpModalProps) {
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const cardScale = useRef(new Animated.Value(0.3)).current;
   const cardOpacity = useRef(new Animated.Value(0)).current;
@@ -482,8 +480,10 @@ export default function LevelUpModal({
           {/* Titre du niveau */}
           <Text style={styles.levelTitle}>{levelTitle}</Text>
           <Text style={styles.levelDesc}>
-            Tu es maintenant niveau {newLevel} !{"\n"}Continue comme ça 🚀
-          </Text>
+  Tu es maintenant niveau {newLevel} !{"\n"}
+  🪙 +{goldBonus} or{getsPotion ? "  •  🧪 +1 potion" : ""}{"\n"}
+  Continue comme ça 🚀
+</Text>
 
           {/* Bouton */}
           <Animated.View

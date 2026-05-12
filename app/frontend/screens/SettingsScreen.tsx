@@ -1,5 +1,6 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Audio } from 'expo-av';
 import { LinearGradient } from "expo-linear-gradient";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
@@ -10,7 +11,6 @@ import ChangePasswordModal from "../components/ChangePasswordModal";
 import WaveBackground from "../components/waveBackground";
 import { useBackgroundMusic } from '../hooks/useBackgroundMusic';
 import styles from "../styles/LoginStyle";
-
 const { width } = Dimensions.get("window");
 
 export default function SettingsScreen() {
@@ -183,7 +183,21 @@ export default function SettingsScreen() {
         >
           <Text style={{ color: '#fff', fontWeight: 'bold' }}>🔔 Tester notif (10s)</Text>
         </TouchableOpacity>
-
+<TouchableOpacity
+  style={{ backgroundColor: '#4CAF50', padding: 15, borderRadius: 20, marginTop: 10, alignItems: 'center' }}
+  onPress={async () => {
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        require('../assets/sounds/notification.wav')
+      )
+      await sound.playAsync()
+    } catch (e) {
+      console.log('Erreur son:', e)
+    }
+  }}
+>
+  <Text style={{ color: '#fff', fontWeight: 'bold' }}>🔊 Tester le son direct</Text>
+</TouchableOpacity>
         <TouchableOpacity
           style={localStyles.logoutBtn}
           onPress={() => router.replace('/frontend/screens/Login')}

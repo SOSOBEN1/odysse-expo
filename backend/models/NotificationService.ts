@@ -12,6 +12,13 @@ async function getSound(): Promise<string | false> {
   const reminders = await AsyncStorage.getItem('pref_reminders')
   return reminders !== 'false' ? 'notification.wav' : false
 }
+// async function getChannelId(): Promise<string> {
+//   return 'odyssee_v2'
+// }
+
+// async function getSound(): Promise<string> {
+//   return 'notification.wav'
+// }
 Notifications.setNotificationHandler({
   handleNotification: async (): Promise<Notifications.NotificationBehavior> => {
     const sound = await AsyncStorage.getItem('pref_sound')

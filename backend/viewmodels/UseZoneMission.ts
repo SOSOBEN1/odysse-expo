@@ -1,28 +1,35 @@
 /**
  * useZoneMissions.ts
- *
- * ✅ Stockage mémoire global
- * ✅ Les timers persistent entre navigations et déconnexions
- * ✅ Le puzzle garde son état
- * ✅ Pause automatique à la déconnexion
+ * Logique identique à useMissions :
+ * - AsyncStorage pour persister les timers
+ * - startMissionSession / pauseMissionSession / finishMissionSession / failMissionSession
+ * - Suggestions = missions user sans id_zone (idle)
+ * - Terminer = finishMissionSession + updatePuzzle (+1 pièce)
+ * - Toutes terminées = zone débloquée
  */
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../app/frontend/constants/supabase";
 import {
-  assignMissionToZone,
+  failMissionSession,
   fetchSuggestions,
   fetchZoneMissions,
+  finishMissionSession,
+  pauseMissionSession,
+  resumeMissionSession,
+  startMissionSession,
 } from "../models/mission.service";
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 export type TimerState = "idle" | "running" | "paused" | "done" | "fail";
 
-export interface TimerData {
+export interface ZoneTimer {
   state: TimerState;
   elapsed: number;
-  startedAt: number | null;
+  validationId: number | null;
+  startedAt: Date | null;
 }
 
 export interface ZoneMission {
@@ -44,208 +51,130 @@ export interface PuzzleInfo {
   is_complete: boolean;
 }
 
-// ─── Stockage mémoire GLOBAL (survit aux déconnexions si l'app n'est pas tuée) ─
+export interface StatusModal {
+  visible: boolean;
+  type: "success" | "fail";
+  missionTitle: string | undefined;
+  xp: number;
+  coins: number;
+}
 
-const globalTimerStore: Record<string, TimerData> = {};
-const globalPuzzleStore: Record<string, PuzzleInfo> = {};
+// ─── AsyncStorage helpers ────────────────────────────────────────────────────
 
-const memoryStore = {
-  get: (key: string): TimerData | null => globalTimerStore[key] ?? null,
-  set: (key: string, data: TimerData): void => { globalTimerStore[key] = data; },
-  remove: (key: string): void => { delete globalTimerStore[key]; },
-};
+const timerKey = (userId: string, zoneId: number, missionId: number) =>
+  `zone_timer:${userId}:${zoneId}:${missionId}`;
 
-const puzzleStore = {
-  get: (key: string): PuzzleInfo | null => globalPuzzleStore[key] ?? null,
-  set: (key: string, data: PuzzleInfo): void => { globalPuzzleStore[key] = data; },
-};
+async function saveTimer(userId: string, zoneId: number, missionId: number, timer: ZoneTimer) {
+  try {
+    await AsyncStorage.setItem(
+      timerKey(userId, zoneId, missionId),
+      JSON.stringify({
+        ...timer,
+        startedAt: timer.startedAt instanceof Date ? timer.startedAt.toISOString() : null,
+      }),
+    );
+  } catch {}
+}
 
-// ─── Hook ──────────────────────────────────────────────────────────────────────
+async function loadTimer(
+  userId: string,
+  zoneId: number,
+  missionId: number,
+  dureeMin: number,
+): Promise<ZoneTimer | null> {
+  try {
+    const raw = await AsyncStorage.getItem(timerKey(userId, zoneId, missionId));
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as any;
+
+    if (saved.state === "running" && saved.startedAt) {
+      const startedAt = new Date(saved.startedAt);
+      const passedSecs = Math.floor((Date.now() - startedAt.getTime()) / 1000);
+      const newElapsed = (saved.elapsed ?? 0) + passedSecs;
+      const totalSecs = dureeMin * 60;
+
+      if (totalSecs > 0 && newElapsed >= totalSecs) {
+        const failed: ZoneTimer = {
+          state: "fail", elapsed: totalSecs,
+          validationId: saved.validationId ?? null, startedAt: null,
+        };
+        await AsyncStorage.setItem(timerKey(userId, zoneId, missionId), JSON.stringify(failed));
+        return failed;
+      }
+      return {
+        state: "running", elapsed: newElapsed,
+        validationId: saved.validationId ?? null, startedAt: new Date(),
+      };
+    }
+
+    return {
+      state: saved.state ?? "idle",
+      elapsed: saved.elapsed ?? 0,
+      validationId: saved.validationId ?? null,
+      startedAt: saved.startedAt ? new Date(saved.startedAt) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function clearTimer(userId: string, zoneId: number, missionId: number) {
+  try {
+    await AsyncStorage.removeItem(timerKey(userId, zoneId, missionId));
+  } catch {}
+}
+
+// ─── Module-level store (survit au démontage) ────────────────────────────────
+
+const pausedStore = new Map<string, ZoneTimer>();
+const storeKey = (userId: string, zoneId: number, missionId: number) =>
+  `${userId}:${zoneId}:${missionId}`;
+
+// ─── Puzzle cache ─────────────────────────────────────────────────────────────
+
+const puzzleCache: Record<string, PuzzleInfo> = {};
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useZoneMissions(
   userId: string | null,
   zoneId: number,
-  totalPieces: number
+  totalPieces: number,
 ) {
-  const [missions,    setMissions]    = useState<ZoneMission[]>([]);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [timers,      setTimers]      = useState<Record<number, TimerData>>({});
-  const [puzzle,      setPuzzle]      = useState<PuzzleInfo | null>(null);
-  const [loading,     setLoading]     = useState(true);
+  const [missions, setMissions] = useState<ZoneMission[]>([]);
+  const [suggestions, setSuggestions] = useState<ZoneMission[]>([]);
+  const [timers, setTimers] = useState<Record<number, ZoneTimer>>({});
+  const [puzzle, setPuzzle] = useState<PuzzleInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [statusModal, setStatusModal] = useState<StatusModal>({
+    visible: false, type: "success", missionTitle: undefined, xp: 0, coins: 0,
+  });
+  const [zoneUnlocked, setZoneUnlocked] = useState(false);
 
-  const intervalsRef  = useRef<Record<number, ReturnType<typeof setInterval>>>({});
-  const startedAtRef  = useRef<Record<number, number>>({});
-  const timersRef     = useRef<Record<number, TimerData>>({});
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const missionsRef = useRef<ZoneMission[]>([]);
+  const timersRef = useRef<Record<number, ZoneTimer>>({});
+  const handleFinishRef = useRef<(id: number) => Promise<void>>(async () => {});
 
-  // ✅ Savoir si l'utilisateur est connecté
-  const prevUserId = useRef<string | null>(null);
+  useEffect(() => { missionsRef.current = missions; }, [missions]);
+  useEffect(() => { timersRef.current = timers; }, [timers]);
 
-  useEffect(() => {
-    timersRef.current = timers;
-  }, [timers]);
-
-  // ── Clés ─────────────────────────────────────────────────────────────────────
-
-  const getKey = useCallback(
-    (missionId: number) => `timer:${userId}:${zoneId}:${missionId}`,
-    [userId, zoneId]
-  );
-
-  const getPuzzleKey = useCallback(
-    () => `puzzle:${userId}:${zoneId}`,
-    [userId, zoneId]
-  );
-
-  // ── Persistence ──────────────────────────────────────────────────────────────
-
-  const saveTimer = useCallback(
-    (missionId: number, data: TimerData) => {
-      if (!userId) return;
-      memoryStore.set(getKey(missionId), data);
-    },
-    [userId, getKey]
-  );
-
-  const loadTimer = useCallback(
-    (missionId: number, dureeMin: number): TimerData => {
-      if (!userId) return { state: "idle", elapsed: 0, startedAt: null };
-
-      const saved = memoryStore.get(getKey(missionId));
-      if (!saved) return { state: "idle", elapsed: 0, startedAt: null };
-
-      if (saved.state === "running" && saved.startedAt) {
-        const passedSecs = Math.floor((Date.now() - saved.startedAt) / 1000);
-        const newElapsed = saved.elapsed + passedSecs;
-        const totalSecs  = dureeMin * 60;
-
-        if (newElapsed >= totalSecs) {
-          const failed: TimerData = { state: "fail", elapsed: totalSecs, startedAt: null };
-          saveTimer(missionId, failed);
-          return failed;
-        }
-
-        const resumed: TimerData = { 
-          state: "running", 
-          elapsed: newElapsed, 
-          startedAt: Date.now() 
-        };
-        saveTimer(missionId, resumed);
-        return resumed;
-      }
-
-      if (saved.state === "running" && !saved.startedAt) {
-        const resumed: TimerData = { 
-          state: "running", 
-          elapsed: saved.elapsed, 
-          startedAt: Date.now() 
-        };
-        saveTimer(missionId, resumed);
-        return resumed;
-      }
-
-      return saved;
-    },
-    [userId, getKey, saveTimer]
-  );
-
-  const removeTimer = useCallback(
-    (missionId: number) => {
-      if (!userId) return;
-      memoryStore.remove(getKey(missionId));
-    },
-    [userId, getKey]
-  );
-
-  // ── Interval management ──────────────────────────────────────────────────────
-
-  const startInterval = useCallback(
-    (missionId: number, dureeMin: number) => {
-      if (intervalsRef.current[missionId]) {
-        clearInterval(intervalsRef.current[missionId]);
-      }
-
-      const totalSecs = dureeMin * 60;
-
-      intervalsRef.current[missionId] = setInterval(() => {
-        const cur = timersRef.current[missionId];
-        if (!cur || cur.state !== "running") {
-          clearInterval(intervalsRef.current[missionId]);
-          delete intervalsRef.current[missionId];
-          return;
-        }
-
-        const newElapsed = cur.elapsed + 1;
-        const isFail = newElapsed >= totalSecs;
-        const next: TimerData = isFail
-          ? { state: "fail", elapsed: totalSecs, startedAt: null }
-          : { ...cur, elapsed: newElapsed };
-
-        if (isFail) {
-          clearInterval(intervalsRef.current[missionId]);
-          delete intervalsRef.current[missionId];
-          delete startedAtRef.current[missionId];
-        }
-
-        saveTimer(missionId, { ...next, startedAt: null });
-        setTimers(prev => ({ ...prev, [missionId]: next }));
-        timersRef.current = { ...timersRef.current, [missionId]: next };
-      }, 1000);
-    },
-    [saveTimer]
-  );
-
-  const stopInterval = useCallback((missionId: number) => {
-    if (intervalsRef.current[missionId]) {
-      clearInterval(intervalsRef.current[missionId]);
-      delete intervalsRef.current[missionId];
-    }
-    delete startedAtRef.current[missionId];
-  }, []);
-
-  const stopAllIntervals = useCallback(() => {
-    Object.values(intervalsRef.current).forEach(clearInterval);
-    intervalsRef.current = {};
-    startedAtRef.current = {};
-  }, []);
-
-  // ✅ PAUSER TOUS LES TIMERS (pour déconnexion)
-  const pauseAllForDisconnect = useCallback(() => {
-    const currentTimers = timersRef.current;
-    const next = { ...currentTimers };
-
-    Object.keys(next).forEach(idStr => {
-      const id = Number(idStr);
-      if (next[id]?.state === "running") {
-        stopInterval(id);
-        next[id] = { ...next[id], state: "paused", startedAt: null };
-        saveTimer(id, next[id]);
-      }
-    });
-
-    setTimers(next);
-    timersRef.current = next;
-  }, [stopInterval, saveTimer]);
-
-  // ── Load puzzle ──────────────────────────────────────────────────────────────
+  // ── Load puzzle ────────────────────────────────────────────────────────────
 
   const loadPuzzle = useCallback(async () => {
-    if (!userId) return;
-
-    // ✅ D'abord vérifier le cache mémoire
-    const cached = puzzleStore.get(getPuzzleKey());
-    if (cached) {
-      setPuzzle(cached);
-      return;
+    if (!userId) return null;
+    const cacheKey = `${userId}:${zoneId}`;
+    if (puzzleCache[cacheKey]) {
+      setPuzzle(puzzleCache[cacheKey]);
+      return puzzleCache[cacheKey];
     }
-
     try {
       const { data: config } = await supabase
         .from("puzzle_config")
         .select("id_puzzle, total_pieces")
         .eq("id_zone", zoneId)
         .single();
-
-      if (!config) return;
+      if (!config) return null;
 
       const { data: prog } = await supabase
         .from("puzzle_progress")
@@ -254,241 +183,428 @@ export function useZoneMissions(
         .eq("id_puzzle", config.id_puzzle)
         .maybeSingle();
 
-      const puzzleData: PuzzleInfo = {
-        id_puzzle:     config.id_puzzle,
-        total_pieces:  config.total_pieces,
+      const info: PuzzleInfo = {
+        id_puzzle: config.id_puzzle,
+        total_pieces: config.total_pieces,
         pieces_earned: prog?.pieces_earned ?? 0,
-        is_complete:   prog?.is_complete ?? false,
+        is_complete: prog?.is_complete ?? false,
       };
-
-      setPuzzle(puzzleData);
-      puzzleStore.set(getPuzzleKey(), puzzleData); // ✅ Mettre en cache
+      setPuzzle(info);
+      puzzleCache[cacheKey] = info;
+      return info;
     } catch (e) {
-      console.error("❌ loadPuzzle error:", e);
+      console.error("❌ loadPuzzle:", e);
+      return null;
     }
-  }, [userId, zoneId, getPuzzleKey]);
+  }, [userId, zoneId]);
 
-  // ── Main load ────────────────────────────────────────────────────────────────
+  // ── Load missions ──────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
     if (!userId) return;
-
-    stopAllIntervals();
     setLoading(true);
-
     try {
-      const [zoneMissions, sugg] = await Promise.all([
+      const [rawMissions, rawSugg] = await Promise.all([
         fetchZoneMissions(userId, zoneId),
         fetchSuggestions(userId),
         loadPuzzle(),
       ]);
 
-      const missionIds = (zoneMissions ?? []).map((m: any) => m.id_mission);
+      // Missions déjà validées (done)
+      const missionIds = (rawMissions ?? []).map((m: any) => m.id_mission);
       let doneSet = new Set<number>();
-
       if (missionIds.length > 0) {
         const { data: validations } = await supabase
           .from("mission_validation")
           .select("id_mission")
           .eq("id_user", userId)
+          .eq("statut", "done")
           .in("id_mission", missionIds);
         doneSet = new Set((validations ?? []).map((v: any) => v.id_mission));
       }
 
-      const loaded: ZoneMission[] = (zoneMissions ?? []).map((m: any) => ({
-        ...m,
+      const loaded: ZoneMission[] = (rawMissions ?? []).map((m: any) => ({
+        id_mission: m.id_mission,
+        titre: m.titre ?? "Sans titre",
+        description: m.description ?? "",
+        xp_gain: m.xp_gain ?? 0,
+        energie_cout: m.energie_cout ?? 0,
+        difficulte: m.difficulte ?? 1,
+        duree_min: m.duree_min ?? 30,
+        priorite: m.priorite ?? 1,
         done: doneSet.has(m.id_mission),
       }));
 
-      setMissions(loaded);
-      setSuggestions(sugg ?? []);
+      // Suggestions = missions sans id_zone, idle (pas dans mission_validation running/paused)
+      const suggMapped: ZoneMission[] = (rawSugg ?? []).map((m: any) => ({
+        id_mission: m.id_mission,
+        titre: m.titre ?? "Sans titre",
+        description: m.description ?? "",
+        xp_gain: m.xp_gain ?? 0,
+        energie_cout: m.energie_cout ?? 0,
+        difficulte: m.difficulte ?? 1,
+        duree_min: m.duree_min ?? 30,
+        priorite: m.priorite ?? 1,
+        done: false,
+      }));
 
-      const initTimers: Record<number, TimerData> = {};
+      setMissions(loaded);
+      setSuggestions(suggMapped);
+
+      // Restaurer les timers
+      const initTimers: Record<number, ZoneTimer> = {};
       for (const m of loaded) {
         if (m.done) {
-          initTimers[m.id_mission] = { state: "done", elapsed: 0, startedAt: null };
+          initTimers[m.id_mission] = { state: "done", elapsed: 0, validationId: null, startedAt: null };
+          continue;
+        }
+        // Module-level store
+        const memKey = storeKey(userId, zoneId, m.id_mission);
+        const memTimer = pausedStore.get(memKey);
+        if (memTimer && memTimer.state !== "idle") {
+          pausedStore.delete(memKey);
+          initTimers[m.id_mission] = memTimer;
+          continue;
+        }
+        // AsyncStorage
+        const stored = await loadTimer(userId, zoneId, m.id_mission, m.duree_min);
+        if (stored && stored.state !== "idle") {
+          initTimers[m.id_mission] = stored;
         } else {
-          initTimers[m.id_mission] = loadTimer(m.id_mission, m.duree_min ?? 30);
-        }
-      }
-      setTimers(initTimers);
-      timersRef.current = initTimers;
+          // Backend validation
+          const { data: val } = await supabase
+            .from("mission_validation")
+            .select("id_validation, statut, date_debut")
+            .eq("id_user", userId)
+            .eq("id_mission", m.id_mission)
+            .not("statut", "in", '("done","fail")')
+            .maybeSingle();
 
-      for (const m of loaded) {
-        const t = initTimers[m.id_mission];
-        if (t?.state === "running") {
-          startedAtRef.current[m.id_mission] = t.startedAt ?? Date.now();
-          startInterval(m.id_mission, m.duree_min ?? 30);
+          if (val) {
+            initTimers[m.id_mission] = {
+              state: val.statut as TimerState,
+              elapsed: 0,
+              validationId: val.id_validation,
+              startedAt: val.date_debut ? new Date(val.date_debut) : null,
+            };
+          } else {
+            initTimers[m.id_mission] = { state: "idle", elapsed: 0, validationId: null, startedAt: null };
+          }
         }
       }
+
+      setTimers(initTimers);
     } catch (e) {
       console.error("❌ load error:", e);
     } finally {
       setLoading(false);
     }
-  }, [userId, zoneId, loadPuzzle, loadTimer, startInterval, stopAllIntervals]);
+  }, [userId, zoneId, loadPuzzle]);
 
-  // ✅ GESTION CONNEXION/DÉCONNEXION
-  useEffect(() => {
-    if (userId && userId !== prevUserId.current) {
-      // Connexion : charger les données
-      prevUserId.current = userId;
-      load();
-    } else if (!userId && prevUserId.current) {
-      // Déconnexion : mettre en pause tous les timers
-      pauseAllForDisconnect();
-      prevUserId.current = null;
-      setLoading(true);
-    }
-  }, [userId, load, pauseAllForDisconnect]);
+  useEffect(() => { load(); }, [load]);
+
+  // ── Cleanup au démontage ───────────────────────────────────────────────────
 
   useEffect(() => {
-    return stopAllIntervals;
-  }, [stopAllIntervals]);
+    return () => {
+      if (!userId) return;
+      Object.entries(timersRef.current).forEach(([id, timer]) => {
+        if (timer.state !== "running") return;
+        const missionId = Number(id);
+        const t = { ...timer, startedAt: timer.startedAt ?? new Date() };
+        pausedStore.set(storeKey(userId, zoneId, missionId), t);
+        saveTimer(userId, zoneId, missionId, t).catch(() => {});
+      });
+    };
+  }, [userId, zoneId]);
 
-  // ── Timer actions ────────────────────────────────────────────────────────────
+  // ── Ticker global + auto-fail ──────────────────────────────────────────────
 
-  const startTimer = useCallback(
-    (missionId: number) => {
-      const mission = missions.find(m => m.id_mission === missionId);
-      if (!mission) return;
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      setTimers((prev) => {
+        const updated = { ...prev };
+        let changed = false;
 
-      const now = Date.now();
-      startedAtRef.current[missionId] = now;
+        Object.entries(updated).forEach(([id, timer]) => {
+          if (timer.state !== "running") return;
+          const missionId = Number(id);
+          const newElapsed = timer.elapsed + 1;
+          updated[missionId] = { ...timer, elapsed: newElapsed };
+          changed = true;
 
-      const updated: TimerData = {
-        state:     "running",
-        elapsed:   timersRef.current[missionId]?.elapsed ?? 0,
-        startedAt: now,
-      };
+          if (userId) {
+            saveTimer(userId, zoneId, missionId, updated[missionId]).catch(() => {});
+          }
 
-      setTimers(prev => ({ ...prev, [missionId]: updated }));
-      timersRef.current = { ...timersRef.current, [missionId]: updated };
-      saveTimer(missionId, updated);
-      startInterval(missionId, mission.duree_min ?? 30);
-    },
-    [missions, saveTimer, startInterval]
-  );
+          const mission = missionsRef.current.find((m) => m.id_mission === missionId);
+          if (mission) {
+            const totalSecs = mission.duree_min * 60;
+            if (totalSecs > 0 && newElapsed >= totalSecs) {
+              // Auto-fail quand le temps est écoulé
+              updated[missionId] = { ...timer, state: "fail", elapsed: totalSecs, startedAt: null };
+              if (timer.validationId) {
+                failMissionSession(timer.validationId).catch(() => {});
+              }
+              setTimeout(() => {
+                setStatusModal({
+                  visible: true, type: "fail",
+                  missionTitle: mission.titre, xp: 0, coins: 0,
+                });
+              }, 0);
+            }
+          }
+        });
 
-  const pauseTimer = useCallback(
-    (missionId: number) => {
-      stopInterval(missionId);
-      const updated: TimerData = {
-        ...timersRef.current[missionId],
-        state: "paused",
-        startedAt: null,
-      };
-      setTimers(prev => ({ ...prev, [missionId]: updated }));
-      timersRef.current = { ...timersRef.current, [missionId]: updated };
-      saveTimer(missionId, updated);
-    },
-    [stopInterval, saveTimer]
-  );
+        return changed ? updated : prev;
+      });
+    }, 1000);
 
-  const finishTimer = useCallback(
-    (missionId: number) => {
-      stopInterval(missionId);
-      const updated: TimerData = { state: "done", elapsed: 0, startedAt: null };
-      setTimers(prev => ({ ...prev, [missionId]: updated }));
-      timersRef.current = { ...timersRef.current, [missionId]: updated };
-      removeTimer(missionId);
-    },
-    [stopInterval, removeTimer]
-  );
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [userId, zoneId]);
 
-  const retryTimer = useCallback(
-    (missionId: number) => {
-      stopInterval(missionId);
-      const reset: TimerData = { state: "idle", elapsed: 0, startedAt: null };
-      setTimers(prev => ({ ...prev, [missionId]: reset }));
-      timersRef.current = { ...timersRef.current, [missionId]: reset };
-      removeTimer(missionId);
-    },
-    [stopInterval, removeTimer]
-  );
-
-  const pauseAllRunning = useCallback(() => {
-    const currentTimers = timersRef.current;
-    const next = { ...currentTimers };
-    Object.keys(next).forEach(idStr => {
-      const id = Number(idStr);
-      if (next[id]?.state === "running") {
-        stopInterval(id);
-        next[id] = { ...next[id], state: "paused", startedAt: null };
-        saveTimer(id, next[id]);
-      }
-    });
-    setTimers(next);
-    timersRef.current = next;
-  }, [stopInterval, saveTimer]);
-
-  const saveAllRunningForBackground = useCallback(() => {
-    const currentTimers = timersRef.current;
-    const now = Date.now();
-    Object.keys(currentTimers).forEach(idStr => {
-      const id = Number(idStr);
-      const t = currentTimers[id];
-      if (t?.state === "running") {
-        saveTimer(id, { state: "running", elapsed: t.elapsed, startedAt: now });
-      }
-    });
-  }, [saveTimer]);
-
-  const hasRunningTimer = useCallback(
-    () => Object.values(timers).some(t => t.state === "running"),
-    [timers]
-  );
-
-  // ── Mission mutations ────────────────────────────────────────────────────────
-
-  const markDone = useCallback((missionId: number) => {
-    setMissions(prev =>
-      prev.map(m => (m.id_mission === missionId ? { ...m, done: true } : m))
-    );
-  }, []);
-
-  const acceptSuggestion = useCallback(
-    async (mission: any) => {
-      if (missions.length >= totalPieces) return;
-      const updated = await assignMissionToZone(mission.id_mission, zoneId);
-      if (updated) {
-        setMissions(prev => [...prev, { ...updated, done: false }]);
-        setSuggestions(prev => prev.filter(s => s.id_mission !== mission.id_mission));
-        const newTimer: TimerData = { state: "idle", elapsed: 0, startedAt: null };
-        setTimers(prev => ({ ...prev, [mission.id_mission]: newTimer }));
-        timersRef.current = { ...timersRef.current, [mission.id_mission]: newTimer };
-      }
-    },
-    [missions.length, totalPieces, zoneId]
-  );
-
-  const addMission = useCallback((mission: any) => {
-    setMissions(prev => [...prev, { ...mission, done: false }]);
-    const newTimer: TimerData = { state: "idle", elapsed: 0, startedAt: null };
-    setTimers(prev => ({ ...prev, [mission.id_mission]: newTimer }));
-    timersRef.current = { ...timersRef.current, [mission.id_mission]: newTimer };
-  }, []);
-
-  const updatePuzzle = useCallback((patch: Partial<PuzzleInfo>) => {
-    setPuzzle(prev => {
-      const updated = prev ? { ...prev, ...patch } : (patch as PuzzleInfo);
-      // ✅ Mettre à jour le cache
-      if (userId) puzzleStore.set(getPuzzleKey(), updated);
-      return updated;
-    });
-  }, [userId, getPuzzleKey]);
-
-  // ── Derived ──────────────────────────────────────────────────────────────────
-
-  const slots        = Array.from({ length: totalPieces }, (_, i) => missions[i] ?? null);
-  const doneMissions = missions.filter(m => m.done).length;
-  const totalXp      = missions.reduce((sum, m) => sum + (m.xp_gain ?? 0), 0);
-  const isComplete   = missions.length === totalPieces && doneMissions === totalPieces;
+  // ── getTimer ───────────────────────────────────────────────────────────────
 
   const getTimer = useCallback(
-    (id: number): TimerData => timers[id] ?? { state: "idle", elapsed: 0, startedAt: null },
-    [timers]
+    (id: number): ZoneTimer =>
+      timers[id] ?? { state: "idle", elapsed: 0, validationId: null, startedAt: null },
+    [timers],
   );
+
+  // ── startTimer ─────────────────────────────────────────────────────────────
+
+  const startTimer = useCallback(
+    async (missionId: number) => {
+      if (!userId) return;
+      const timer = timersRef.current[missionId];
+      try {
+        if (timer?.state === "paused" && timer.validationId) {
+          await resumeMissionSession(timer.validationId);
+          const updated: ZoneTimer = { ...timer, state: "running", startedAt: new Date() };
+          setTimers((prev) => ({ ...prev, [missionId]: updated }));
+          timersRef.current = { ...timersRef.current, [missionId]: updated };
+          await saveTimer(userId, zoneId, missionId, updated);
+        } else {
+          const validationId = await startMissionSession(userId, missionId);
+          const newTimer: ZoneTimer = { state: "running", elapsed: 0, validationId, startedAt: new Date() };
+          setTimers((prev) => ({ ...prev, [missionId]: newTimer }));
+          timersRef.current = { ...timersRef.current, [missionId]: newTimer };
+          await saveTimer(userId, zoneId, missionId, newTimer);
+        }
+      } catch (e) {
+        console.error("❌ startTimer:", e);
+      }
+    },
+    [userId, zoneId],
+  );
+
+  // ── pauseTimer ─────────────────────────────────────────────────────────────
+
+  const pauseTimer = useCallback(
+    async (missionId: number) => {
+      if (!userId) return;
+      const timer = timersRef.current[missionId];
+      if (!timer?.validationId) return;
+      try {
+        await pauseMissionSession(timer.validationId);
+        const updated: ZoneTimer = { ...timer, state: "paused", startedAt: null };
+        setTimers((prev) => ({ ...prev, [missionId]: updated }));
+        timersRef.current = { ...timersRef.current, [missionId]: updated };
+        await saveTimer(userId, zoneId, missionId, updated);
+      } catch (e) {
+        console.error("❌ pauseTimer:", e);
+      }
+    },
+    [userId, zoneId],
+  );
+
+  // ── finishTimer ────────────────────────────────────────────────────────────
+
+  const finishTimer = useCallback(
+    async (missionId: number) => {
+      if (!userId) return;
+      const timer = timersRef.current[missionId];
+      if (!timer || timer.state === "done" || timer.state === "fail") return;
+
+      try {
+        const { xp, coins } = await finishMissionSession(
+          missionId, timer.validationId, timer.elapsed, userId,
+        );
+
+        const done: ZoneTimer = { ...timer, state: "done", startedAt: null };
+        setTimers((prev) => ({ ...prev, [missionId]: done }));
+        timersRef.current = { ...timersRef.current, [missionId]: done };
+        await clearTimer(userId, zoneId, missionId);
+
+        // Marquer la mission comme done
+        setMissions((prev) =>
+          prev.map((m) => m.id_mission === missionId ? { ...m, done: true } : m),
+        );
+
+        // Débloquer pièce puzzle via RPC Supabase
+        let newPiecesEarned = (puzzle?.pieces_earned ?? 0) + 1;
+        let puzzleComplete = false;
+        try {
+          const { data: rpcData } = await supabase.rpc("complete_mission", {
+            p_user_id: userId,
+            p_mission_id: missionId,
+          });
+          console.log("✅ complete_mission RPC:", JSON.stringify(rpcData));
+          if (rpcData?.pieces_earned !== undefined) {
+            newPiecesEarned = rpcData.pieces_earned;
+            puzzleComplete = rpcData.puzzle_complete ?? false;
+          }
+        } catch (rpcErr) {
+          console.warn("⚠️ RPC complete_mission failed, fallback local:", rpcErr);
+        }
+
+        // Mettre à jour puzzle localement
+        setPuzzle((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev, pieces_earned: newPiecesEarned, is_complete: puzzleComplete };
+          const cacheKey = `${userId}:${zoneId}`;
+          puzzleCache[cacheKey] = updated;
+          return updated;
+        });
+
+        // Modal succès
+        const mission = missionsRef.current.find((m) => m.id_mission === missionId);
+        setStatusModal({
+          visible: true, type: "success",
+          missionTitle: mission?.titre, xp, coins,
+        });
+
+        // Vérifier si toutes les missions sont terminées → zone débloquée
+        const updatedMissions = missionsRef.current.map((m) =>
+          m.id_mission === missionId ? { ...m, done: true } : m,
+        );
+        if (
+          updatedMissions.length === totalPieces &&
+          updatedMissions.every((m) => m.done)
+        ) {
+          setTimeout(() => setZoneUnlocked(true), 1500);
+        }
+      } catch (e) {
+        console.error("❌ finishTimer:", e);
+      }
+    },
+    [userId, zoneId, totalPieces, puzzle],
+  );
+
+  useEffect(() => { handleFinishRef.current = finishTimer; }, [finishTimer]);
+
+  // ── retryTimer ─────────────────────────────────────────────────────────────
+
+  const retryTimer = useCallback(
+    async (missionId: number) => {
+      if (!userId) return;
+      const reset: ZoneTimer = { state: "idle", elapsed: 0, validationId: null, startedAt: null };
+      setTimers((prev) => ({ ...prev, [missionId]: reset }));
+      timersRef.current = { ...timersRef.current, [missionId]: reset };
+      await clearTimer(userId, zoneId, missionId);
+    },
+    [userId, zoneId],
+  );
+
+  // ── pauseAllRunning ────────────────────────────────────────────────────────
+
+  const pauseAllRunning = useCallback(async () => {
+    if (!userId) return;
+    const current = timersRef.current;
+    const updates: Record<number, ZoneTimer> = { ...current };
+    for (const [id, timer] of Object.entries(current)) {
+      if (timer.state !== "running") continue;
+      const missionId = Number(id);
+      if (timer.validationId) {
+        await pauseMissionSession(timer.validationId).catch(() => {});
+      }
+      updates[missionId] = { ...timer, state: "paused", startedAt: null };
+      await saveTimer(userId, zoneId, missionId, updates[missionId]);
+    }
+    setTimers(updates);
+    timersRef.current = updates;
+  }, [userId, zoneId]);
+
+  // ── saveAllRunningForBackground ────────────────────────────────────────────
+
+  const saveAllRunningForBackground = useCallback(async () => {
+    if (!userId) return;
+    const current = timersRef.current;
+    for (const [id, timer] of Object.entries(current)) {
+      if (timer.state !== "running") continue;
+      const missionId = Number(id);
+      const t = { ...timer, startedAt: timer.startedAt ?? new Date() };
+      pausedStore.set(storeKey(userId, zoneId, missionId), t);
+      await saveTimer(userId, zoneId, missionId, t);
+    }
+  }, [userId, zoneId]);
+
+  const hasRunningTimer = useCallback(
+    () => Object.values(timersRef.current).some((t) => t.state === "running"),
+    [],
+  );
+
+  // ── acceptSuggestion ───────────────────────────────────────────────────────
+
+  const acceptSuggestion = useCallback(
+    async (mission: ZoneMission) => {
+      if (!userId) return;
+      if (missions.length >= totalPieces) return;
+      try {
+        const { data, error } = await supabase
+          .from("mission")
+          .update({ id_zone: zoneId })
+          .eq("id_mission", mission.id_mission)
+          .select()
+          .single();
+        if (error) throw error;
+
+        const newMission: ZoneMission = { ...mission, done: false };
+        setMissions((prev) => [...prev, newMission]);
+        setSuggestions((prev) => prev.filter((s) => s.id_mission !== mission.id_mission));
+        const newTimer: ZoneTimer = { state: "idle", elapsed: 0, validationId: null, startedAt: null };
+        setTimers((prev) => ({ ...prev, [mission.id_mission]: newTimer }));
+        timersRef.current = { ...timersRef.current, [mission.id_mission]: newTimer };
+      } catch (e) {
+        console.error("❌ acceptSuggestion:", e);
+      }
+    },
+    [userId, zoneId, missions.length, totalPieces],
+  );
+
+  // ── addMission (créée depuis modal) ───────────────────────────────────────
+
+  const addMission = useCallback((raw: any) => {
+    const m: ZoneMission = {
+      id_mission: raw.id_mission,
+      titre: raw.titre ?? "Sans titre",
+      description: raw.description ?? "",
+      xp_gain: raw.xp_gain ?? 0,
+      energie_cout: raw.energie_cout ?? 0,
+      difficulte: raw.difficulte ?? 1,
+      duree_min: raw.duree_min ?? 30,
+      priorite: raw.priorite ?? 1,
+      done: false,
+    };
+    setMissions((prev) => [...prev, m]);
+    const newTimer: ZoneTimer = { state: "idle", elapsed: 0, validationId: null, startedAt: null };
+    setTimers((prev) => ({ ...prev, [m.id_mission]: newTimer }));
+    timersRef.current = { ...timersRef.current, [m.id_mission]: newTimer };
+  }, []);
+
+  // ── closeStatusModal ──────────────────────────────────────────────────────
+
+  const closeStatusModal = useCallback(() => {
+    setStatusModal((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  const closeZoneUnlocked = useCallback(() => setZoneUnlocked(false), []);
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+
+  const slots = Array.from({ length: totalPieces }, (_, i) => missions[i] ?? null);
+  const doneMissions = missions.filter((m) => m.done).length;
+  const totalXp = missions.reduce((sum, m) => sum + (m.xp_gain ?? 0), 0);
 
   return {
     missions,
@@ -497,9 +613,10 @@ export function useZoneMissions(
     timers,
     puzzle,
     loading,
+    statusModal,
+    zoneUnlocked,
     doneMissions,
     totalXp,
-    isComplete,
     getTimer,
     startTimer,
     pauseTimer,
@@ -508,10 +625,10 @@ export function useZoneMissions(
     hasRunningTimer,
     pauseAllRunning,
     saveAllRunningForBackground,
-    markDone,
     acceptSuggestion,
     addMission,
-    updatePuzzle,
+    closeStatusModal,
+    closeZoneUnlocked,
     reload: load,
   };
 }

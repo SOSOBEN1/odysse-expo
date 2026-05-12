@@ -761,3 +761,65 @@ export function useMissionCompletion(): UseMissionCompletion {
 
   return { completing, result, complete };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  failEvent — Marque un boss_event comme échoué et applique des pénalités
+// ─────────────────────────────────────────────────────────────────────────────
+export async function failEvent(
+  userId: number,
+  bossId: number,
+): Promise<{ success: boolean; message: string; penalty: { energie: number; stress: number } }> {
+  console.log(`\n💀 [failEvent] START — userId: ${userId}, bossId: ${bossId}`);
+
+  const penalty = { energie: -20, stress: +25 };
+
+  try {
+    // 1. Marquer l'event comme échoué
+    const { error: failErr } = await supabase
+      .from("boss_events")
+      .update({ failed_at: new Date().toISOString() })
+      .eq("id_boss", bossId)
+      .eq("id_creator", userId);
+
+    if (failErr) {
+      console.error("[failEvent] ❌ update boss_events error:", failErr.message);
+      return { success: false, message: "Erreur lors du marquage d'échec.", penalty };
+    }
+
+    // 2. Récupérer les stats actuelles
+    const { data: ps } = await supabase
+      .from("player_stats")
+      .select("energie, stress, connaissance, organisation")
+      .eq("id_user", userId)
+      .maybeSingle();
+
+    const newEnergie      = clamp((ps?.energie      ?? 50) + penalty.energie);
+    const newStress       = clamp((ps?.stress       ?? 50) + penalty.stress);
+    const newConnaissance = ps?.connaissance ?? 50;
+    const newOrganisation = ps?.organisation ?? 50;
+
+    console.log(`[failEvent] pénalités: énergie ${ps?.energie ?? 50} → ${newEnergie}, stress ${ps?.stress ?? 50} → ${newStress}`);
+
+    // 3. Appliquer les pénalités sur player_stats
+    await supabase
+      .from("player_stats")
+      .upsert({
+        id_user:      userId,
+        energie:      newEnergie,
+        stress:       newStress,
+        connaissance: newConnaissance,
+        organisation: newOrganisation,
+        date_maj:     new Date().toISOString(),
+      }, { onConflict: "id_user" });
+
+    // 4. Sync users.energie
+    await supabase.from("users").update({ energie: newEnergie }).eq("id_user", userId);
+
+    console.log("✅ [failEvent] DONE\n");
+    return { success: true, message: "Événement échoué.", penalty };
+
+  } catch (e: any) {
+    console.error("[failEvent] ❌ EXCEPTION:", e);
+    return { success: false, message: "Erreur inattendue.", penalty };
+  }
+}

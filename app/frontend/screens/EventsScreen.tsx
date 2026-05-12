@@ -17,9 +17,12 @@ import { useStats } from "../constants/StatsContext";
 type EventType = "projet" | "examen" | "soutenance";
 
 interface BossEvent {
-  id_boss: number;
-  nom: string;
-  type_boss: EventType;
+  id_boss:      number;
+  nom:          string;
+  type_boss:    EventType;
+  date_limite:  string | null;
+  completed_at: string | null;
+  failed_at:    string | null;
 }
 
 const TABS = ["Tout", "Projet", "Examen", "Soutenance"] as const;
@@ -96,9 +99,21 @@ export default function EventsScreen() {
 
       const { data, error } = await supabase
         .from("boss_events")
-        .select("id_boss, nom, type_boss")
+        .select("id_boss, nom, type_boss, date_limite, completed_at, failed_at")
         .eq("id_creator", userId)
         .order("id_boss", { ascending: false });
+
+      // Auto-fail events whose deadline has passed and aren't done/failed yet
+      const now = new Date();
+      for (const ev of (data ?? [])) {
+        if (ev.date_limite && !ev.completed_at && !ev.failed_at) {
+          if (new Date(ev.date_limite) < now) {
+            const { failEvent } = await import("../../../backend/services/Userstatsservice");
+            await failEvent(Number(userId), ev.id_boss);
+            ev.failed_at = new Date().toISOString(); // update local copy
+          }
+        }
+      }
 
       if (error) throw error;
       setEvents(data ?? []);
@@ -138,7 +153,7 @@ export default function EventsScreen() {
   };
 
   const handleEdit = (ev: BossEvent) => {
-    setSelectedData({ id_boss: ev.id_boss, nom: ev.nom, type_boss: ev.type_boss });
+    setSelectedData({ id_boss: ev.id_boss, nom: ev.nom, type_boss: ev.type_boss, date_limite: ev.date_limite });
     setModalVisible(true);
   };
 
@@ -223,42 +238,92 @@ export default function EventsScreen() {
         ) : filtered.length === 0 ? (
           <Text style={styles.empty}>Aucun événement trouvé</Text>
         ) : filtered.map(ev => {
-          const cfg = getConfig(ev.type_boss);
+          const cfg           = getConfig(ev.type_boss);
+          const isFailed      = !!ev.failed_at;
+          const isCompleted   = !!ev.completed_at;
+          const now           = new Date();
+          const deadlineDate  = ev.date_limite ? new Date(ev.date_limite) : null;
+          const isExpiring    = deadlineDate && !isFailed && !isCompleted && deadlineDate > now
+                                  && (deadlineDate.getTime() - now.getTime()) < 3 * 24 * 60 * 60 * 1000; // <3 jours
+          const deadlineStr   = deadlineDate
+            ? deadlineDate.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })
+            : null;
+
+          const cardBg = isFailed ? "#fff1f2" : isCompleted ? "#f0fdf4" : cfg.bg;
+
           return (
             <View key={ev.id_boss} style={styles.cardWrapper}>
-              <View style={[styles.eventBadge, { backgroundColor: cfg.color }]}>
-                <Text style={styles.eventBadgeText}>{ev.type_boss}</Text>
+              {/* Type badge */}
+              <View style={[styles.eventBadge, { backgroundColor: isFailed ? "#ef4444" : isCompleted ? "#10b981" : cfg.color }]}>
+                <Text style={styles.eventBadgeText}>
+                  {isFailed ? "❌ Échoué" : isCompleted ? "✅ Terminé" : ev.type_boss}
+                </Text>
               </View>
 
               <TouchableOpacity
-                style={[styles.card, { backgroundColor: cfg.bg }]}
+                style={[styles.card, { backgroundColor: cardBg, opacity: isFailed ? 0.75 : 1 }]}
                 activeOpacity={0.88}
-                onPress={() => navigateToEventMissions(String(ev.id_boss), ev.nom)}
+                onPress={() => !isFailed && navigateToEventMissions(String(ev.id_boss), ev.nom)}
               >
                 <View style={styles.topRow}>
-                  <View style={[styles.iconBox, { backgroundColor: cfg.color }]}>
-                    <Text style={styles.iconText}>{cfg.icon}</Text>
+                  <View style={[styles.iconBox, { backgroundColor: isFailed ? "#ef4444" : isCompleted ? "#10b981" : cfg.color }]}>
+                    <Text style={styles.iconText}>{isFailed ? "💀" : isCompleted ? "🏆" : cfg.icon}</Text>
                   </View>
                   <View style={styles.infoBox}>
                     <Text style={styles.eventTitle} numberOfLines={2}>{ev.nom}</Text>
-                    <Text style={[styles.typePill, { color: cfg.color }]}>
-                      {ev.type_boss?.charAt(0).toUpperCase() + ev.type_boss?.slice(1)}
-                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <Text style={[styles.typePill, { color: isFailed ? "#ef4444" : isCompleted ? "#10b981" : cfg.color }]}>
+                        {ev.type_boss?.charAt(0).toUpperCase() + ev.type_boss?.slice(1)}
+                      </Text>
+                      {/* Deadline chip */}
+                      {deadlineStr && !isCompleted && (
+                        <View style={[
+                          styles.deadlineChip,
+                          isFailed    && styles.deadlineChipFailed,
+                          isExpiring  && styles.deadlineChipExpiring,
+                        ]}>
+                          <Text style={[
+                            styles.deadlineChipText,
+                            isFailed   && { color: "#ef4444" },
+                            isExpiring && { color: "#f59e0b" },
+                          ]}>
+                            {isFailed ? "⛔ Expiré" : isExpiring ? "⚠️ " + deadlineStr : "📅 " + deadlineStr}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                 </View>
 
+                {/* Pénalité si échoué */}
+                {isFailed && (
+                  <View style={styles.failPenaltyRow}>
+                    <Text style={styles.failPenaltyText}>💔 -20 énergie  😰 +25 stress</Text>
+                  </View>
+                )}
+
                 {/* Footer */}
                 <View style={styles.cardFooter}>
-                  <TouchableOpacity
-                    style={[styles.seeMissionsBtn, { backgroundColor: cfg.color }]}
-                    onPress={() => navigateToEventMissions(String(ev.id_boss), ev.nom)}
-                  >
-                    <Text style={styles.seeMissionsText}>Voir les missions →</Text>
-                  </TouchableOpacity>
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => handleEdit(ev)}>
-                      <Ionicons name="pencil-outline" size={16} color="#6c3fcb" />
+                  {!isFailed ? (
+                    <TouchableOpacity
+                      style={[styles.seeMissionsBtn, { backgroundColor: isCompleted ? "#10b981" : cfg.color }]}
+                      onPress={() => navigateToEventMissions(String(ev.id_boss), ev.nom)}
+                    >
+                      <Text style={styles.seeMissionsText}>
+                        {isCompleted ? "Voir le résumé →" : "Voir les missions →"}
+                      </Text>
                     </TouchableOpacity>
+                  ) : (
+                    <View style={[styles.seeMissionsBtn, { backgroundColor: "#9ca3af" }]}>
+                      <Text style={styles.seeMissionsText}>Événement échoué</Text>
+                    </View>
+                  )}
+                  <View style={styles.cardActions}>
+                    {!isFailed && !isCompleted && (
+                      <TouchableOpacity style={styles.iconBtn} onPress={() => handleEdit(ev)}>
+                        <Ionicons name="pencil-outline" size={16} color="#6c3fcb" />
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity style={styles.iconBtn} onPress={() => handleDelete(ev.id_boss)}>
                       <Ionicons name="trash-outline" size={16} color="#e84393" />
                     </TouchableOpacity>
@@ -333,7 +398,13 @@ const styles = StyleSheet.create({
   eventTitle:     { fontWeight: "800", fontSize: 17, color: "#2d1a5e" },
   typePill:       { fontSize: 13, fontWeight: "600", marginTop: 4, textTransform: "capitalize" },
   cardFooter:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.06)" },
-  seeMissionsBtn: { borderRadius: 20, paddingVertical: 7, paddingHorizontal: 14 },
+  seeMissionsBtn:       { borderRadius: 20, paddingVertical: 7, paddingHorizontal: 14 },
+  deadlineChip:         { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: "#ede9fe" },
+  deadlineChipFailed:   { backgroundColor: "#fee2e2" },
+  deadlineChipExpiring: { backgroundColor: "#fef3c7" },
+  deadlineChipText:     { fontSize: 10, fontWeight: "700", color: "#7c3aed" },
+  failPenaltyRow:       { backgroundColor: "#fee2e2", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8 },
+  failPenaltyText:      { fontSize: 11, fontWeight: "700", color: "#ef4444", textAlign: "center" },
   seeMissionsText:{ color: "#fff", fontWeight: "700", fontSize: 13 },
   cardActions:    { flexDirection: "row", gap: 10 },
   iconBtn:        { width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(120,90,180,0.08)", alignItems: "center", justifyContent: "center" },

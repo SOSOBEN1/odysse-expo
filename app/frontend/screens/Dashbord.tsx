@@ -1282,6 +1282,7 @@ const statsStyles = StyleSheet.create({
 
 // ─── MissionCard ──────────────────────────────────────────────────────────────
 const MissionCard = ({ mission }: { mission: TodayMission }) => {
+  const router     = useRouter();
   const isContinue = mission.status === "continue";
   const isDone     = mission.status === "done";
   const isFail     = mission.status === "fail";
@@ -1316,6 +1317,7 @@ const MissionCard = ({ mission }: { mission: TodayMission }) => {
             missionStyles.btn,
             isContinue ? missionStyles.btnContinue : missionStyles.btnStart,
           ]}
+          onPress={() => router.push("/frontend/screens/Missions")}
         >
           <Text style={missionStyles.btnText}>
             {isContinue ? "Continuer ▶" : "Démarrer ▶"}

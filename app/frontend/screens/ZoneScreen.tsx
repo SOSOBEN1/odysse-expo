@@ -1,7 +1,11 @@
 /**
  * ZoneScreen.tsx
- * ✅ Utilisation du hook useZoneMissions comme source unique de vérité
- * ✅ Correction du bug timer : les timers persistent correctement entre les navigations
+ * - Slots = total_pieces du puzzle
+ * - Suggestions = missions user sans id_zone (idle)
+ * - Timer identique à useMissions (AsyncStorage + validation BDD)
+ * - Terminer = finishMissionSession + pièce puzzle débloquée
+ * - Échouer = failMissionSession + modal fail
+ * - Toutes terminées = zone débloquée
  */
 
 import { Ionicons } from "@expo/vector-icons";
@@ -9,10 +13,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Animated, Dimensions, Easing, Image, Modal,
-  ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  ScrollView, StatusBar, StyleSheet, Text, TextInput,
+  TouchableOpacity, View,
 } from "react-native";
-import { useZoneMissions, ZoneMission } from "../../../backend/viewmodels/UseZoneMission";
-import SuccessModal from "../components/SuccessModal";
+import { useZoneMissions, ZoneMission, ZoneTimer } from "../../../backend/viewmodels/UseZoneMission";
+import CreateMissionModal from "../components/CreateMissionModal";
 import ZoneUnlockedModal from "../components/ZoneUnlockedModal";
 import { supabase } from "../constants/supabase";
 import { useUser } from "../constants/UserContext";
@@ -20,31 +25,25 @@ import { useUser } from "../constants/UserContext";
 const { width: SW } = Dimensions.get("window");
 const GRID_COLS = 3;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type TimerState = "idle" | "running" | "paused" | "done" | "fail";
-
-interface TimerData {
-  state:     TimerState;
-  elapsed:   number;
-  startedAt: number | null;
-}
+// ─── Types locaux ─────────────────────────────────────────────────────────────
 
 interface ZoneInfo {
-  nom: string; image_url: string; accent_color: string; dark_color: string; light_color: string;
-}
-
-interface PuzzleInfo {
-  id_puzzle: number; total_pieces: number; pieces_earned: number; is_complete: boolean;
+  nom: string;
+  image_url: string;
+  accent_color: string;
+  dark_color: string;
+  light_color: string;
 }
 
 const DIFF_LABEL: Record<number, string> = { 1: "💧 Facile", 2: "🔥 Moyen", 3: "🔥 Difficile" };
 const DIFF_COLOR: Record<number, string> = { 1: "#22c55e", 2: "#f59e0b", 3: "#ef4444" };
-const DIFF_BG:    Record<number, string> = { 1: "#dcfce7", 2: "#fef3c7", 3: "#fee2e2" };
+const DIFF_BG: Record<number, string>    = { 1: "#dcfce7", 2: "#fef3c7", 3: "#fee2e2" };
 
 // ─── ExitConfirmModal ─────────────────────────────────────────────────────────
 
-function ExitConfirmModal({ visible, accent, onPauseAndLeave, onContinueAndLeave, onCancel }: {
+function ExitConfirmModal({
+  visible, accent, onPauseAndLeave, onContinueAndLeave, onCancel,
+}: {
   visible: boolean; accent: string;
   onPauseAndLeave: () => void; onContinueAndLeave: () => void; onCancel: () => void;
 }) {
@@ -54,7 +53,7 @@ function ExitConfirmModal({ visible, accent, onPauseAndLeave, onContinueAndLeave
         <View style={modalStyles.box}>
           <Text style={modalStyles.emoji}>⏱</Text>
           <Text style={modalStyles.title}>Mission en cours</Text>
-          <Text style={modalStyles.subtitle}>Une mission est en cours. Que veux-tu faire ?</Text>
+          <Text style={modalStyles.subtitle}>Une mission tourne encore. Que veux-tu faire ?</Text>
           <TouchableOpacity style={[modalStyles.btn, { backgroundColor: accent }]} onPress={onPauseAndLeave}>
             <Text style={modalStyles.btnText}>⏸ Mettre en pause et quitter</Text>
           </TouchableOpacity>
@@ -72,11 +71,14 @@ function ExitConfirmModal({ visible, accent, onPauseAndLeave, onContinueAndLeave
 
 // ─── EditMissionModal ─────────────────────────────────────────────────────────
 
-function EditMissionModal({ visible, mission, onSave, onCancel }: {
+function EditMissionModal({
+  visible, mission, onSave, onCancel,
+}: {
   visible: boolean; mission: ZoneMission | null;
-  onSave: (id: number, titre: string, description: string) => void; onCancel: () => void;
+  onSave: (id: number, titre: string, description: string) => void;
+  onCancel: () => void;
 }) {
-  const [titre, setTitre]             = useState("");
+  const [titre, setTitre] = useState("");
   const [description, setDescription] = useState("");
 
   useEffect(() => {
@@ -91,9 +93,16 @@ function EditMissionModal({ visible, mission, onSave, onCancel }: {
         <View style={[modalStyles.box, { paddingBottom: 24 }]}>
           <Text style={modalStyles.title}>✏️ Modifier la mission</Text>
           <Text style={editStyles.label}>Titre</Text>
-          <TextInput style={editStyles.input} value={titre} onChangeText={setTitre} placeholder="Titre de la mission" maxLength={80} />
+          <TextInput
+            style={editStyles.input} value={titre} onChangeText={setTitre}
+            placeholder="Titre de la mission" maxLength={80}
+          />
           <Text style={editStyles.label}>Description</Text>
-          <TextInput style={[editStyles.input, { height: 90, textAlignVertical: "top" }]} value={description} onChangeText={setDescription} placeholder="Description (optionnel)" multiline maxLength={300} />
+          <TextInput
+            style={[editStyles.input, { height: 90, textAlignVertical: "top" }]}
+            value={description} onChangeText={setDescription}
+            placeholder="Description (optionnel)" multiline maxLength={300}
+          />
           <TouchableOpacity
             style={[modalStyles.btn, { backgroundColor: "#7f5af0", marginTop: 8 }]}
             onPress={() => onSave(mission.id_mission, titre.trim(), description.trim())}
@@ -112,7 +121,9 @@ function EditMissionModal({ visible, mission, onSave, onCancel }: {
 
 // ─── PuzzleCell ───────────────────────────────────────────────────────────────
 
-function PuzzleCell({ index, revealed, imageUri, cellSize, accent }: {
+function PuzzleCell({
+  index, revealed, imageUri, cellSize, accent,
+}: {
   index: number; revealed: boolean; imageUri: string; cellSize: number; accent: string;
 }) {
   const sc    = useRef(new Animated.Value(0)).current;
@@ -170,18 +181,22 @@ function PuzzleCell({ index, revealed, imageUri, cellSize, accent }: {
 
 // ─── MissionCard ──────────────────────────────────────────────────────────────
 
-function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRetry, onEdit }: {
-  mission: ZoneMission; timer: TimerData; accent: string;
+function MissionCard({
+  mission, timer, accent,
+  onStart, onPause, onFinish, onRetry, onEdit,
+}: {
+  mission: ZoneMission; timer: ZoneTimer; accent: string;
   onStart: (id: number) => void; onPause: (id: number) => void;
-  onFinish: (id: number) => void; onRetry: (id: number) => void; onEdit: (m: ZoneMission) => void;
+  onFinish: (id: number) => void; onRetry: (id: number) => void;
+  onEdit: (m: ZoneMission) => void;
 }) {
   const isDone    = timer.state === "done";
   const isFail    = timer.state === "fail";
   const isRunning = timer.state === "running";
   const isPaused  = timer.state === "paused";
   const isActive  = isRunning || isPaused;
-  const totalSecs = (mission.duree_min ?? 1) * 60;
-  const pct       = Math.min(100, Math.round((timer.elapsed / totalSecs) * 100));
+  const totalSecs = (mission.duree_min ?? 30) * 60;
+  const pct       = Math.min(100, totalSecs > 0 ? Math.round((timer.elapsed / totalSecs) * 100) : 0);
 
   const fmt = (s: number) => {
     const m   = Math.floor(s / 60).toString().padStart(2, "0");
@@ -203,7 +218,11 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
   };
 
   return (
-    <View style={[styles.missionCard, isDone && { backgroundColor: "#f0fdf4" }, isFail && { backgroundColor: "#fff1f1" }]}>
+    <View style={[
+      styles.missionCard,
+      isDone && { backgroundColor: "#f0fdf4" },
+      isFail && { backgroundColor: "#fff1f1" },
+    ]}>
       <View style={styles.missionHeader}>
         <View style={[styles.missionIconBox, { backgroundColor: DIFF_BG[mission.difficulte] ?? "#f3f4f6" }]}>
           <Text style={{ fontSize: 20 }}>{mission.difficulte === 1 ? "💧" : "🔥"}</Text>
@@ -212,7 +231,9 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
           <Text style={styles.missionTitle} numberOfLines={2}>{mission.titre}</Text>
           <View style={styles.missionMeta}>
             <View style={[styles.diffPill, { backgroundColor: DIFF_COLOR[mission.difficulte] + "22" }]}>
-              <Text style={[styles.diffText, { color: DIFF_COLOR[mission.difficulte] }]}>{DIFF_LABEL[mission.difficulte]}</Text>
+              <Text style={[styles.diffText, { color: DIFF_COLOR[mission.difficulte] }]}>
+                {DIFF_LABEL[mission.difficulte]}
+              </Text>
             </View>
             <Text style={styles.metaText}>⏱ {mission.duree_min} min</Text>
             <Text style={styles.metaText}>⚡ {mission.xp_gain} XP</Text>
@@ -226,22 +247,32 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
         )}
       </View>
 
-      {mission.description ? <Text style={styles.missionDesc} numberOfLines={2}>{mission.description}</Text> : null}
+      {mission.description ? (
+        <Text style={styles.missionDesc} numberOfLines={2}>{mission.description}</Text>
+      ) : null}
 
       {(isActive || isDone || isFail) && (
-        <View style={[styles.chronoBox,
-          isDone ? { backgroundColor: "#dcfce7" } : isFail ? { backgroundColor: "#fee2e2" } :
-          isRunning ? { backgroundColor: "#fff7ed" } : { backgroundColor: "#f3f4f6" },
+        <View style={[
+          styles.chronoBox,
+          isDone    ? { backgroundColor: "#dcfce7" } :
+          isFail    ? { backgroundColor: "#fee2e2" } :
+          isRunning ? { backgroundColor: "#fff7ed" } :
+                      { backgroundColor: "#f3f4f6" },
         ]}>
-          <Text style={[styles.chronoText,
-            isDone ? { color: "#16a34a" } : isFail ? { color: "#dc2626" } :
-            isRunning ? { color: "#ea580c" } : { color: "#6b7280" },
+          <Text style={[
+            styles.chronoText,
+            isDone    ? { color: "#16a34a" } :
+            isFail    ? { color: "#dc2626" } :
+            isRunning ? { color: "#ea580c" } :
+                        { color: "#6b7280" },
           ]}>
             {isDone ? "✅ Mission terminée !" :
              isFail ? "❌ Temps écoulé — mission échouée" :
-             `⏱ ${fmt(timer.elapsed)} / ${String(mission.duree_min).padStart(2, "0")}:00`}
+             `⏱ ${fmt(timer.elapsed)} / ${String(mission.duree_min ?? 30).padStart(2, "0")}:00`}
           </Text>
-          {isActive && <View style={[styles.chronoPulse, { backgroundColor: isRunning ? "#ea580c" : "#9ca3af" }]} />}
+          {isActive && (
+            <View style={[styles.chronoPulse, { backgroundColor: isRunning ? "#ea580c" : "#9ca3af" }]} />
+          )}
         </View>
       )}
 
@@ -259,7 +290,10 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
         </View>
         <View style={styles.btnGroup}>
           {isFail && (
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: "#f59e0b" }]} onPress={() => onRetry(mission.id_mission)}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: "#f59e0b" }]}
+              onPress={() => onRetry(mission.id_mission)}
+            >
               <Text style={styles.actionBtnText}>🔄 Recommencer</Text>
             </TouchableOpacity>
           )}
@@ -271,8 +305,12 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
                 </TouchableOpacity>
               )}
               <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: isDone ? "#22c55e" : accent, opacity: isDone ? 0.8 : 1 }]}
-                onPress={handleBtn} disabled={isDone}
+                style={[styles.actionBtn, {
+                  backgroundColor: isDone ? "#22c55e" : accent,
+                  opacity: isDone ? 0.8 : 1,
+                }]}
+                onPress={handleBtn}
+                disabled={isDone}
               >
                 <Text style={styles.actionBtnText}>{getBtnLabel()}</Text>
               </TouchableOpacity>
@@ -286,41 +324,69 @@ function MissionCard({ mission, timer, accent, onStart, onPause, onFinish, onRet
 
 // ─── EmptySlot ────────────────────────────────────────────────────────────────
 
-function EmptySlot({ index, suggestions, onAccept, onCreateNew, accent }: {
-  index: number; suggestions: any[];
-  onAccept: (m: any) => void; onCreateNew: () => void; accent: string;
+function EmptySlot({
+  index, suggestions, onAccept, onCreateNew, accent,
+}: {
+  index: number;
+  suggestions: ZoneMission[];
+  onAccept: (m: ZoneMission) => void;
+  onCreateNew: () => void;
+  accent: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+
   return (
-    <View style={[styles.missionCard, { borderStyle: "dashed", borderWidth: 2, borderColor: accent + "55", backgroundColor: "#faf9ff" }]}>
+    <View style={[
+      styles.missionCard,
+      { borderStyle: "dashed", borderWidth: 2, borderColor: accent + "55", backgroundColor: "#faf9ff" },
+    ]}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <Text style={{ color: accent, fontWeight: "700", fontSize: 14 }}>🧩 Emplacement {index + 1}</Text>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: accent }]} onPress={() => setExpanded(!expanded)}>
+        <Text style={{ color: accent, fontWeight: "700", fontSize: 14 }}>
+          🧩 Emplacement {index + 1}
+        </Text>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: accent }]}
+          onPress={() => setExpanded(!expanded)}
+        >
           <Text style={styles.actionBtnText}>+ Ajouter</Text>
         </TouchableOpacity>
       </View>
+
       {expanded && (
         <View style={{ marginTop: 12, gap: 8 }}>
-          {suggestions.length > 0 && (
+          {suggestions.length > 0 ? (
             <>
-              <Text style={{ fontSize: 12, fontWeight: "700", color: "#6b7280" }}>Suggestions :</Text>
-              {suggestions.slice(0, 3).map(s => (
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#6b7280", marginBottom: 2 }}>
+                Missions disponibles :
+              </Text>
+              {suggestions.slice(0, 4).map((s) => (
                 <TouchableOpacity
                   key={s.id_mission}
-                  style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#f3f0ff", borderRadius: 10, padding: 10 }}
+                  style={styles.suggestionRow}
                   onPress={() => { onAccept(s); setExpanded(false); }}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, fontWeight: "700", color: "#2d1a6e" }}>{s.titre}</Text>
-                    <Text style={{ fontSize: 11, color: "#9b87c9" }}>+{s.xp_gain} XP</Text>
+                    <Text style={styles.suggestionTitle} numberOfLines={1}>{s.titre}</Text>
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
+                      <Text style={styles.suggestionMeta}>⏱ {s.duree_min} min</Text>
+                      <Text style={styles.suggestionMeta}>⚡ {s.xp_gain} XP</Text>
+                      <Text style={[styles.suggestionMeta, { color: DIFF_COLOR[s.difficulte] }]}>
+                        {DIFF_LABEL[s.difficulte]}
+                      </Text>
+                    </View>
                   </View>
-                  <Text style={{ color: accent, fontWeight: "800" }}>✓</Text>
+                  <Text style={{ color: accent, fontWeight: "800", fontSize: 16 }}>✓</Text>
                 </TouchableOpacity>
               ))}
             </>
+          ) : (
+            <Text style={{ fontSize: 12, color: "#9b87c9", textAlign: "center", paddingVertical: 4 }}>
+              Aucune mission disponible
+            </Text>
           )}
+
           <TouchableOpacity
-            style={{ borderWidth: 1.5, borderColor: accent, borderStyle: "dashed", borderRadius: 10, padding: 10, alignItems: "center" }}
+            style={[styles.createSlotBtn, { borderColor: accent }]}
             onPress={() => { onCreateNew(); setExpanded(false); }}
           >
             <Text style={{ color: accent, fontWeight: "700" }}>✏️ Créer une nouvelle mission</Text>
@@ -334,23 +400,18 @@ function EmptySlot({ index, suggestions, onAccept, onCreateNew, accent }: {
 // ─── Écran principal ──────────────────────────────────────────────────────────
 
 export default function ZoneScreen() {
-  const router                = useRouter();
+  const router               = useRouter();
   const { userId: rawUserId } = useUser();
-  const { zoneId, zoneSlug }  = useLocalSearchParams<{ zoneId: string; zoneSlug: string }>();
+  const { zoneId, zoneSlug } = useLocalSearchParams<{ zoneId: string; zoneSlug: string }>();
 
   if (!rawUserId) return null;
-  const userId = rawUserId;
+  const userId = String(rawUserId);
 
-  // ✅ État local UNIQUEMENT pour l'UI (modales, animations)
-  const [zoneInfo,  setZoneInfo]  = useState<ZoneInfo | null>(null);
-  const [showSuccess,    setShowSuccess]    = useState(false);
-  const [showUnlocked,   setShowUnlocked]   = useState(false);
-  const [currentMission, setCurrentMission] = useState<ZoneMission | null>(null);
-  const [nextZoneName,   setNextZoneName]   = useState("");
-  const pendingUnlock = useRef(false);
-  const [showExitModal,  setShowExitModal]  = useState(false);
-  const [editingMission, setEditingMission] = useState<ZoneMission | null>(null);
-  const [saving,    setSaving]    = useState(false);
+  const [zoneInfo,        setZoneInfo]        = useState<ZoneInfo | null>(null);
+  const [showExitModal,   setShowExitModal]   = useState(false);
+  const [editingMission,  setEditingMission]  = useState<ZoneMission | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [nextZoneName,    setNextZoneName]    = useState("");
 
   const bgFade    = useRef(new Animated.Value(0)).current;
   const cardSlide = useRef(new Animated.Value(50)).current;
@@ -358,49 +419,41 @@ export default function ZoneScreen() {
 
   const CELL_SIZE = Math.floor((SW - 48) / GRID_COLS) - 4;
 
-  // ✅ Utilisation du hook useZoneMissions comme source unique de vérité
+  // ── Hook principal ─────────────────────────────────────────────────────────
+
   const {
-    missions,
-    slots,
-    suggestions,
-    timers,
-    puzzle,
-    loading,
-    doneMissions,
-    getTimer,
-    startTimer,
-    pauseTimer,
-    finishTimer,
-    retryTimer,
-    hasRunningTimer,
-    pauseAllRunning,
-    saveAllRunningForBackground,
-    markDone,
-    updatePuzzle,
+    slots, suggestions, puzzle, loading,
+    puzzleModal, zoneUnlocked,
+    doneMissions, getTimer,
+    startTimer, pauseTimer, finishTimer, retryTimer,
+    hasRunningTimer, pauseAllRunning, saveAllRunningForBackground,
     acceptSuggestion,
-  } =useZoneMissions(String(userId), Number(zoneId), 3);
+    closePuzzleModal, closeZoneUnlocked,
+    reload,
+  } = useZoneMissions(userId, Number(zoneId));
 
-  const totalPieces = puzzle?.total_pieces ?? 3;
+  const totalPieces  = puzzle?.total_pieces  ?? 0;
   const piecesEarned = puzzle?.pieces_earned ?? 0;
-  const isComplete = puzzle?.is_complete ?? false;
-  const imageUri = zoneInfo?.image_url ?? "";
-  const accent = zoneInfo?.accent_color ?? "#22c55e";
+  const isComplete   = puzzle?.is_complete   ?? false;
+  const imageUri     = zoneInfo?.image_url   ?? "";
+  const accent       = zoneInfo?.accent_color ?? "#7f5af0";
 
-  // ✅ Chargement unique des infos de zone (indépendant des missions/timers)
+  // ── Charger infos zone ─────────────────────────────────────────────────────
+
   useEffect(() => {
     const loadZoneInfo = async () => {
-      const numId = Number(zoneId);
-      const { data: zone } = await supabase
+      const { data } = await supabase
         .from("zone")
         .select("nom, image_url, accent_color, dark_color, light_color")
-        .eq("id_zone", numId)
+        .eq("id_zone", Number(zoneId))
         .single();
-      if (zone) setZoneInfo(zone);
+      if (data) setZoneInfo(data);
     };
     loadZoneInfo();
   }, [zoneId]);
 
-  // ✅ Animation d'entrée (une seule fois)
+  // ── Animation d'entrée ─────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!loading) {
       Animated.parallel([
@@ -410,7 +463,8 @@ export default function ZoneScreen() {
     }
   }, [loading]);
 
-  // ✅ Mise à jour de la progression du puzzle
+  // ── Animation barre puzzle ─────────────────────────────────────────────────
+
   useEffect(() => {
     if (puzzle) {
       Animated.timing(progressW, {
@@ -422,82 +476,44 @@ export default function ZoneScreen() {
     }
   }, [puzzle]);
 
-  // ✅ Gestion du retour arrière
+  // ── Zone débloquée : récupérer nom zone suivante ───────────────────────────
+
+  useEffect(() => {
+    if (!zoneUnlocked) return;
+    const fetchNextZone = async () => {
+      const { data } = await supabase
+        .from("zone")
+        .select("nom")
+        .gt("id_zone", Number(zoneId))
+        .order("id_zone", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (data?.nom) setNextZoneName(data.nom);
+    };
+    fetchNextZone();
+  }, [zoneUnlocked, zoneId]);
+
+  // ── Navigation retour ──────────────────────────────────────────────────────
+
   const handleBack = useCallback(() => {
     if (hasRunningTimer()) setShowExitModal(true);
     else router.back();
   }, [hasRunningTimer, router]);
 
-  // ✅ Gestion de la modale de sortie
-  const handlePauseAndLeave = useCallback(() => {
-    pauseAllRunning();
+  const handlePauseAndLeave = useCallback(async () => {
+    await pauseAllRunning();
     setShowExitModal(false);
     router.back();
   }, [pauseAllRunning, router]);
 
-  // ✅ LAISSER TOURNER ET QUITTER - Utilise saveAllRunningForBackground du hook
-  const handleContinueAndLeave = useCallback(() => {
-    saveAllRunningForBackground();
+  const handleContinueAndLeave = useCallback(async () => {
+    await saveAllRunningForBackground();
     setShowExitModal(false);
     router.back();
   }, [saveAllRunningForBackground, router]);
 
-  // ✅ Gestion de la fin de mission
-  const handleFinish = useCallback(async (id: number) => {
-    const t = getTimer(id);
-    if (t.state === "done" || t.state === "fail") return;
-    if (saving) return;
+  // ── Édition mission ────────────────────────────────────────────────────────
 
-    setSaving(true);
-    const mission = missions.find(m => m.id_mission === id);
-    setCurrentMission(mission || null);
-
-    try {
-      const { data, error } = await supabase.rpc("complete_mission", {
-        p_user_id:    userId,
-        p_mission_id: id,
-      });
-
-      if (error) { console.error("RPC error:", error); return; }
-      if (data?.error) {
-        if (data.error !== "mission_already_done") console.error("Mission error:", data.error);
-        return;
-      }
-
-      // ✅ Informer le hook
-      finishTimer(id);
-      markDone(id);
-
-      // ✅ Mettre à jour le puzzle dans le hook
-      if (data.pieces_earned !== undefined) {
-        updatePuzzle({
-          pieces_earned: data.pieces_earned,
-          is_complete: data.puzzle_complete,
-        });
-      }
-
-      if (data.zone_unlocked && data.next_zone_id) {
-        const { data: nextZone } = await supabase
-          .from("zone").select("nom").eq("id_zone", data.next_zone_id).single();
-        setNextZoneName(nextZone?.nom ?? "Zone suivante");
-        pendingUnlock.current = true;
-      }
-
-      const allDone = missions.filter(m => m.id_mission !== id ? m.done : true).every(m => m.done) 
-                      && missions.length === totalPieces;
-      if (allDone) {
-        const totalXp = missions.reduce((sum, m) => sum + (m.xp_gain ?? 0), 0);
-        await supabase.rpc("add_xp", { p_user_id: userId, p_xp: totalXp });
-        setTimeout(() => setShowUnlocked(true), 1500);
-      }
-
-      setShowSuccess(true);
-    } finally {
-      setSaving(false);
-    }
-  }, [missions, saving, userId, finishTimer, markDone, updatePuzzle, getTimer, totalPieces]);
-
-  // ✅ Gestion de l'édition de mission
   const handleSaveEdit = useCallback(async (id: number, titre: string, description: string) => {
     try {
       await supabase.from("mission").update({ titre, description }).eq("id_mission", id);
@@ -508,7 +524,15 @@ export default function ZoneScreen() {
     }
   }, []);
 
-  // ✅ Rendu
+  // ── Mission créée depuis modal ─────────────────────────────────────────────
+
+  const handleMissionCreated = useCallback(async () => {
+    setShowCreateModal(false);
+    await reload();
+  }, [reload]);
+
+  // ── Rendu loading ──────────────────────────────────────────────────────────
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
@@ -521,11 +545,15 @@ export default function ZoneScreen() {
     <View style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
+      {/* Background */}
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: bgFade }]}>
-        {imageUri ? <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+        {imageUri ? (
+          <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ) : null}
         <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.5)" }]} />
       </Animated.View>
 
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -538,13 +566,15 @@ export default function ZoneScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         <Animated.View style={[styles.card, { transform: [{ translateY: cardSlide }] }]}>
-          {/* Puzzle */}
+
+          {/* ── Puzzle ── */}
           <View style={styles.puzzleSection}>
             <Text style={styles.sectionTitle}>Puzzle de zone</Text>
             <View style={styles.puzzleGrid}>
               {Array.from({ length: totalPieces }).map((_, i) => (
                 <PuzzleCell
-                  key={i} index={i} revealed={i < piecesEarned}
+                  key={i} index={i}
+                  revealed={i < piecesEarned}
                   imageUri={imageUri} cellSize={CELL_SIZE} accent={accent}
                 />
               ))}
@@ -575,7 +605,7 @@ export default function ZoneScreen() {
             )}
           </View>
 
-          {/* Missions avec slots - Utilisation des slots du hook */}
+          {/* ── Missions ── */}
           <Text style={styles.sectionTitle}>Missions ({doneMissions}/{totalPieces})</Text>
           {slots.map((m, i) =>
             m ? (
@@ -586,7 +616,7 @@ export default function ZoneScreen() {
                 accent={accent}
                 onStart={startTimer}
                 onPause={pauseTimer}
-                onFinish={handleFinish}
+                onFinish={finishTimer}
                 onRetry={retryTimer}
                 onEdit={setEditingMission}
               />
@@ -596,7 +626,7 @@ export default function ZoneScreen() {
                 index={i}
                 suggestions={suggestions}
                 onAccept={acceptSuggestion}
-                onCreateNew={() => {}}
+                onCreateNew={() => setShowCreateModal(true)}
                 accent={accent}
               />
             )
@@ -605,6 +635,7 @@ export default function ZoneScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
+      {/* ── Modales ── */}
       <ExitConfirmModal
         visible={showExitModal}
         accent={accent}
@@ -620,24 +651,42 @@ export default function ZoneScreen() {
         onCancel={() => setEditingMission(null)}
       />
 
-      <SuccessModal
-        visible={showSuccess}
-        xp={currentMission?.xp_gain ?? 20}
-        missionImg={undefined}
-        onContinue={() => {
-          setShowSuccess(false);
-          if (pendingUnlock.current) {
-            pendingUnlock.current = false;
-            setTimeout(() => setShowUnlocked(true), 500);
-          }
-        }}
+      {/* Modal création mission */}
+      <CreateMissionModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSave={handleMissionCreated}
+        initialData={{ id_zone: Number(zoneId) }}
       />
 
+      {/* Modal pièce puzzle débloquée */}
+      <Modal visible={puzzleModal.visible} transparent animationType="fade">
+        <View style={modalStyles.overlay}>
+          <View style={modalStyles.box}>
+            <Text style={{ fontSize: 52, marginBottom: 8 }}>🧩</Text>
+            <Text style={modalStyles.title}>Pièce débloquée !</Text>
+            <Text style={modalStyles.subtitle}>
+              {puzzleModal.piecesEarned}/{puzzleModal.totalPieces} pièces obtenues
+            </Text>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: "#f59e0b", marginBottom: 20 }}>
+              +{puzzleModal.xp} XP
+            </Text>
+            <TouchableOpacity
+              style={[modalStyles.btn, { backgroundColor: accent }]}
+              onPress={closePuzzleModal}
+            >
+              <Text style={modalStyles.btnText}>Super ! 🎉</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Zone débloquée */}
       <ZoneUnlockedModal
-        visible={showUnlocked}
+        visible={zoneUnlocked}
         zoneName={nextZoneName}
         zoneImage={imageUri}
-        onExplore={() => { setShowUnlocked(false); router.back(); }}
+        onExplore={() => { closeZoneUnlocked(); router.back(); }}
       />
     </View>
   );
@@ -646,49 +695,53 @@ export default function ZoneScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: "#000" },
-  backBtn:     { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.15)", justifyContent: "center", alignItems: "center" },
-  header:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 54, paddingBottom: 12, zIndex: 10 },
-  headerTitle: { fontSize: 18, fontWeight: "900", color: "#fff", flex: 1, textAlign: "center", textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  pieceBadge:  { borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5 },
-  pieceBadgeText: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  scroll: { paddingHorizontal: 14, paddingBottom: 40, paddingTop: 6 },
-  card:   { backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 26, padding: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 18, elevation: 8 },
-  sectionTitle: { fontSize: 15, fontWeight: "800", color: "#2d1a6e", marginBottom: 12 },
-  puzzleSection: { marginBottom: 20 },
-  puzzleGrid:    { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginBottom: 12 },
-  puzzleProgress: { marginBottom: 8 },
+  container:            { flex: 1, backgroundColor: "#000" },
+  header:               { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 54, paddingBottom: 12, zIndex: 10 },
+  backBtn:              { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.15)", justifyContent: "center", alignItems: "center" },
+  headerTitle:          { fontSize: 18, fontWeight: "900", color: "#fff", flex: 1, textAlign: "center", textShadowColor: "rgba(0,0,0,0.5)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  pieceBadge:           { borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5 },
+  pieceBadgeText:       { color: "#fff", fontWeight: "800", fontSize: 12 },
+  scroll:               { paddingHorizontal: 14, paddingBottom: 40, paddingTop: 6 },
+  card:                 { backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 26, padding: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 18, elevation: 8 },
+  sectionTitle:         { fontSize: 15, fontWeight: "800", color: "#2d1a6e", marginBottom: 12 },
+  puzzleSection:        { marginBottom: 20 },
+  puzzleGrid:           { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginBottom: 12 },
+  puzzleProgress:       { marginBottom: 8 },
   puzzleProgressHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
   puzzleProgressLabel:  { fontSize: 13, fontWeight: "700", color: "#2d1a6e" },
   puzzleProgressPct:    { fontSize: 13, fontWeight: "900" },
-  revealedBox:    { borderRadius: 16, overflow: "hidden", marginTop: 8, position: "relative" },
-  revealedImage:  { width: "100%", height: 180 },
-  revealedBanner: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "rgba(0,0,0,0.5)", paddingVertical: 8, alignItems: "center" },
-  revealedText:   { color: "#fff", fontWeight: "900", fontSize: 16 },
-  progressTrack: { height: 10, backgroundColor: "#e8e0ff", borderRadius: 10, overflow: "hidden" },
-  progressFill:  { height: "100%", borderRadius: 10 },
-  cell:       { borderRadius: 8, overflow: "hidden", borderWidth: 2, margin: 2, elevation: 3 },
-  cellCheck:  { position: "absolute", bottom: 3, right: 3, width: 15, height: 15, borderRadius: 8, justifyContent: "center", alignItems: "center", borderWidth: 1.5, borderColor: "#fff" },
-  cellLocked: { flex: 1, backgroundColor: "rgba(40,10,100,0.55)", justifyContent: "center", alignItems: "center" },
-  missionCard:   { backgroundColor: "#f8f7ff", borderRadius: 18, padding: 12, marginBottom: 12, shadowColor: "#7f5af0", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
-  missionHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 8 },
-  missionIconBox:{ width: 48, height: 48, borderRadius: 14, justifyContent: "center", alignItems: "center" },
-  missionTitle:  { fontSize: 14, fontWeight: "700", color: "#2d1a6e", marginBottom: 4, lineHeight: 19 },
-  missionMeta:   { flexDirection: "row", flexWrap: "wrap", gap: 5, alignItems: "center" },
-  missionDesc:   { fontSize: 12, color: "#6b7280", lineHeight: 17, marginBottom: 8 },
-  diffPill:      { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
-  diffText:      { fontSize: 10, fontWeight: "700" },
-  metaText:      { fontSize: 10, color: "#9b87c9", fontWeight: "600" },
-  chronoBox:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 8 },
-  chronoText:    { fontSize: 13, fontWeight: "700" },
-  chronoPulse:   { width: 8, height: 8, borderRadius: 4 },
-  missionBottom: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
-  pctText:       { fontSize: 11, fontWeight: "700", marginTop: 3 },
-  btnGroup:      { flexDirection: "row", gap: 6, alignItems: "center" },
-  finishBtn:     { width: 38, height: 38, borderRadius: 19, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
-  actionBtn:     { borderRadius: 14, paddingVertical: 9, paddingHorizontal: 14 },
-  actionBtnText: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  editBtn:       { width: 30, height: 30, borderRadius: 15, backgroundColor: "#f3f0ff", justifyContent: "center", alignItems: "center", marginLeft: 4 },
+  revealedBox:          { borderRadius: 16, overflow: "hidden", marginTop: 8 },
+  revealedImage:        { width: "100%", height: 180 },
+  revealedBanner:       { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "rgba(0,0,0,0.5)", paddingVertical: 8, alignItems: "center" },
+  revealedText:         { color: "#fff", fontWeight: "900", fontSize: 16 },
+  progressTrack:        { height: 10, backgroundColor: "#e8e0ff", borderRadius: 10, overflow: "hidden" },
+  progressFill:         { height: "100%", borderRadius: 10 },
+  cell:                 { borderRadius: 8, overflow: "hidden", borderWidth: 2, margin: 2, elevation: 3 },
+  cellCheck:            { position: "absolute", bottom: 3, right: 3, width: 15, height: 15, borderRadius: 8, justifyContent: "center", alignItems: "center", borderWidth: 1.5, borderColor: "#fff" },
+  cellLocked:           { flex: 1, backgroundColor: "rgba(40,10,100,0.55)", justifyContent: "center", alignItems: "center" },
+  missionCard:          { backgroundColor: "#f8f7ff", borderRadius: 18, padding: 12, marginBottom: 12, shadowColor: "#7f5af0", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
+  missionHeader:        { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 8 },
+  missionIconBox:       { width: 48, height: 48, borderRadius: 14, justifyContent: "center", alignItems: "center" },
+  missionTitle:         { fontSize: 14, fontWeight: "700", color: "#2d1a6e", marginBottom: 4, lineHeight: 19 },
+  missionMeta:          { flexDirection: "row", flexWrap: "wrap", gap: 5, alignItems: "center" },
+  missionDesc:          { fontSize: 12, color: "#6b7280", lineHeight: 17, marginBottom: 8 },
+  diffPill:             { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  diffText:             { fontSize: 10, fontWeight: "700" },
+  metaText:             { fontSize: 10, color: "#9b87c9", fontWeight: "600" },
+  chronoBox:            { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 8 },
+  chronoText:           { fontSize: 13, fontWeight: "700" },
+  chronoPulse:          { width: 8, height: 8, borderRadius: 4 },
+  missionBottom:        { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
+  pctText:              { fontSize: 11, fontWeight: "700", marginTop: 3 },
+  btnGroup:             { flexDirection: "row", gap: 6, alignItems: "center" },
+  finishBtn:            { width: 38, height: 38, borderRadius: 19, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
+  actionBtn:            { borderRadius: 14, paddingVertical: 9, paddingHorizontal: 14 },
+  actionBtnText:        { color: "#fff", fontWeight: "800", fontSize: 12 },
+  editBtn:              { width: 30, height: 30, borderRadius: 15, backgroundColor: "#f3f0ff", justifyContent: "center", alignItems: "center", marginLeft: 4 },
+  suggestionRow:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#f3f0ff", borderRadius: 12, padding: 10 },
+  suggestionTitle:      { fontSize: 13, fontWeight: "700", color: "#2d1a6e" },
+  suggestionMeta:       { fontSize: 10, color: "#9b87c9", fontWeight: "600" },
+  createSlotBtn:        { borderWidth: 1.5, borderStyle: "dashed", borderRadius: 12, padding: 11, alignItems: "center" },
 });
 
 const modalStyles = StyleSheet.create({
